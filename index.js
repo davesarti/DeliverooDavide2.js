@@ -1,9 +1,10 @@
 // Importa la funzione di connessione dall'SDK di Deliveroo.js
 import { DjsConnect } from '@unitn-asa/deliveroo-js-sdk/client';
 
-// Importa host (indirizzo server) e token (autenticazione) dal file di configurazione
-import { host, token } from './config.js';
 
+import 'dotenv/config';
+const host = process.env.HOST;
+const token = process.env.TOKEN;
 
 // Crea la connessione al server e restituisce il socket per comunicare con il gioco
 const socket = DjsConnect(host, token);
