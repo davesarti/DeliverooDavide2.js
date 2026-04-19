@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { DjsConnect } from '@unitn-asa/deliveroo-js-sdk/client';
 import { createPlanLibrary } from './plan.js';
 import {
-    createOptionsGeneration,
+    optionsGeneration,
     IntentionRevisionQueue,
     IntentionRevisionReplace,
     IntentionRevisionRevise
@@ -28,6 +28,14 @@ socket.onYou(({ id, name, x, y, score }) => {
     me.score = score;
 });
 
+let deliveryTiles = [];
+let spawnTiles = [];
+
+socket.onMap((width, height, tiles) => {
+    deliveryTiles = tiles.filter((tile) => tile.type == 2);
+    spawnTiles = tiles.filter((tile) => tile.type == 1);
+});
+
 socket.onSensing(async (sensing) => {
     for (const parcel of sensing.parcels) {
         parcels.set(parcel.id, parcel);
@@ -44,18 +52,19 @@ socket.onSensing(async (sensing) => {
 const planLibrary = createPlanLibrary({ socket, me });
 
 // const myAgent = new IntentionRevisionQueue({ parcels, planLibrary });
-const myAgent = new IntentionRevisionReplace({ parcels, planLibrary });
+const myAgent = new IntentionRevisionReplace({ parcels, planLibrary, me });
 // const myAgent = new IntentionRevisionRevise({ parcels, planLibrary });
 
 // Before, optionsGeneration was in the main file and had access to parcels, me and myAgent
 // Now that it's in intention_revision.js, I pass those objects to a constructor as arguments so it can generate the options
-const optionsGeneration = createOptionsGeneration({
-    parcels,
-    me,
-    agent: myAgent
+
+socket.onSensing((sensing) => {
+    optionsGeneration(parcels, me, myAgent, deliveryTiles);
+});
+socket.onYou((sensing) => {
+    optionsGeneration(parcels, me, myAgent, deliveryTiles);
 });
 
-socket.onSensing(optionsGeneration);
-socket.onYou(optionsGeneration);
-
 myAgent.loop();
+
+

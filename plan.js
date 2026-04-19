@@ -35,8 +35,14 @@ export class Plan {
     }
 }
 
-export function createPlanLibrary({ socket, me }) {
+export function createPlanLibrary({ socket, me, shouldPause = () => false }) {
     const planLibrary = [];
+
+    async function waitWhilePaused() {
+        while (shouldPause()) {
+            await new Promise((res) => setImmediate(res));
+        }
+    }
 
     class GoPickUp extends Plan {
         static isApplicableTo(go_pick_up, x, y, id) {
@@ -44,10 +50,12 @@ export function createPlanLibrary({ socket, me }) {
         }
 
         async execute(go_pick_up, x, y) {
+            await waitWhilePaused();
             if (this.stopped) {
                 throw ['stopped'];
             }
             await this.subIntention(['go_to', x, y]);
+            await waitWhilePaused();
             if (this.stopped) {
                 throw ['stopped'];
             }
@@ -59,6 +67,30 @@ export function createPlanLibrary({ socket, me }) {
         }
     }
 
+    class GoDropOff extends Plan {
+        static isApplicableTo(go_drop_off, x, y) {
+            return go_drop_off === 'go_drop_off';
+        }
+
+        async execute(go_drop_off, x, y) {
+            await waitWhilePaused();
+            if (this.stopped) {
+                throw ['stopped'];
+            }
+            await this.subIntention(['go_to', x, y]);
+            await waitWhilePaused();
+            if (this.stopped) {
+                throw ['stopped'];
+            }
+            await socket.emitPutdown();
+            if (this.stopped) {
+                throw ['stopped'];
+            }
+            return true;
+        }
+    }
+
+
     class BlindMove extends Plan {
         static isApplicableTo(go_to, x, y) {
             return go_to === 'go_to';
@@ -66,6 +98,7 @@ export function createPlanLibrary({ socket, me }) {
 
         async execute(go_to, x, y) {
             while (me.x !== x || me.y !== y) {
+                await waitWhilePaused();
                 if (this.stopped) {
                     throw ['stopped'];
                 }
@@ -84,6 +117,7 @@ export function createPlanLibrary({ socket, me }) {
                     me.y = movedHorizontally.y;
                 }
 
+                await waitWhilePaused();
                 if (this.stopped) {
                     throw ['stopped'];
                 }
@@ -109,9 +143,35 @@ export function createPlanLibrary({ socket, me }) {
         }
     }
 
+    class SimpleExplore extends Plan {
+        static isApplicableTo(explore) {
+            return explore === 'explore';
+        }
+
+        async execute(explore) {
+            const directions = ['up', 'right', 'down', 'left'];
+            while (true) {
+                let direction = directions[Math.floor(Math.random() * directions.length)];
+                const moved = await socket.emitMove(direction);
+                if (moved) {
+                    me.x = moved.x;
+                    me.y = moved.y;
+                }
+                await waitWhilePaused();
+                if (this.stopped) {
+                    throw ['stopped'];
+                }
+            }
+        }
+    }
+
+
     // Le classi piano vengono registrate nella libreria qui.
     planLibrary.push(GoPickUp);
     planLibrary.push(BlindMove);
+    planLibrary.push(GoDropOff);
+    planLibrary.push(SimpleExplore);
+
 
     return planLibrary;
 }

@@ -1,34 +1,54 @@
 import { distance } from './utils.js';
 
-export function createOptionsGeneration({ parcels, me, agent }) {
-    // TODO revisit beliefset revision so to trigger option generation only in the case a new parcel is observed (from lab comments)
-    return function optionsGeneration() {
-        const options = [];
-        for (const parcel of parcels.values()) {
-            if (!parcel.carriedBy) {
-                options.push(['go_pick_up', parcel.x, parcel.y, parcel.id]);
-            }
+function generateBestPickupOption({ parcels, me }) {
+    let bestOption;
+    let nearest = Number.MAX_VALUE;
+
+    for (const parcel of parcels.values()) {
+        if (parcel.carriedBy) {
+            continue;
         }
 
-        let bestOption;
-        let nearest = Number.MAX_VALUE;
-
-        for (const option of options) {
-            if (option[0] === 'go_pick_up') {
-                const [, x, y] = option;
-                const currentDistance = distance({ x, y }, me);
-                if (currentDistance < nearest) {
-                    bestOption = option;
-                    nearest = currentDistance;
-                }
-            }
+        const currentDistance = distance({ x: parcel.x, y: parcel.y }, me);
+        if (currentDistance < nearest) {
+            bestOption = ['go_pick_up', parcel.x, parcel.y, parcel.id];
+            nearest = currentDistance;
         }
+    }
 
-        if (bestOption) {
-            agent.push(bestOption);
-        }
-    };
+    return bestOption;
 }
+
+function generateDeliveryOptions({ parcels, me, deliveryTiles }) {
+    let nearest = Number.MAX_VALUE;
+    let bestOption;
+    for (const parcel of parcels.values()) {
+        if (parcel.carriedBy !== me.id) {
+            continue;
+        }
+        for (const deliveryTile of deliveryTiles) {
+            const currentDistance = distance({ x: deliveryTile.x, y: deliveryTile.y }, me);
+            if (currentDistance < nearest) {
+                bestOption = ['go_drop_off', deliveryTile.x, deliveryTile.y];
+                console.log('New best delivery option', bestOption, 'for parcel', parcel.id);
+                nearest = currentDistance;
+            }
+        }
+    }
+    return bestOption;
+}
+
+export function optionsGeneration(parcels, me, agent, deliveryTiles) {
+    const bestOption = generateBestPickupOption({ parcels, me });
+    if (bestOption) {
+        agent.push(bestOption);
+    }
+    const deliveryOption = generateDeliveryOptions({ parcels, me, deliveryTiles });
+    if (deliveryOption) {
+        agent.push(deliveryOption);
+    }
+};
+
 
 class Intention {
     #currentPlan;
@@ -107,10 +127,12 @@ export class IntentionRevision {
     #intentionQueue = [];
     #parcels;
     #planLibrary;
+    #me;
 
-    constructor({ parcels, planLibrary }) {
+    constructor({ parcels, planLibrary, me }) {
         this.#parcels = parcels;
         this.#planLibrary = planLibrary;
+        this.#me = me;
     }
 
     get intention_queue() {
@@ -127,9 +149,10 @@ export class IntentionRevision {
                 console.log('intentionRevision.loop', this.intention_queue.map((i) => i.predicate));
 
                 const intention = this.intention_queue[0];
+                const [action] = intention.predicate;   
 
-                const [action, , , parcelId] = intention.predicate;
                 if (action === 'go_pick_up') {
+                    const parcelId = intention.predicate[3];
                     const parcel = this.#parcels.get(parcelId);
                     if (!parcel || parcel.carriedBy) {
                         console.log('Skipping intention because no more valid', intention.predicate);
@@ -138,12 +161,27 @@ export class IntentionRevision {
                         continue;
                     }
                 }
+                if (action === 'go_drop_off') {
+                    const allParcels = Array.from(this.#parcels.values());
+                    const myParcels = allParcels.find((p) => p.carriedBy === this.#me.id);
+                    if (!myParcels) {
+                        console.log('Skipping intention because no more valid', intention.predicate);
+                        this.intention_queue.shift();
+                        await new Promise((res) => setImmediate(res));
+                        continue;
+                    }
+                }
+
 
                 await intention.achieve().catch(() => {
                     // Errore piano ignorato: il loop continua con la prossima intenzione.
                 });
 
                 this.intention_queue.shift();
+            }
+            else if (this.intention_queue.length === 0) {
+                this.log('Intention queue is empty, start exploring');
+                this.push(['explore']);
             }
 
             await new Promise((res) => setImmediate(res));
