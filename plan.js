@@ -1,3 +1,5 @@
+import {findCellToExplore} from './utils.js';
+
 export class Plan {
     #stopped = false;
     #parent;
@@ -35,7 +37,7 @@ export class Plan {
     }
 }
 
-export function createPlanLibrary({ socket, me, shouldPause = () => false }) {
+export function createPlanLibrary({ socket, me, spawnTiles, shouldPause = () => false }) {
     const planLibrary = [];
 
     async function waitWhilePaused() {
@@ -138,7 +140,6 @@ export function createPlanLibrary({ socket, me, shouldPause = () => false }) {
                     throw 'stucked';
                 }
             }
-
             return true;
         }
     }
@@ -149,19 +150,12 @@ export function createPlanLibrary({ socket, me, shouldPause = () => false }) {
         }
 
         async execute(explore) {
-            const directions = ['up', 'right', 'down', 'left'];
-            while (true) {
-                let direction = directions[Math.floor(Math.random() * directions.length)];
-                const moved = await socket.emitMove(direction);
-                if (moved) {
-                    me.x = moved.x;
-                    me.y = moved.y;
-                }
-                await waitWhilePaused();
-                if (this.stopped) {
-                    throw ['stopped'];
-                }
+            const cell = findCellToExplore(spawnTiles, me);
+            if (!cell) {
+                 throw ['no spawn tiles available'];
             }
+            await this.subIntention(['go_to', cell.x, cell.y]);
+            return true;
         }
     }
 

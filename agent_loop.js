@@ -7,6 +7,7 @@ import {
     IntentionRevisionReplace,
     IntentionRevisionRevise
 } from './intention_revision.js';
+import { updateSpawnVisitCount } from './utils.js';
 
 const socket = DjsConnect();
 
@@ -26,6 +27,7 @@ socket.onYou(({ id, name, x, y, score }) => {
     me.x = x;
     me.y = y;
     me.score = score;
+    updateSpawnVisitCount(me, spawnTiles);
 });
 
 let deliveryTiles = [];
@@ -33,7 +35,7 @@ let spawnTiles = [];
 
 socket.onMap((width, height, tiles) => {
     deliveryTiles = tiles.filter((tile) => tile.type == 2);
-    spawnTiles = tiles.filter((tile) => tile.type == 1);
+    spawnTiles.push(...tiles.filter((tile) => tile.type == 1).map(t => ({ ...t, visits: 0 })));
 });
 
 socket.onSensing(async (sensing) => {
@@ -49,7 +51,9 @@ socket.onSensing(async (sensing) => {
     }
 });
 
-const planLibrary = createPlanLibrary({ socket, me });
+console.log("spawn_tiles", spawnTiles);
+
+const planLibrary = createPlanLibrary({ socket, me, spawnTiles });
 
 // const myAgent = new IntentionRevisionQueue({ parcels, planLibrary });
 const myAgent = new IntentionRevisionReplace({ parcels, planLibrary, me });

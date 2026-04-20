@@ -5,9 +5,40 @@ export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
 }
 
 export function updateSpawnVisitCount(me, spawnTiles) {
-    for(let d_tile of spawnTiles){
-        if(d_tile.x === me.x && d_tile.y === me.y) {
-            d_tile.visite++;
+    for (const tile of spawnTiles) {
+        if (tile.x === me.x && tile.y === me.y) {
+            tile.visits++;
         }
     }
+}
+
+function getSortedSpawnTiles(spawnTiles, me) {
+    const sorted = [];
+
+    for (const tile of spawnTiles) {
+        sorted.push({
+            dist: distance(tile, me),
+            x: tile.x,
+            y: tile.y,
+            visits: tile.visits
+        });
+    }
+
+    sorted.sort((a, b) => a.dist - b.dist);
+    return sorted;
+}
+
+export function findCellToExplore(spawnTiles, me) {
+    const candidates = getSortedSpawnTiles(spawnTiles, me)
+        .filter(t => !(t.x === me.x && t.y === me.y));
+
+    const maxDist = Math.max(...spawnTiles.map(t => distance(t, me)));
+    const maxVisits = Math.max(...spawnTiles.map(t => t.visits));
+    const weight = maxVisits > 0 ? maxDist / maxVisits : 1;
+
+    candidates.sort((a, b) =>
+        (a.dist + a.visits * weight) - (b.dist + b.visits * weight)
+    );
+
+    return candidates[0];
 }
