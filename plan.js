@@ -37,13 +37,26 @@ export class Plan {
     }
 }
 
-export function createPlanLibrary({ socket, me, spawnTiles, shouldPause = () => false }) {
+export function createPlanLibrary({ socket, me, spawnTiles, map, shouldPause = () => false }) {
     const planLibrary = [];
 
     async function waitWhilePaused() {
         while (shouldPause()) {
             await new Promise((res) => setImmediate(res));
         }
+    }
+
+    async function executePath(path) {
+        for (const dir of path) {
+            await waitWhilePaused();
+            const moved = await socket.emitMove(dir);
+            if (!moved) {
+                throw 'movement failed';
+            }
+            me.x = moved.x;
+            me.y = moved.y;
+        }
+        return true;
     }
 
     class GoPickUp extends Plan {
@@ -144,6 +157,85 @@ export function createPlanLibrary({ socket, me, spawnTiles, shouldPause = () => 
         }
     }
 
+    class BFSMove extends Plan {
+        static isApplicableTo(go_to, x, y) {
+            return go_to === 'go_to';
+        }
+        
+        findPath(targetX, targetY) {
+
+            if (!map.length || !map[0]?.length) {
+                throw 'map not ready';
+            }
+
+            const queue = [];
+            const height = map.length;
+            const width = map[0].length;
+
+            const visited = Array.from(
+                { length: height },
+                () => Array(width).fill(false)
+            );
+
+            queue.push({ x: me.x, y: me.y, path: [] });
+            visited[me.y][me.x] = true;
+
+            const directions = [
+                { dx: 1, dy: 0, move: 'right' },
+                { dx: -1, dy: 0, move: 'left' },
+                { dx: 0, dy: 1, move: 'up' },
+                { dx: 0, dy: -1, move: 'down' }
+            ];
+
+            while (queue.length > 0) {
+                const current = queue.shift();
+
+                if (current.x === targetX && current.y === targetY) {
+                    return current.path;
+                }
+
+                for (const { dx, dy, move } of directions) {
+                    const newX = current.x + dx;
+                    const newY = current.y + dy;
+
+                    const insideMap =
+                        newX >= 0 && newX < width &&
+                        newY >= 0 && newY < height;
+
+                    if (!insideMap) continue;
+                    if (visited[newY][newX]) continue;
+                    if (Number(map[newY][newX]) === 0) continue;
+
+                    visited[newY][newX] = true;
+
+                    queue.push({
+                        x: newX,
+                        y: newY,
+                        path: [...current.path, move]
+                    });
+                }
+            }
+
+            return null;
+        }
+
+        async execute(go_to, x, y) {
+            await waitWhilePaused();
+            if (this.stopped) throw ['stopped'];
+
+            const path = this.findPath(x, y);
+
+            if (!path) {
+                throw 'path not found';
+            }
+
+            await waitWhilePaused();
+            if (this.stopped) throw ['stopped'];
+
+            return await executePath(path);
+        }
+    }
+
     class SimpleExplore extends Plan {
         static isApplicableTo(explore) {
             return explore === 'explore';
@@ -162,9 +254,10 @@ export function createPlanLibrary({ socket, me, spawnTiles, shouldPause = () => 
 
     // Le classi piano vengono registrate nella libreria qui.
     planLibrary.push(GoPickUp);
-    planLibrary.push(BlindMove);
+    //planLibrary.push(BlindMove);
     planLibrary.push(GoDropOff);
     planLibrary.push(SimpleExplore);
+    planLibrary.push(BFSMove);
 
 
     return planLibrary;

@@ -32,10 +32,35 @@ socket.onYou(({ id, name, x, y, score }) => {
 
 let deliveryTiles = [];
 let spawnTiles = [];
+let map = [];
 
 socket.onMap((width, height, tiles) => {
+    // resetto map, spawnTiles e deliveryTiles
+    map.length = 0;
+    spawnTiles.length = 0;
+    deliveryTiles.length = 0;
+
+    // creo la matrice map con dimensioni height x width
+    for (let y = 0; y <= height; y++) {
+        map.push(Array(width + 1).fill(0));
+    }
+
+    // riempio la matrice con i type ricevuti
+    for (const tile of tiles) {
+        map[tile.y][tile.x] = tile.type;
+    }
+
+    // filtro i tile di delivery
     deliveryTiles = tiles.filter((tile) => tile.type == 2);
-    spawnTiles.push(...tiles.filter((tile) => tile.type == 1).map(t => ({ ...t, visits: 0 })));
+
+    // filtro i tile di spawn e aggiungo la proprietà visits
+    spawnTiles.push(
+        ...tiles
+            .filter((tile) => tile.type == 1)
+            .map(t => ({ ...t, visits: 0 }))
+    );
+
+    console.log('map ready:', map.length, map[0]?.length);
 });
 
 socket.onSensing(async (sensing) => {
@@ -53,7 +78,7 @@ socket.onSensing(async (sensing) => {
 
 console.log("spawn_tiles", spawnTiles);
 
-const planLibrary = createPlanLibrary({ socket, me, spawnTiles });
+const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map });
 
 // const myAgent = new IntentionRevisionQueue({ parcels, planLibrary });
 const myAgent = new IntentionRevisionReplace({ parcels, planLibrary, me });
