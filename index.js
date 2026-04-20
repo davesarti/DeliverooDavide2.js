@@ -22,12 +22,18 @@ let delivery_tiles = [];
 // Zone di spawn
 let spawn_tiles = [];
 
+// Raggio di sensing dell'agente
+let raggio_sensing;
+
 // leggimao le zone di consegna 
 socket.on('map', (width, height, tiles) => {
     // Filtra solo le tile di tipo delivery (ovvero di tipo 2)
-    delivery_tiles = tiles.filter(t => t.type === 2);
+    delivery_tiles = tiles.filter(t => t.type == 2);
+    console.log("Tile di consegna:", delivery_tiles);
+
+    let initial_time = Date.now();
     //mappa i tile di spawn e imposta il contatore visite a zero
-    spawn_tiles = tiles.filter(t => t.type === 1).map(t => ({ ...t, visite: 0 }));
+    spawn_tiles = tiles.filter(t => t.type === 1).map(t => ({ ...t, ultima_visita: initial_time }));
     //console.log("Tile:", spawn_tiles);
     
 });
@@ -35,7 +41,7 @@ socket.on('map', (width, height, tiles) => {
 
 // Riceve la configurazione del gioco appena connesso (es. distanza di sensing, durata azioni, ecc.)
 socket.onConfig((config) => {
-    //console.log('Config:', config);
+    raggio_sensing = config.GAME.player.observation_distance;
 });
 
 
@@ -59,12 +65,27 @@ socket.onSensing((sensing) => {
     //console.log('Parcels visibili:', sensing.parcels);
 });
 
+function gaussian_weight(distance, sigma) {
+    return Math.exp(- (distance * distance) / (2 * (sigma * sigma)));
+}
+
 function aggiorna_visita_celle(posizione_agente) {
 
-    for(let d_tile of spawn_tiles){
-        if(d_tile.x === posizione_agente.x && d_tile.y === posizione_agente.y) {
-            d_tile.visite++;
-        }
+    //configurazione sensing non disponibile, non aggiorno le visite
+    if (raggio_sensing === undefined) {
+        return;
+    }
+
+    const now = Date.now();
+    const sigma = raggio_sensing / 2;
+    const celle_raggio = spawn_tiles.filter(t => calcola_distanza(t, posizione_agente) <= raggio_sensing);
+
+    for (let d_tile of celle_raggio) {
+        const d = calcola_distanza(d_tile, posizione_agente);
+        const f = gaussian_weight(d, sigma);
+        
+        // Avvicina il timestamp a "now" in proporzione alla vicinanza
+        d_tile.ultima_visita = now - (now - d_tile.ultima_visita) * f;
     }
 }
 
@@ -119,7 +140,7 @@ function spawn_tile_vicini(vettore_posizione_spawn_tile, posizione_agente) {
         distanza: calcola_distanza(zona_n, posizione_agente),
         x: zona_n.x,
         y: zona_n.y,
-        visite: zona_n.visite
+        ultima_visita: zona_n.ultima_visita
         });
     }
 
@@ -148,19 +169,55 @@ async function go_to(destinazione_x, destinazione_y) {
     //console.log('Destinazione raggiunta!');
 }
 
-// Trova la zona della mappa da esplorare 
+// Trova la cella di spawn migliore da esplorare,
+// bilanciando il tempo trascorso dall'ultima visita e la distanza dall'agente
 function trova_cella_da_esplorare() {
 
-    let distanza_spawn_tile = spawn_tile_vicini(spawn_tiles, me).filter(t => !(t.x === me.x && t.y === me.y));
+    // Prendi tutte le spawn tile con distanza e ultima_visita,
+    // ed escludi la cella su cui l'agente si trova già
+    let distanza_spawn_tile = spawn_tile_vicini(spawn_tiles, me)
+        .filter(t => !(t.x === me.x && t.y === me.y));
 
+    const now = Date.now();
+
+    // Calcola il massimo della distanza tra tutte le spawn tile e l'agente
     const distanza_max = Math.max(...spawn_tiles.map(t => calcola_distanza(t, me)));
-    const visite_max = Math.max(...spawn_tiles.map(t => t.visite));
-    const peso = visite_max > 0 ? distanza_max / visite_max : 1;
 
-    distanza_spawn_tile.sort((a, b) => 
-        (a.distanza + a.visite * peso) - (b.distanza + b.visite * peso)
-    );
+    // Calcola il massimo del tempo trascorso dall'ultima visita tra tutte le spawn tile
+    const tempo_passato_max = Math.max(...spawn_tiles.map(t => now - t.ultima_visita));
 
+    distanza_spawn_tile.sort((a, b) => {
+
+        // Tempo trascorso dall'ultima visita per le celle a e b (in ms)
+        const tempo_a = now - a.ultima_visita;
+        const tempo_b = now - b.ultima_visita;
+
+        // Normalizza il tempo tra 0(non urgente) e 1(urgente)
+        const tempo_norm_a = tempo_a / tempo_passato_max;
+        const tempo_norm_b = tempo_b / tempo_passato_max;
+
+        // Normalizza la distanza tra 0(non conveniente) e 1(conveniente):
+        const dist_norm_a = 1 - (a.distanza / distanza_max);
+        const dist_norm_b = 1 - (b.distanza / distanza_max);
+
+        const alpha = 0.8; // 50% tempo, 50% distanza
+
+        // Score finale: vogliamo massimizzare il tempo trascorso e minimizzare la distanza
+        const score_a = alpha * tempo_norm_a + (1 - alpha) * dist_norm_a;
+        const score_b = alpha * tempo_norm_b + (1 - alpha) * dist_norm_b;
+
+        // Ordine decrescente: la cella con score più alto viene prima
+        return score_b - score_a;
+    });
+
+    // LOG TEMPORANEO
+    console.log(distanza_spawn_tile.slice(0, 10).map(t => ({
+        x: t.x, y: t.y,
+        tempo: now - t.ultima_visita,
+        distanza: t.distanza
+    })));
+
+    // Restituisce la cella con lo score più alto (indice 0 dopo l'ordinamento decrescente)
     return distanza_spawn_tile[0];
 }
 
@@ -169,7 +226,7 @@ async function loop() {
 
     while (true) {
         // Aspetta che la mappa e la posizione siano state ricevute dal server
-        if (spawn_tiles.length === 0 || delivery_tiles.length === 0 || me.x === undefined) {
+        if (spawn_tiles.length === 0 || delivery_tiles.length === 0 || me.x === undefined || raggio_sensing === undefined) {
             await new Promise(resolve => setTimeout(resolve, 100));
             continue;
         }
@@ -190,14 +247,16 @@ async function loop() {
             // 4. Consegna
             await socket.emitPutdown();
 
-            await new Promise(resolve => setTimeout(resolve, 100)); 
         } else {
             let tile = trova_cella_da_esplorare();
             await go_to(tile.x, tile.y);
-            await new Promise(resolve => setTimeout(resolve, 100));
         }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
     }
 }
+
 
 // Avvia il loop di movimento
 loop();
