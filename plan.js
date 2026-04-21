@@ -46,15 +46,24 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, shouldPause = (
         }
     }
 
-    async function executePath(path) {
+    async function executePath(path, shouldStop = () => false) {
         for (const dir of path) {
             await waitWhilePaused();
+            if (shouldStop()) {
+                throw ['stopped'];
+            }
+
             const moved = await socket.emitMove(dir);
             if (!moved) {
                 throw 'movement failed';
             }
+
             me.x = moved.x;
             me.y = moved.y;
+
+            if (shouldStop()) {
+                throw ['stopped'];
+            }
         }
         return true;
     }
@@ -232,7 +241,7 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, shouldPause = (
             await waitWhilePaused();
             if (this.stopped) throw ['stopped'];
 
-            return await executePath(path);
+            return await executePath(path, () => this.stopped);
         }
     }
 

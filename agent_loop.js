@@ -61,6 +61,7 @@ socket.onMap((width, height, tiles) => {
     );
 
     console.log('map ready:', map.length, map[0]?.length);
+    console.log('spawn tiles:', spawnTiles);
 });
 
 socket.onSensing(async (sensing) => {
@@ -76,13 +77,10 @@ socket.onSensing(async (sensing) => {
     }
 });
 
-console.log("spawn_tiles", spawnTiles);
-
 const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map });
 
-// const myAgent = new IntentionRevisionQueue({ parcels, planLibrary });
-const myAgent = new IntentionRevisionReplace({ parcels, planLibrary, me });
-// const myAgent = new IntentionRevisionRevise({ parcels, planLibrary });
+// const myAgent = new IntentionRevisionReplace({ parcels, planLibrary, me, deliveryTiles });
+const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTiles });
 
 // Before, optionsGeneration was in the main file and had access to parcels, me and myAgent
 // Now that it's in intention_revision.js, I pass those objects to a constructor as arguments so it can generate the options

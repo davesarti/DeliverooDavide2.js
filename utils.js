@@ -1,7 +1,22 @@
+export const DISTANCE_FACTOR = 0.1; // Fattore di penalizzazione per la distanza, da calibrare
+
 export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
     const dx = Math.abs(Math.round(x1) - Math.round(x2));
     const dy = Math.abs(Math.round(y1) - Math.round(y2));
     return dx + dy;
+}
+
+export function nearestDeliveryDistance({ x, y }, deliveryTiles) {
+    let bestDistance = Number.MAX_VALUE;
+    let tile = null;
+    for (const deliveryTile of deliveryTiles) {
+        const currentDistance = distance({ x: deliveryTile.x, y: deliveryTile.y }, { x, y });
+        if (currentDistance < bestDistance) {
+            bestDistance = currentDistance;
+            tile = deliveryTile;
+        }
+    }
+    return [bestDistance, tile];
 }
 
 export function updateSpawnVisitCount(me, spawnTiles) {

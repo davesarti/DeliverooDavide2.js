@@ -1,18 +1,25 @@
-import { distance } from './utils.js';
+import { distance, nearestDeliveryDistance, DISTANCE_FACTOR } from './utils.js';
 
-function generateBestPickupOption({ parcels, me }) {
-    let bestOption;
-    let nearest = Number.MAX_VALUE;
+function generateBestPickupOption({ parcels, me, deliveryTiles }) {
+    if (!Array.isArray(deliveryTiles) || deliveryTiles.length === 0) {
+        return null;
+    }
+
+    let bestOption = null;
+    let bestScore = Number.MIN_VALUE;
 
     for (const parcel of parcels.values()) {
         if (parcel.carriedBy) {
             continue;
         }
-
-        const currentDistance = distance({ x: parcel.x, y: parcel.y }, me);
-        if (currentDistance < nearest) {
+        const [deliveryDistance] = nearestDeliveryDistance({ x: parcel.x, y: parcel.y }, deliveryTiles);
+        const totalDistance = distance({ x: parcel.x, y: parcel.y }, { x: me.x, y: me.y }) + deliveryDistance;
+        const currentScore = parcel.reward - totalDistance * DISTANCE_FACTOR;
+        console.log('Evaluating parcel', parcel.id, 'with score', currentScore);
+        if (currentScore > bestScore && currentScore > 0) {
             bestOption = ['go_pick_up', parcel.x, parcel.y, parcel.id];
-            nearest = currentDistance;
+            console.log('New best option found:', bestOption, 'with score:', currentScore);
+            bestScore = currentScore;
         }
     }
 
@@ -20,26 +27,24 @@ function generateBestPickupOption({ parcels, me }) {
 }
 
 function generateDeliveryOptions({ parcels, me, deliveryTiles }) {
-    let nearest = Number.MAX_VALUE;
-    let bestOption;
-    for (const parcel of parcels.values()) {
-        if (parcel.carriedBy !== me.id) {
-            continue;
-        }
-        for (const deliveryTile of deliveryTiles) {
-            const currentDistance = distance({ x: deliveryTile.x, y: deliveryTile.y }, me);
-            if (currentDistance < nearest) {
-                bestOption = ['go_drop_off', deliveryTile.x, deliveryTile.y];
-                console.log('New best delivery option', bestOption, 'for parcel', parcel.id);
-                nearest = currentDistance;
-            }
+    let bestOption = null;
+
+    if (Array.from(parcels.values()).find((p) => p.carriedBy === me.id)) {
+        const [, deliveryTile] = nearestDeliveryDistance({ x: me.x, y: me.y }, deliveryTiles);
+        if (deliveryTile) {
+            bestOption = ['go_drop_off', deliveryTile.x, deliveryTile.y];
         }
     }
+
     return bestOption;
 }
 
 export function optionsGeneration(parcels, me, agent, deliveryTiles) {
-    const bestOption = generateBestPickupOption({ parcels, me });
+    if (!me?.id || me?.x == null || me?.y == null || !Array.isArray(deliveryTiles) || deliveryTiles.length === 0) {
+        return;
+    }
+
+    const bestOption = generateBestPickupOption({ parcels, me, deliveryTiles });
     if (bestOption) {
         agent.push(bestOption);
     }
@@ -49,6 +54,9 @@ export function optionsGeneration(parcels, me, agent, deliveryTiles) {
     }
 };
 
+function samePredicateInQueue(queue, predicate) {
+    return queue.find((i) => i.predicate.join(' ') === predicate.join(' '));
+}
 
 class Intention {
     #currentPlan;
@@ -128,11 +136,13 @@ export class IntentionRevision {
     #parcels;
     #planLibrary;
     #me;
+    #deliveryTiles;
 
-    constructor({ parcels, planLibrary, me }) {
+    constructor({ parcels, planLibrary, me, deliveryTiles = [] }) {
         this.#parcels = parcels;
         this.#planLibrary = planLibrary;
         this.#me = me;
+        this.#deliveryTiles = deliveryTiles;
     }
 
     get intention_queue() {
@@ -141,6 +151,67 @@ export class IntentionRevision {
 
     log(...args) {
         console.log(...args);
+    }
+
+    intentionScore(predicate) {
+    let MyParcels = [...this.#parcels.values()].filter((p) => p.carriedBy === this.#me.id);
+    let total = MyParcels.reduce((sum, p) => sum + p.reward, 0);
+    let estimatedParcelLoss = 0;
+    
+    const action = predicate[0];
+    if (action === 'go_drop_off') {
+        const [, x, y] = predicate;
+        const routeEstimatedDistance = distance({ x, y }, this.#me);
+        for (const parcel of MyParcels) {
+            estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * DISTANCE_FACTOR); //euristica
+        }
+        return (total - estimatedParcelLoss);
+    }
+    else if (action === 'go_pick_up') {
+        const [, x, y, parcelId] = predicate;
+        const newParcel = this.#parcels.get(parcelId);
+        if (!newParcel) {
+            return Number.NEGATIVE_INFINITY;
+        }
+        const routeEstimatedDistance = distance({ x, y }, this.#me) + nearestDeliveryDistance({ x, y }, this.#deliveryTiles)[0];
+        let estimatedParcelLoss = 0;
+        for (const parcel of MyParcels) {
+            estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * DISTANCE_FACTOR); //euristica
+        }
+        return (total + newParcel.reward - routeEstimatedDistance * DISTANCE_FACTOR - estimatedParcelLoss);
+    }
+
+    else {
+        return 0;
+    }
+}
+
+    sortQueueByScore() {
+        const scoredIntentions = this.intention_queue.map((intention, index) => ({
+            intention,
+            index,
+            score: this.intentionScore(intention.predicate)
+        }));
+
+        const validIntentions = scoredIntentions.filter((entry) => entry.score !== Number.NEGATIVE_INFINITY);
+
+        validIntentions.sort((a, b) => {
+            if (b.score !== a.score) {
+                return b.score - a.score;
+            }
+            return a.index - b.index;
+        });
+
+        this.intention_queue.splice(
+            0,
+            this.intention_queue.length,
+            ...validIntentions.map((entry) => entry.intention)
+        );
+
+        this.log('Queue ordinata per score', validIntentions.map((entry) => ({
+            predicate: entry.intention.predicate,
+            score: entry.score
+        })));
     }
 
     async loop() {
@@ -224,10 +295,14 @@ export class IntentionRevisionReplace extends IntentionRevision {
 
 export class IntentionRevisionRevise extends IntentionRevision {
     async push(predicate) {
-        console.log('Revising intention queue. Received', ...predicate);
-        // TODO
-        // - ordinare per utilita' (reward - cost)
-        // - eventualmente interrompere quella corrente
-        // - valutare validita' intenzione
+        if (samePredicateInQueue(this.intention_queue, predicate)) {
+            return;
+        }
+
+        console.log('IntentionRevisionRevise.push', predicate);
+        const intention = this.createIntention(predicate);
+        this.intention_queue.push(intention);
+
+        this.sortQueueByScore();
     }
 }
