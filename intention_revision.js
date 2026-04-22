@@ -1,12 +1,11 @@
 import { distance, nearestDeliveryDistance, DISTANCE_FACTOR } from './utils.js';
 
-function generateBestPickupOption({ parcels, me, deliveryTiles }) {
+function generateBestPickupOptions({ parcels, me, deliveryTiles }) { //nuova logica, ora vengono generate option per tutti i pacchi con score positivo
     if (!Array.isArray(deliveryTiles) || deliveryTiles.length === 0) {
         return null;
     }
 
-    let bestOption = null;
-    let bestScore = Number.MIN_VALUE;
+    let bestOptions = [];
 
     for (const parcel of parcels.values()) {
         if (parcel.carriedBy) {
@@ -15,15 +14,14 @@ function generateBestPickupOption({ parcels, me, deliveryTiles }) {
         const [deliveryDistance] = nearestDeliveryDistance({ x: parcel.x, y: parcel.y }, deliveryTiles);
         const totalDistance = distance({ x: parcel.x, y: parcel.y }, { x: me.x, y: me.y }) + deliveryDistance;
         const currentScore = parcel.reward - totalDistance * DISTANCE_FACTOR;
-        console.log('Evaluating parcel', parcel.id, 'with score', currentScore);
-        if (currentScore > bestScore && currentScore > 0) {
-            bestOption = ['go_pick_up', parcel.x, parcel.y, parcel.id];
-            console.log('New best option found:', bestOption, 'with score:', currentScore);
-            bestScore = currentScore;
+        if (currentScore > 0) {
+            const bestOption = ['go_pick_up', parcel.x, parcel.y, parcel.id];
+            console.log('New option found:', bestOption, 'with score:', currentScore);
+            bestOptions.push(bestOption);
         }
     }
 
-    return bestOption;
+    return bestOptions;
 }
 
 function generateDeliveryOptions({ parcels, me, deliveryTiles }) {
@@ -44,9 +42,9 @@ export function optionsGeneration(parcels, me, agent, deliveryTiles) {
         return;
     }
 
-    const bestOption = generateBestPickupOption({ parcels, me, deliveryTiles });
-    if (bestOption) {
-        agent.push(bestOption);
+    const bestOptions = generateBestPickupOptions({ parcels, me, deliveryTiles });
+    if (bestOptions.length > 0) {
+        agent.push(...bestOptions);
     }
     const deliveryOption = generateDeliveryOptions({ parcels, me, deliveryTiles });
     if (deliveryOption) {
@@ -133,6 +131,7 @@ class Intention {
 
 export class IntentionRevision {
     #intentionQueue = [];
+    #currentIntention = null;
     #parcels;
     #planLibrary;
     #me;
@@ -187,6 +186,8 @@ export class IntentionRevision {
 }
 
     sortQueueByScore() {
+        const runningIntention = this.#currentIntention;
+
         const scoredIntentions = this.intention_queue.map((intention, index) => ({
             intention,
             index,
@@ -212,6 +213,22 @@ export class IntentionRevision {
             predicate: entry.intention.predicate,
             score: entry.score
         })));
+
+        const bestIntention = this.intention_queue[0];
+        if (
+            runningIntention && //preemption solo se c'è un'intenzione in esecuzione
+            bestIntention && //preemption solo se c'è un'intenzione valida in coda
+            runningIntention !== bestIntention //preemption solo se l'intenzione migliore in coda è diversa da quella in esecuzione
+        ) {
+            this.log(
+                'Preemption: interrompo il job corrente e carico quello con score piu alto',
+                {
+                    running: runningIntention.predicate,
+                    best: bestIntention.predicate
+                }
+            );
+            runningIntention.stop();
+        }
     }
 
     async loop() {
@@ -227,7 +244,7 @@ export class IntentionRevision {
                     const parcel = this.#parcels.get(parcelId);
                     if (!parcel || parcel.carriedBy) {
                         console.log('Skipping intention because no more valid', intention.predicate);
-                        this.intention_queue.shift();
+                        this.removeIntention(intention);
                         await new Promise((res) => setImmediate(res));
                         continue;
                     }
@@ -237,18 +254,37 @@ export class IntentionRevision {
                     const myParcels = allParcels.find((p) => p.carriedBy === this.#me.id);
                     if (!myParcels) {
                         console.log('Skipping intention because no more valid', intention.predicate);
-                        this.intention_queue.shift();
+                        this.removeIntention(intention);
                         await new Promise((res) => setImmediate(res));
                         continue;
                     }
                 }
 
 
-                await intention.achieve().catch(() => {
-                    // Errore piano ignorato: il loop continua con la prossima intenzione.
+                this.#currentIntention = intention;
+                let keepIntentionInQueue = false;
+
+                await intention.achieve().catch((error) => {
+                    const isStoppedIntentionError =
+                        Array.isArray(error) && error[0] === 'stopped intention'; //reference in Intention.achieve()
+
+                    // Se l'intenzione e stata preemptata, la rigenero per mantenerla in coda.
+                    if (isStoppedIntentionError) {
+                        const index = this.intention_queue.indexOf(intention);
+                        if (index !== -1) {
+                            this.intention_queue.splice(index, 1, this.createIntention(intention.predicate));
+                            keepIntentionInQueue = true;
+                        }
+                    }
+                }).finally(() => {
+                    if (this.#currentIntention === intention) {
+                        this.#currentIntention = null;
+                    }
                 });
 
-                this.intention_queue.shift();
+                if (!keepIntentionInQueue) {
+                    this.removeIntention(intention);
+                }
             }
             else if (this.intention_queue.length === 0) {
                 this.log('Intention queue is empty, start exploring');
@@ -261,6 +297,13 @@ export class IntentionRevision {
 
     createIntention(predicate) {
         return new Intention(this, predicate, this.#planLibrary);
+    }
+
+    removeIntention(intention) {
+        const index = this.intention_queue.indexOf(intention);
+        if (index !== -1) {
+            this.intention_queue.splice(index, 1);
+        }
     }
 }
 
@@ -299,7 +342,7 @@ export class IntentionRevisionRevise extends IntentionRevision {
             return;
         }
 
-        console.log('IntentionRevisionRevise.push', predicate);
+        console.log('IntentionRevisionRevise.push', predicate, 'with current queue', this.intention_queue.map((i) => i.predicate));
         const intention = this.createIntention(predicate);
         this.intention_queue.push(intention);
 
