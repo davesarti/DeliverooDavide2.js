@@ -60,8 +60,7 @@ socket.onMap((width, height, tiles) => {
             .map(t => ({ ...t, visits: 0 }))
     );
 
-    console.log('map ready:', map.length, map[0]?.length);
-    console.log('spawn tiles:', spawnTiles);
+    console.log('map ready');
 });
 
 socket.onSensing(async (sensing) => {

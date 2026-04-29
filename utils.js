@@ -1,4 +1,4 @@
-export const DISTANCE_FACTOR = 0; // Fattore di penalizzazione per la distanza, da calibrare
+export const DISTANCE_FACTOR = 0.0; // Fattore di penalizzazione per la distanza, da calibrare
 
 export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
     const dx = Math.abs(Math.round(x1) - Math.round(x2));

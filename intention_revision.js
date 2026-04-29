@@ -16,7 +16,6 @@ function generateBestPickupOptions({ parcels, me, deliveryTiles }) { //nuova log
         const currentScore = parcel.reward - totalDistance * DISTANCE_FACTOR;
         if (currentScore > 0) {
             const bestOption = ['go_pick_up', parcel.x, parcel.y, parcel.id];
-            console.log('New option found:', bestOption, 'with score:', currentScore);
             bestOptions.push(bestOption);
         }
     }
@@ -56,6 +55,27 @@ function samePredicateInQueue(queue, predicate) {
     return queue.find((i) => i.predicate.join(' ') === predicate.join(' '));
 }
 
+const STOPPED_INTENTION = 'stopped intention';
+const PREEMPTED_INTENTION = 'preempted intention';
+const STOPPED_PLAN = 'stopped';
+const STOP_REASON_PREEMPTION = 'preemption';
+
+function createStoppedIntentionError(predicate, stopReason) {
+    if (stopReason === STOP_REASON_PREEMPTION) {
+        return [PREEMPTED_INTENTION, ...predicate];
+    }
+
+    return [STOPPED_INTENTION, ...predicate];
+}
+
+function isStoppedPlanError(error) {
+    return Array.isArray(error) && error[0] === STOPPED_PLAN;
+}
+
+function isPreemptedIntentionError(error) {
+    return Array.isArray(error) && error[0] === PREEMPTED_INTENTION;
+}
+
 class Intention {
     #currentPlan;
     #stopped = false;
@@ -63,6 +83,7 @@ class Intention {
     #predicate;
     #started = false;
     #planLibrary;
+    #stopReason = null;
 
     constructor(parent, predicate, planLibrary) {
         this.#parent = parent;
@@ -78,8 +99,9 @@ class Intention {
         return this.#stopped;
     }
 
-    stop() {
+    stop(reason = null) {
         this.#stopped = true;
+        this.#stopReason = reason;
         if (this.#currentPlan) {
             this.#currentPlan.stop();
         }
@@ -101,7 +123,7 @@ class Intention {
 
         for (const planClass of this.#planLibrary) {
             if (this.stopped) {
-                throw ['stopped intention', ...this.predicate];
+                throw createStoppedIntentionError(this.predicate, this.#stopReason);
             }
 
             if (planClass.isApplicableTo(...this.predicate)) {
@@ -113,16 +135,22 @@ class Intention {
 
                 try {
                     const planResult = await this.#currentPlan.execute(...this.predicate);
-                    this.log('succesful intention', ...this.predicate, 'with plan', planClass.name, 'with result:', planResult);
+                    this.log('successful intention', ...this.predicate, 'with plan', planClass.name, 'with result:', planResult);
                     return planResult;
                 } catch (error) {
+                    if (this.stopped || isStoppedPlanError(error)) {
+                        const stopError = createStoppedIntentionError(this.predicate, this.#stopReason);
+                        this.log(stopError[0], ...this.predicate, 'with plan', planClass.name);
+                        throw stopError;
+                    }
+
                     this.log('failed intention', ...this.predicate, 'with plan', planClass.name, 'with error:', error);
                 }
             }
         }
 
         if (this.stopped) {
-            throw ['stopped intention', ...this.predicate];
+            throw createStoppedIntentionError(this.predicate, this.#stopReason);
         }
 
         throw ['no plan satisfied the intention', ...this.predicate];
@@ -209,7 +237,7 @@ export class IntentionRevision {
             ...validIntentions.map((entry) => entry.intention)
         );
 
-        this.log('Queue ordinata per score', validIntentions.map((entry) => ({
+        this.log('Queue sorted by score', validIntentions.map((entry) => ({
             predicate: entry.intention.predicate,
             score: entry.score
         })));
@@ -221,20 +249,15 @@ export class IntentionRevision {
             runningIntention !== bestIntention //preemption solo se l'intenzione migliore in coda è diversa da quella in esecuzione
         ) {
             this.log(
-                'Preemption: interrompo il job corrente e carico quello con score piu alto',
-                {
-                    running: runningIntention.predicate,
-                    best: bestIntention.predicate
-                }
+                'Preemption: stopping the current job and loading the higher-score one'
             );
-            runningIntention.stop();
+            runningIntention.stop(STOP_REASON_PREEMPTION);
         }
     }
 
     async loop() {
         while (true) {
             if (this.intention_queue.length > 0) {
-                console.log('intentionRevision.loop', this.intention_queue.map((i) => i.predicate));
 
                 const intention = this.intention_queue[0];
                 const [action] = intention.predicate;   
@@ -243,7 +266,7 @@ export class IntentionRevision {
                     const parcelId = intention.predicate[3];
                     const parcel = this.#parcels.get(parcelId);
                     if (!parcel || parcel.carriedBy) {
-                        console.log('Skipping intention because no more valid', intention.predicate);
+                        console.log('Skipping intention because it is no longer valid', intention.predicate);
                         this.removeIntention(intention);
                         await new Promise((res) => setImmediate(res));
                         continue;
@@ -253,7 +276,7 @@ export class IntentionRevision {
                     const allParcels = Array.from(this.#parcels.values());
                     const myParcels = allParcels.find((p) => p.carriedBy === this.#me.id);
                     if (!myParcels) {
-                        console.log('Skipping intention because no more valid', intention.predicate);
+                        console.log('Skipping intention because it is no longer valid', intention.predicate);
                         this.removeIntention(intention);
                         await new Promise((res) => setImmediate(res));
                         continue;
@@ -265,11 +288,10 @@ export class IntentionRevision {
                 let keepIntentionInQueue = false;
 
                 await intention.achieve().catch((error) => {
-                    const isStoppedIntentionError =
-                        Array.isArray(error) && error[0] === 'stopped intention'; //reference in Intention.achieve()
+                    const wasPreempted = isPreemptedIntentionError(error);
 
                     // Se l'intenzione e stata preemptata, la rigenero per mantenerla in coda.
-                    if (isStoppedIntentionError) {
+                    if (wasPreempted) {
                         const index = this.intention_queue.indexOf(intention);
                         if (index !== -1) {
                             this.intention_queue.splice(index, 1, this.createIntention(intention.predicate));
@@ -342,7 +364,7 @@ export class IntentionRevisionRevise extends IntentionRevision {
             return;
         }
 
-        console.log('IntentionRevisionRevise.push', predicate, 'with current queue', this.intention_queue.map((i) => i.predicate));
+        console.log('IntentionRevisionRevise.push', predicate);
         const intention = this.createIntention(predicate);
         this.intention_queue.push(intention);
 
