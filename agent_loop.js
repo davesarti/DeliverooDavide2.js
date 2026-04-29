@@ -3,11 +3,9 @@ import { DjsConnect } from '@unitn-asa/deliveroo-js-sdk/client';
 import { createPlanLibrary } from './plan.js';
 import {
     optionsGeneration,
-    IntentionRevisionQueue,
-    IntentionRevisionReplace,
     IntentionRevisionRevise
 } from './intention_revision.js';
-import { updateSpawnVisitCount } from './utils.js';
+import { updateSpawnVisitCount, buildDeliveryTileMap, canEnterTile } from './utils.js';
 
 const socket = DjsConnect();
 
@@ -32,6 +30,7 @@ socket.onYou(({ id, name, x, y, score }) => {
 });
 
 let deliveryTiles = [];
+let deliveryTileMap = [];
 let spawnTiles = [];
 let map = [];
 
@@ -53,6 +52,9 @@ socket.onMap((width, height, tiles) => {
 
     // filtro i tile di delivery
     deliveryTiles = tiles.filter((tile) => tile.type == 2);
+
+    // precomputo, con BFS multi-sorgente, la delivery tile più vicina per ogni cella
+    deliveryTileMap = buildDeliveryTileMap(width, height, tiles, deliveryTiles);
 
     // filtro i tile di spawn e aggiungo la proprietà visits
     spawnTiles.push(
@@ -92,17 +94,14 @@ socket.onSensing(async (sensing) => {
 
 const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map, crates });
 
-// const myAgent = new IntentionRevisionReplace({ parcels, planLibrary, me, deliveryTiles });
-const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTiles });
+const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTiles, deliveryTileMap });
 
-// Before, optionsGeneration was in the main file and had access to parcels, me and myAgent
-// Now that it's in intention_revision.js, I pass those objects to a constructor as arguments so it can generate the options
-
+//deliveryTiles is used as a fallback
 socket.onSensing((sensing) => {
-    optionsGeneration(parcels, me, myAgent, deliveryTiles);
+    optionsGeneration(parcels, me, myAgent, deliveryTiles, deliveryTileMap);
 });
 socket.onYou((sensing) => {
-    optionsGeneration(parcels, me, myAgent, deliveryTiles);
+    optionsGeneration(parcels, me, myAgent, deliveryTiles, deliveryTileMap);
 });
 
 myAgent.loop();

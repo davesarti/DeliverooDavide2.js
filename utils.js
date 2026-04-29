@@ -1,4 +1,12 @@
 export const DISTANCE_FACTOR = 0.0; // Fattore di penalizzazione per la distanza, da calibrare
+export const EXPLORATION_INCENTIVE = 10; // Incentivo per l'esplorazione, da calibrare
+
+const directions = [
+    { dx: 1, dy: 0, move: 'right' },
+    { dx: -1, dy: 0, move: 'left' },
+    { dx: 0, dy: 1, move: 'up' },
+    { dx: 0, dy: -1, move: 'down' }
+];
 
 export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
     const dx = Math.abs(Math.round(x1) - Math.round(x2));
@@ -56,4 +64,66 @@ export function findCellToExplore(spawnTiles, me) {
     );
 
     return candidates[0];
+}
+
+export function canEnterTile(tileValue, move) {
+    if (Number(tileValue) === 0) {
+        return false;
+    }
+
+    if (tileValue == '↓' && move === 'up') return false;
+    if (tileValue == '↑' && move === 'down') return false;
+    if (tileValue == '→' && move === 'left') return false;
+    if (tileValue == '←' && move === 'right') return false;
+
+    return true;
+}
+
+export function buildDeliveryTileMap(width, height, tiles, deliveryTiles) {
+    const tileMap = Array.from({ length: height + 1 }, () => Array(width + 1).fill(0));
+
+    // Build a fast lookup grid with the raw tile type for every map position.
+    for (const tile of tiles) {
+        tileMap[tile.y][tile.x] = tile.type;
+    }
+
+    // nearestDelivery stores, for each cell, the closest delivery tile and its distance.
+    // The BFS starts from every delivery tile at once so the first visit is always the shortest path.
+    const nearestDelivery = Array.from({ length: height + 1 }, () => Array(width + 1).fill(null));
+    const visited = Array.from({ length: height + 1 }, () => Array(width + 1).fill(false));
+    const queue = [];
+
+    // Seed the queue with all delivery tiles as independent BFS sources.
+    for (const deliveryTile of deliveryTiles) {
+        visited[deliveryTile.y][deliveryTile.x] = true;
+        nearestDelivery[deliveryTile.y][deliveryTile.x] = { tile: deliveryTile, distance: 0 };
+        queue.push({ x: deliveryTile.x, y: deliveryTile.y, source: deliveryTile, distance: 0 });
+    }
+
+    let head = 0;
+    while (head < queue.length) {
+        const current = queue[head++];
+
+        // Expand to the four adjacent cells, but only through tiles that can legally be entered.
+        for (const { dx, dy, move } of directions) {
+            const nextX = current.x + dx;
+            const nextY = current.y + dy;
+
+            const insideMap =
+                nextX >= 0 && nextX < tileMap[0].length &&
+                nextY >= 0 && nextY < tileMap.length;
+
+            // Skip out-of-bounds cells, already visited cells, and blocked transitions.
+            if (!insideMap) continue;
+            if (visited[nextY][nextX]) continue;
+            if (!canEnterTile(tileMap[nextY][nextX], move)) continue;
+
+            visited[nextY][nextX] = true;
+            // Record the delivery source that first reaches this cell, which is the nearest one.
+            nearestDelivery[nextY][nextX] = { tile: current.source, distance: current.distance + 1 };
+            queue.push({ x: nextX, y: nextY, source: current.source, distance: current.distance + 1 });
+        }
+    }
+
+    return nearestDelivery;
 }
