@@ -94,14 +94,14 @@ socket.onSensing(async (sensing) => {
 
 const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map, crates });
 
-const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTiles, deliveryTileMap });
+const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTileMap });
 
 //deliveryTiles is used as a fallback
 socket.onSensing((sensing) => {
-    optionsGeneration(parcels, me, myAgent, deliveryTiles, deliveryTileMap);
+    optionsGeneration(parcels, me, myAgent, deliveryTileMap);
 });
 socket.onYou((sensing) => {
-    optionsGeneration(parcels, me, myAgent, deliveryTiles, deliveryTileMap);
+    optionsGeneration(parcels, me, myAgent, deliveryTileMap);
 });
 
 myAgent.loop();
