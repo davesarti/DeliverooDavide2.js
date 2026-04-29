@@ -214,6 +214,10 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, shouldPause = (
                     if (!insideMap) continue;
                     if (visited[newY][newX]) continue;
                     if (Number(map[newY][newX]) === 0) continue;
+                    if (map[newY][newX] == "↓" && move === 'up') continue;
+                    if (map[newY][newX] == "↑" && move === 'down') continue;
+                    if (map[newY][newX] == "→" && move === 'left') continue;
+                    if (map[newY][newX] == "←" && move === 'right') continue;
 
                     visited[newY][newX] = true;
 
