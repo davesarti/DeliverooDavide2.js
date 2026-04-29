@@ -37,8 +37,16 @@ export class Plan {
     }
 }
 
-export function createPlanLibrary({ socket, me, spawnTiles, map, shouldPause = () => false }) {
+export function createPlanLibrary({ socket, me, spawnTiles, map, crates, shouldPause = () => false }) {
     const planLibrary = [];
+
+    function isOccupied(x, y, objects) {
+        for (const obj of objects.values()) {
+            if (obj.x === x && obj.y === y) return true;
+        }
+        return false;
+    }
+    
 
     async function waitWhilePaused() {
         while (shouldPause()) {
@@ -218,6 +226,7 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, shouldPause = (
                     if (map[newY][newX] == "↑" && move === 'down') continue;
                     if (map[newY][newX] == "→" && move === 'left') continue;
                     if (map[newY][newX] == "←" && move === 'right') continue;
+                    if (isOccupied(newX, newY, crates)) continue;
 
                     visited[newY][newX] = true;
 

@@ -20,6 +20,7 @@ const me = { id: null, name: null, x: null, y: null, score: null };
  * @type {Map<string, {id: string, carriedBy?: string, x:number, y:number, reward:number}>}
  */
 const parcels = new Map();
+const crates = new Map();
 
 socket.onYou(({ id, name, x, y, score }) => {
     me.id = id;
@@ -68,15 +69,28 @@ socket.onSensing(async (sensing) => {
         parcels.set(parcel.id, parcel);
     }
 
-    const sensedIds = new Set(sensing.parcels.map((parcel) => parcel.id));
+    for (const crate of sensing.crates) {
+        crates.set(crate.id, crate);
+    }
+
+    // Rimuovo i crate che non sono più visibili
+    const sensedIdsCrates = new Set(sensing.crates.map((crate) => crate.id));
+    for (const knownCrate of crates.values()) {
+        if (!sensedIdsCrates.has(knownCrate.id)) {
+            crates.delete(knownCrate.id);
+        }
+    }
+
+    // Rimuovo i parcels che non sono più visibili
+    const sensedIdsParcels = new Set(sensing.parcels.map((parcel) => parcel.id));
     for (const knownParcel of parcels.values()) {
-        if (!sensedIds.has(knownParcel.id)) {
+        if (!sensedIdsParcels.has(knownParcel.id)) {
             parcels.delete(knownParcel.id);
         }
     }
 });
 
-const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map });
+const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map, crates });
 
 // const myAgent = new IntentionRevisionReplace({ parcels, planLibrary, me, deliveryTiles });
 const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTiles });
