@@ -5,7 +5,7 @@ import {
     optionsGeneration,
     IntentionRevisionRevise
 } from './intention_revision.js';
-import { updateSpawnVisitCount, buildDeliveryTileMap, canEnterTile } from './utils.js';
+import { updateSpawnVisitCount, updateTilesPerSecond, buildDeliveryTileMap, buildSpawnTileMap, canEnterTile } from './utils.js';
 
 const socket = DjsConnect();
 
@@ -19,6 +19,7 @@ const me = { id: null, name: null, x: null, y: null, score: null };
  */
 const parcels = new Map();
 const crates = new Map();
+const agents = new Map();
 
 socket.onYou(({ id, name, x, y, score }) => {
     me.id = id;
@@ -27,10 +28,12 @@ socket.onYou(({ id, name, x, y, score }) => {
     me.y = y;
     me.score = score;
     updateSpawnVisitCount(me, spawnTiles);
+    updateTilesPerSecond(x, y);
 });
 
 let deliveryTiles = [];
 let deliveryTileMap = [];
+let spawnTileMap = [];  
 let spawnTiles = [];
 let map = [];
 
@@ -53,15 +56,23 @@ socket.onMap((width, height, tiles) => {
     // filtro i tile di delivery
     deliveryTiles = tiles.filter((tile) => tile.type == 2);
 
-    // precomputo, con BFS multi-sorgente, la delivery tile più vicina per ogni cella
-    deliveryTileMap = buildDeliveryTileMap(width, height, tiles, deliveryTiles);
-
     // filtro i tile di spawn e aggiungo la proprietà visits
     spawnTiles.push(
         ...tiles
             .filter((tile) => tile.type == 1)
             .map(t => ({ ...t, visits: 0 }))
     );
+
+    // precomputo, con BFS multi-sorgente, la delivery tile più vicina per ogni cella
+    deliveryTileMap = buildDeliveryTileMap(width, height, tiles, deliveryTiles);
+    spawnTileMap = buildSpawnTileMap(width, height, tiles, spawnTiles);
+
+    if (myAgent) {
+        myAgent.setDeliveryTileMap(deliveryTileMap); //Necessario perchè la generazione richiede tempo
+        myAgent.setSpawnTileMap(spawnTileMap);
+    }
+
+
 
     console.log('map ready');
 });
@@ -73,6 +84,21 @@ socket.onSensing(async (sensing) => {
 
     for (const crate of sensing.crates) {
         crates.set(crate.id, crate);
+    }
+
+    const sensedAgentsRaw = sensing.agents;
+    if (Array.isArray(sensedAgentsRaw)) {
+        for (const agent of sensedAgentsRaw) {
+            if (agent.id === me.id) continue;
+            agents.set(agent.id, agent);
+        }
+
+        const sensedIdsAgents = new Set(sensedAgentsRaw.map((agent) => agent.id));
+        for (const knownAgent of agents.values()) {
+            if (!sensedIdsAgents.has(knownAgent.id)) {
+                agents.delete(knownAgent.id);
+            }
+        }
     }
 
     // Rimuovo i crate che non sono più visibili
@@ -94,14 +120,14 @@ socket.onSensing(async (sensing) => {
 
 const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map, crates });
 
-const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTileMap });
+const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTileMap, spawnTileMap });
 
 //deliveryTiles is used as a fallback
 socket.onSensing((sensing) => {
-    optionsGeneration(parcels, me, myAgent, deliveryTileMap);
+    optionsGeneration(parcels, me, myAgent, deliveryTileMap, spawnTileMap);
 });
 socket.onYou((sensing) => {
-    optionsGeneration(parcels, me, myAgent, deliveryTileMap);
+    optionsGeneration(parcels, me, myAgent, deliveryTileMap, spawnTileMap);
 });
 
 myAgent.loop();

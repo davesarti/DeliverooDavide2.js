@@ -1,5 +1,53 @@
-export const DISTANCE_FACTOR = 0.0; // Fattore di penalizzazione per la distanza, da calibrare
-export const EXPLORATION_INCENTIVE = 10; // Incentivo per l'esplorazione, da calibrare
+export const EXPLORATION_INCENTIVE = 0; // Incentivo per l'esplorazione, da calibrare
+let tiles_per_sec = 10.0;
+export const PARCEL_DECAY = 1;
+
+const MOVING_WINDOW_MS = 10000;
+
+const movementStats = {
+    lastX: null,
+    lastY: null,
+    lastTimeMs: null,
+    samples: [],
+    lastReportMs: 0
+};
+
+export function updateTilesPerSecond (x, y) {
+    const nowMs = Date.now();
+
+    if (movementStats.lastTimeMs === null) {
+        movementStats.lastX = x;
+        movementStats.lastY = y;
+        movementStats.lastTimeMs = nowMs;
+        return;
+    }
+
+    const dx = Math.abs(x - movementStats.lastX);
+    const dy = Math.abs(y - movementStats.lastY);
+    const movedTiles = dx + dy;
+    movementStats.samples.push({ timeMs: nowMs, tiles: movedTiles });
+
+    const cutoffMs = nowMs - MOVING_WINDOW_MS;
+    while (movementStats.samples.length > 0 && movementStats.samples[0].timeMs < cutoffMs) {
+        movementStats.samples.shift();
+    }
+
+    if (nowMs - movementStats.lastReportMs >= 1000 && movementStats.samples.length > 0) {
+        const windowTiles = movementStats.samples.reduce((sum, s) => sum + s.tiles, 0);
+        const windowDurationMs = Math.max(nowMs - movementStats.samples[0].timeMs, 1);
+        const tilesPerSecond = windowTiles / (windowDurationMs / 1000);
+        tiles_per_sec = Number(tilesPerSecond.toFixed(2));
+        movementStats.lastReportMs = nowMs;
+    }
+
+    movementStats.lastX = x;
+    movementStats.lastY = y;
+    movementStats.lastTimeMs = nowMs;
+};
+
+export function getTilesPerSecond() {
+    return tiles_per_sec;
+}
 
 const directions = [
     { dx: 1, dy: 0, move: 'right' },
@@ -126,4 +174,58 @@ export function buildDeliveryTileMap(width, height, tiles, deliveryTiles) {
     }
 
     return nearestDelivery;
+}
+
+export function buildSpawnTileMap(width, height, tiles, spawnTiles) {
+    const tileMap = Array.from({ length: height + 1 }, () => Array(width + 1).fill(0));
+
+    for (const tile of tiles) {
+        tileMap[tile.y][tile.x] = tile.type;
+    }
+
+    const spawnTileMap = Array.from({ length: height + 1 }, (_, row) =>
+        Array.from({ length: width + 1 }, (_, col) =>
+            spawnTiles.map((tile) => ({
+                spawnX: tile.x,
+                spawnY: tile.y,
+                cellX: col,
+                cellY: row,
+                distance: Number.POSITIVE_INFINITY
+            }))
+        )
+    );
+
+    for (let i = 0; i < spawnTiles.length; i++) {
+        const spawnTile = spawnTiles[i];
+        const visited = Array.from({ length: height + 1 }, () => Array(width + 1).fill(false));
+        const queue = [];
+
+        visited[spawnTile.y][spawnTile.x] = true;
+        spawnTileMap[spawnTile.y][spawnTile.x][i].distance = 0;
+        queue.push({ x: spawnTile.x, y: spawnTile.y, distance: 0 });
+
+        let head = 0;
+        while (head < queue.length) {
+            const current = queue[head++];
+
+            for (const { dx, dy, move } of directions) {
+                const nextX = current.x + dx;
+                const nextY = current.y + dy;
+
+                const insideMap =
+                    nextX >= 0 && nextX < tileMap[0].length &&
+                    nextY >= 0 && nextY < tileMap.length;
+
+                if (!insideMap) continue;
+                if (visited[nextY][nextX]) continue;
+                if (!canEnterTile(tileMap[nextY][nextX], move)) continue;
+
+                visited[nextY][nextX] = true;
+                spawnTileMap[nextY][nextX][i].distance = current.distance + 1;
+                queue.push({ x: nextX, y: nextY, distance: current.distance + 1 });
+            }
+        }
+    }
+
+    return spawnTileMap;
 }
