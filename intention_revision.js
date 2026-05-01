@@ -257,13 +257,12 @@ export class IntentionRevision {
             const [, x, y, parcelId] = predicate;
             const newParcel = this.#parcels.get(parcelId);
             if (!newParcel) {
-                return Number.NEGATIVE_INFINITY;
+                return -1;
             }
             const nearest = nearestDeliveryTileAt({ x, y }, this.#deliveryTileMap);
-            console.log(nearest)
             const pickupDistance = spawnMapDistance(this.#spawnTileMap, this.#me, { x, y })
-                ?? distance({ x, y }, this.#me);
-            const routeEstimatedDistance = pickupDistance + (nearest ? nearest.distance : nearestDeliveryDistance({ x, y }, this.#deliveryTileMap));
+                ?? distance({ x, y }, this.#me); //Spawn map access or fallback to direct manhattan distance
+            const routeEstimatedDistance = pickupDistance + (nearest ? nearest.distance : nearestDeliveryDistance({ x, y }, this.#deliveryTileMap)); //Choice with delivery map access or fallback to nearest delivery by manhattan
             let estimatedParcelLoss = 0;
             for (const parcel of MyParcels) {
                 estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * distance_factor());
@@ -289,7 +288,7 @@ export class IntentionRevision {
             score: this.intentionScore(intention.predicate)
         }));
 
-        const validIntentions = scoredIntentions.filter((entry) => entry.score !== Number.NEGATIVE_INFINITY);
+        const validIntentions = scoredIntentions.filter((entry) => entry.score > 0);
 
         validIntentions.sort((a, b) => {
             if (b.score !== a.score) {

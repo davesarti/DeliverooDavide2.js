@@ -1,4 +1,4 @@
-export const EXPLORATION_INCENTIVE = 0; // Incentivo per l'esplorazione, da calibrare
+export const EXPLORATION_INCENTIVE = 1; // Incentivo per l'esplorazione, da calibrare
 let tiles_per_sec = 10.0;
 export const PARCEL_DECAY = 1;
 
