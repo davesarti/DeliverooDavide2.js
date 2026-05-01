@@ -1,4 +1,5 @@
 export const DISTANCE_FACTOR = 0.0; // Fattore di penalizzazione per la distanza, da calibrare
+const MAX_HEAT = 100; // Valore massimo di "calore" per una cella di spawn
 
 export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
     const dx = Math.abs(Math.round(x1) - Math.round(x2));
@@ -19,41 +20,36 @@ export function nearestDeliveryDistance({ x, y }, deliveryTiles) {
     return [bestDistance, tile];
 }
 
-export function updateSpawnVisitCount(me, spawnTiles) {
+export function updateSpawnVisitCount(me, spawnTiles, raggio_sensing) {
     for (const tile of spawnTiles) {
-        if (tile.x === me.x && tile.y === me.y) {
-            tile.visits++;
+        const manhattanDist = Math.abs(tile.x - me.x) + Math.abs(tile.y - me.y);
+        if (manhattanDist <= raggio_sensing) {
+            // Tile dentro il rombo di sensing → raffredda
+            tile.visits = 0;
+        } else {
+            // Tile fuori dal sensing → scalda
+            if (tile.visits < MAX_HEAT) {
+                tile.visits++;
+            }
         }
     }
 }
 
-function getSortedSpawnTiles(spawnTiles, me) {
-    const sorted = [];
-
-    for (const tile of spawnTiles) {
-        sorted.push({
-            dist: distance(tile, me),
-            x: tile.x,
-            y: tile.y,
-            visits: tile.visits
-        });
-    }
-
-    sorted.sort((a, b) => a.dist - b.dist);
-    return sorted;
-}
-
 export function findCellToExplore(spawnTiles, me) {
-    const candidates = getSortedSpawnTiles(spawnTiles, me)
-        .filter(t => !(t.x === me.x && t.y === me.y));
+    // Escludi la cella corrente
+    const candidates = spawnTiles.filter(t => !(t.x === me.x && t.y === me.y));
 
-    const maxDist = Math.max(...spawnTiles.map(t => distance(t, me)));
-    const maxVisits = Math.max(...spawnTiles.map(t => t.visits));
-    const weight = maxVisits > 0 ? maxDist / maxVisits : 1;
+    if (candidates.length === 0) return null;
 
-    candidates.sort((a, b) =>
-        (a.dist + a.visits * weight) - (b.dist + b.visits * weight)
-    );
+    const maxVisits = Math.max(...candidates.map(t => t.visits));
+    const maxDist = Math.max(...candidates.map(t => distance({ x: t.x, y: t.y }, me))) || 1;
+
+    // Score: calore normalizzato + vicinanza normalizzata
+    candidates.sort((a, b) => {
+        const scoreA = (a.visits / maxVisits) + (1 - distance({ x: a.x, y: a.y }, me) / maxDist);
+        const scoreB = (b.visits / maxVisits) + (1 - distance({ x: b.x, y: b.y }, me) / maxDist);
+        return scoreB - scoreA; // ordine decrescente: score alto = preferibile
+    });
 
     return candidates[0];
 }

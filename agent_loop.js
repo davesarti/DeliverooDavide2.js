@@ -22,18 +22,24 @@ const me = { id: null, name: null, x: null, y: null, score: null };
 const parcels = new Map();
 const crates = new Map();
 
+let deliveryTiles = [];
+let spawnTiles = [];
+let map = [];
+let raggio_sensing;
+
+socket.onConfig((config) => {
+    raggio_sensing = config.GAME.player.observation_distance;
+});
+
 socket.onYou(({ id, name, x, y, score }) => {
     me.id = id;
     me.name = name;
     me.x = x;
     me.y = y;
     me.score = score;
-    updateSpawnVisitCount(me, spawnTiles);
+    updateSpawnVisitCount(me, spawnTiles, raggio_sensing);
+    optionsGeneration(parcels, me, myAgent, deliveryTiles);
 });
-
-let deliveryTiles = [];
-let spawnTiles = [];
-let map = [];
 
 socket.onMap((width, height, tiles) => {
     // resetto map, spawnTiles e deliveryTiles
@@ -60,11 +66,9 @@ socket.onMap((width, height, tiles) => {
             .filter((tile) => tile.type == 1)
             .map(t => ({ ...t, visits: 0 }))
     );
-
-    console.log('map ready');
 });
 
-socket.onSensing(async (sensing) => {
+socket.onSensing((sensing) => {
     for (const parcel of sensing.parcels) {
         parcels.set(parcel.id, parcel);
     }
@@ -88,22 +92,14 @@ socket.onSensing(async (sensing) => {
             parcels.delete(knownParcel.id);
         }
     }
+
+    optionsGeneration(parcels, me, myAgent, deliveryTiles);
 });
 
 const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map, crates });
 
 // const myAgent = new IntentionRevisionReplace({ parcels, planLibrary, me, deliveryTiles });
 const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTiles });
-
-// Before, optionsGeneration was in the main file and had access to parcels, me and myAgent
-// Now that it's in intention_revision.js, I pass those objects to a constructor as arguments so it can generate the options
-
-socket.onSensing((sensing) => {
-    optionsGeneration(parcels, me, myAgent, deliveryTiles);
-});
-socket.onYou((sensing) => {
-    optionsGeneration(parcels, me, myAgent, deliveryTiles);
-});
 
 myAgent.loop();
 

@@ -47,7 +47,6 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, shouldP
         return false;
     }
     
-
     async function waitWhilePaused() {
         while (shouldPause()) {
             await new Promise((res) => setImmediate(res));
@@ -121,7 +120,6 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, shouldP
             return true;
         }
     }
-
 
     class BlindMove extends Plan {
         static isApplicableTo(go_to, x, y) {
