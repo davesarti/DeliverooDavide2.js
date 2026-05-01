@@ -38,13 +38,12 @@ function spawnMapDistance(spawnTileMap, from, target) {
     return entry.distance;
 }
 
-function generateBestPickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) {
+function generatePickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) {
     if (!Array.isArray(deliveryTileMap) || deliveryTileMap.length === 0) {
         return null;
     }
 
-    let bestOption = null;
-    let bestScore = Number.NEGATIVE_INFINITY;
+    const pickupOptions = [];
 
     for (const parcel of parcels.values()) {
         if (parcel.carriedBy) {
@@ -60,12 +59,15 @@ function generateBestPickupOptions({ parcels, me, deliveryTileMap, spawnTileMap 
             ?? distance({ x: parcel.x, y: parcel.y }, { x: me.x, y: me.y });
         const totalDistance = pickupDistance + deliveryDistance;
         const currentScore = parcel.reward - totalDistance * distance_factor();
-        if (currentScore > 0 && currentScore > bestScore) {
-            bestScore = currentScore;
-            bestOption = ['go_pick_up', parcel.x, parcel.y, parcel.id];
+        if (currentScore > 0) {
+            pickupOptions.push(
+                ['go_pick_up', parcel.x, parcel.y, parcel.id]
+            );
         }
+        return pickupOptions;
     }
-    return bestOption;
+
+    return pickupOptions;
 }
 
 function generateDeliveryOptions({ parcels, me, deliveryTileMap }) {
@@ -87,9 +89,9 @@ export function optionsGeneration(parcels, me, agent, deliveryTileMap, spawnTile
         return;
     }
 
-    const bestOption = generateBestPickupOptions({ parcels, me, deliveryTileMap, spawnTileMap });
-    if (bestOption) {
-        agent.push(bestOption);
+    const pickupOptions = generatePickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) ?? [];
+    for (const option of pickupOptions) {
+        agent.push(option);
     }
     const deliveryOption = generateDeliveryOptions({ parcels, me, deliveryTileMap });
     if (deliveryOption) {
