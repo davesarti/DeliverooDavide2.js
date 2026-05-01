@@ -56,7 +56,6 @@ function generatePickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) {
     }
 
     const pickupOptions = [];
-
     for (const parcel of parcels.values()) {
         if (parcel.carriedBy) {
             continue;
@@ -67,13 +66,11 @@ function generatePickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) {
         }
 
         const currentScore = parcel.reward - routeDistance * distance_factor();
-        console.log(`Evaluating pickup option for parcel at (${parcel.x}, ${parcel.y}) with reward ${parcel.reward} and score ${currentScore.toFixed(2)}`);
         if (currentScore > 0) {
             pickupOptions.push(
                 ['go_pick_up', parcel.x, parcel.y, parcel.id]
             );
         }
-        return pickupOptions;
     }
 
     return pickupOptions;
