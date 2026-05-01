@@ -1,4 +1,4 @@
-import { distance, nearestDeliveryDistance, EXPLORATION_INCENTIVE, PARCEL_DECAY, getTilesPerSecond } from './utils.js';
+import { distance, EXPLORATION_INCENTIVE, PARCEL_DECAY, getTilesPerSecond } from './utils.js';
 
 function distance_factor() {
     const tilesPerSec = getTilesPerSecond();
@@ -6,6 +6,18 @@ function distance_factor() {
         return 0;
     }
     return PARCEL_DECAY / tilesPerSec;
+}
+
+function pickupRouteDistance({ parcel, me, deliveryTileMap, spawnTileMap }) {
+    const nearest = nearestDeliveryTileAt({ x: parcel.x, y: parcel.y }, deliveryTileMap);
+    if (!nearest) {
+        return null;
+    }
+
+    const pickupDistance = spawnMapDistance(spawnTileMap, { x: me.x, y: me.y }, { x: parcel.x, y: parcel.y })
+        ?? distance({ x: parcel.x, y: parcel.y }, { x: me.x, y: me.y });
+
+    return pickupDistance + nearest.distance;
 }
 
 function nearestDeliveryTileAt({ x, y }, deliveryTileMap) {
@@ -49,16 +61,13 @@ function generatePickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) {
         if (parcel.carriedBy) {
             continue;
         }
-        const nearest = nearestDeliveryTileAt({ x: parcel.x, y: parcel.y }, deliveryTileMap);
-        if (!nearest) {
+        const routeDistance = pickupRouteDistance({ parcel, me, deliveryTileMap, spawnTileMap });
+        if (routeDistance == null) {
             continue;
         }
 
-        const deliveryDistance = nearest.distance;
-        const pickupDistance = spawnMapDistance(spawnTileMap, { x: me.x, y: me.y }, { x: parcel.x, y: parcel.y })
-            ?? distance({ x: parcel.x, y: parcel.y }, { x: me.x, y: me.y });
-        const totalDistance = pickupDistance + deliveryDistance;
-        const currentScore = parcel.reward - totalDistance * distance_factor();
+        const currentScore = parcel.reward - routeDistance * distance_factor();
+        console.log(`Evaluating pickup option for parcel at (${parcel.x}, ${parcel.y}) with reward ${parcel.reward} and score ${currentScore.toFixed(2)}`);
         if (currentScore > 0) {
             pickupOptions.push(
                 ['go_pick_up', parcel.x, parcel.y, parcel.id]
@@ -246,7 +255,11 @@ export class IntentionRevision {
         const action = predicate[0];
         if (action === 'go_drop_off') {
             const [, x, y] = predicate;
-            const routeEstimatedDistance = distance({ x, y }, this.#me);
+            const routeEstimatedDistance = nearestDeliveryTileAt({ x: this.#me.x, y: this.#me.y }, this.#deliveryTileMap)?.distance;
+
+            if (routeEstimatedDistance == null) {
+                return -1;
+            }
             for (const parcel of MyParcels) {
                 estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * distance_factor());
             }
@@ -259,13 +272,22 @@ export class IntentionRevision {
             if (!newParcel) {
                 return -1;
             }
-            const nearest = nearestDeliveryTileAt({ x, y }, this.#deliveryTileMap);
-            const pickupDistance = spawnMapDistance(this.#spawnTileMap, this.#me, { x, y })
-                ?? distance({ x, y }, this.#me); //Spawn map access or fallback to direct manhattan distance
-            const routeEstimatedDistance = pickupDistance + (nearest ? nearest.distance : nearestDeliveryDistance({ x, y }, this.#deliveryTileMap)); //Choice with delivery map access or fallback to nearest delivery by manhattan
-            let estimatedParcelLoss = 0;
-            for (const parcel of MyParcels) {
-                estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * distance_factor());
+            const routeEstimatedDistance = pickupRouteDistance({
+                parcel: newParcel,
+                me: this.#me,
+                deliveryTileMap: this.#deliveryTileMap,
+                spawnTileMap: this.#spawnTileMap
+            });
+            if (routeEstimatedDistance == null) {
+                return -1;
+            }
+            if (MyParcels.length === 0) {
+                return newParcel.reward - routeEstimatedDistance * distance_factor();
+            } else {
+                let estimatedParcelLoss = 0;
+                for (const parcel of MyParcels) {
+                    estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * distance_factor());
+                }
             }
             return (total + newParcel.reward - routeEstimatedDistance * distance_factor() - estimatedParcelLoss);
     }
