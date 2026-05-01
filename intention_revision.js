@@ -1,34 +1,82 @@
-import { distance, nearestDeliveryDistance, DISTANCE_FACTOR } from './utils.js';
+import { distance, nearestDeliveryDistance, EXPLORATION_INCENTIVE, PARCEL_DECAY, getTilesPerSecond } from './utils.js';
 
-function generateBestPickupOptions({ parcels, me, deliveryTiles }) { //nuova logica, ora vengono generate option per tutti i pacchi con score positivo
-    if (!Array.isArray(deliveryTiles) || deliveryTiles.length === 0) {
+function distance_factor() {
+    const tilesPerSec = getTilesPerSecond();
+    if (!tilesPerSec || tilesPerSec <= 0) {
+        return 0;
+    }
+    return PARCEL_DECAY / tilesPerSec;
+}
+
+function nearestDeliveryTileAt({ x, y }, deliveryTileMap) {
+    const row = deliveryTileMap?.[Math.round(y)];
+    const mappedEntry = row?.[Math.round(x)];
+
+    if (mappedEntry) {
+        return mappedEntry;  // { tile: deliveryTile, distance: dist }
+    }
+
+    return null;
+}
+
+function spawnMapDistance(spawnTileMap, from, target) {
+    const fromRow = spawnTileMap?.[Math.round(from.y)];
+    const fromEntries = fromRow?.[Math.round(from.x)];
+
+    if (!Array.isArray(fromEntries)) {
         return null;
     }
 
-    let bestOptions = [];
+    const entry = fromEntries.find(
+        (candidate) => candidate.spawnX === Math.round(target.x) && candidate.spawnY === Math.round(target.y)
+    );
+
+    if (!entry || !Number.isFinite(entry.distance)) {
+        return null;
+    }
+
+    return entry.distance;
+}
+
+function generatePickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) {
+    if (!Array.isArray(deliveryTileMap) || deliveryTileMap.length === 0) {
+        return null;
+    }
+
+    const pickupOptions = [];
 
     for (const parcel of parcels.values()) {
         if (parcel.carriedBy) {
             continue;
         }
-        const [deliveryDistance] = nearestDeliveryDistance({ x: parcel.x, y: parcel.y }, deliveryTiles);
-        const totalDistance = distance({ x: parcel.x, y: parcel.y }, { x: me.x, y: me.y }) + deliveryDistance;
-        const currentScore = parcel.reward - totalDistance * DISTANCE_FACTOR;
-        if (currentScore > 0) {
-            const bestOption = ['go_pick_up', parcel.x, parcel.y, parcel.id];
-            bestOptions.push(bestOption);
+        const nearest = nearestDeliveryTileAt({ x: parcel.x, y: parcel.y }, deliveryTileMap);
+        if (!nearest) {
+            continue;
         }
+
+        const deliveryDistance = nearest.distance;
+        const pickupDistance = spawnMapDistance(spawnTileMap, { x: me.x, y: me.y }, { x: parcel.x, y: parcel.y })
+            ?? distance({ x: parcel.x, y: parcel.y }, { x: me.x, y: me.y });
+        const totalDistance = pickupDistance + deliveryDistance;
+        const currentScore = parcel.reward - totalDistance * distance_factor();
+        if (currentScore > 0) {
+            pickupOptions.push(
+                ['go_pick_up', parcel.x, parcel.y, parcel.id]
+            );
+        }
+        return pickupOptions;
     }
 
-    return bestOptions;
+    return pickupOptions;
 }
 
-function generateDeliveryOptions({ parcels, me, deliveryTiles }) {
+function generateDeliveryOptions({ parcels, me, deliveryTileMap }) {
     let bestOption = null;
 
     if (Array.from(parcels.values()).find((p) => p.carriedBy === me.id)) {
-        const [, deliveryTile] = nearestDeliveryDistance({ x: me.x, y: me.y }, deliveryTiles);
-        if (deliveryTile) {
+        const nearest = nearestDeliveryTileAt({ x: me.x, y: me.y }, deliveryTileMap);
+        if (nearest) {
+            const deliveryTile = nearest.tile;
             bestOption = ['go_drop_off', deliveryTile.x, deliveryTile.y];
         }
     }
@@ -36,16 +84,16 @@ function generateDeliveryOptions({ parcels, me, deliveryTiles }) {
     return bestOption;
 }
 
-export function optionsGeneration(parcels, me, agent, deliveryTiles) {
-    if (!me?.id || me?.x == null || me?.y == null || !Array.isArray(deliveryTiles) || deliveryTiles.length === 0) {
+export function optionsGeneration(parcels, me, agent, deliveryTileMap, spawnTileMap) {
+    if (!me?.id || me?.x == null || me?.y == null || !Array.isArray(deliveryTileMap) || deliveryTileMap.length === 0) {
         return;
     }
 
-    const bestOptions = generateBestPickupOptions({ parcels, me, deliveryTiles });
-    if (bestOptions.length > 0) {
-        agent.push(...bestOptions);
+    const pickupOptions = generatePickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) ?? [];
+    for (const option of pickupOptions) {
+        agent.push(option);
     }
-    const deliveryOption = generateDeliveryOptions({ parcels, me, deliveryTiles });
+    const deliveryOption = generateDeliveryOptions({ parcels, me, deliveryTileMap });
     if (deliveryOption) {
         agent.push(deliveryOption);
     }
@@ -163,13 +211,23 @@ export class IntentionRevision {
     #parcels;
     #planLibrary;
     #me;
-    #deliveryTiles;
+    #deliveryTileMap;
+    #spawnTileMap;
 
-    constructor({ parcels, planLibrary, me, deliveryTiles = [] }) {
+    constructor({ parcels, planLibrary, me, deliveryTileMap = [], spawnTileMap = [] }) {
         this.#parcels = parcels;
         this.#planLibrary = planLibrary;
         this.#me = me;
-        this.#deliveryTiles = deliveryTiles;
+        this.#deliveryTileMap = deliveryTileMap;
+        this.#spawnTileMap = spawnTileMap;
+    }
+
+    setDeliveryTileMap(deliveryTileMap) {
+        this.#deliveryTileMap = Array.isArray(deliveryTileMap) ? deliveryTileMap : []; //Carino generalizzarlo per tutti i campi
+    }
+
+    setSpawnTileMap(spawnTileMap) {
+       this.#spawnTileMap = Array.isArray(spawnTileMap) ? spawnTileMap : [];
     }
 
     get intention_queue() {
@@ -181,31 +239,39 @@ export class IntentionRevision {
     }
 
     intentionScore(predicate) {
-    let MyParcels = [...this.#parcels.values()].filter((p) => p.carriedBy === this.#me.id);
-    let total = MyParcels.reduce((sum, p) => sum + p.reward, 0);
-    let estimatedParcelLoss = 0;
-    
-    const action = predicate[0];
-    if (action === 'go_drop_off') {
-        const [, x, y] = predicate;
-        const routeEstimatedDistance = distance({ x, y }, this.#me);
-        for (const parcel of MyParcels) {
-            estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * DISTANCE_FACTOR); //euristica
-        }
-        return (total - estimatedParcelLoss);
-    }
-    else if (action === 'go_pick_up') {
-        const [, x, y, parcelId] = predicate;
-        const newParcel = this.#parcels.get(parcelId);
-        if (!newParcel) {
-            return Number.NEGATIVE_INFINITY;
-        }
-        const routeEstimatedDistance = distance({ x, y }, this.#me) + nearestDeliveryDistance({ x, y }, this.#deliveryTiles)[0];
+        let MyParcels = [...this.#parcels.values()].filter((p) => p.carriedBy === this.#me.id);
+        let total = MyParcels.reduce((sum, p) => sum + p.reward, 0);
         let estimatedParcelLoss = 0;
-        for (const parcel of MyParcels) {
-            estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * DISTANCE_FACTOR); //euristica
+        
+        const action = predicate[0];
+        if (action === 'go_drop_off') {
+            const [, x, y] = predicate;
+            const routeEstimatedDistance = distance({ x, y }, this.#me);
+            for (const parcel of MyParcels) {
+                estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * distance_factor());
+            }
+            return (total - estimatedParcelLoss);
         }
-        return (total + newParcel.reward - routeEstimatedDistance * DISTANCE_FACTOR - estimatedParcelLoss);
+        else if (action === 'go_pick_up') {
+
+            const [, x, y, parcelId] = predicate;
+            const newParcel = this.#parcels.get(parcelId);
+            if (!newParcel) {
+                return -1;
+            }
+            const nearest = nearestDeliveryTileAt({ x, y }, this.#deliveryTileMap);
+            const pickupDistance = spawnMapDistance(this.#spawnTileMap, this.#me, { x, y })
+                ?? distance({ x, y }, this.#me); //Spawn map access or fallback to direct manhattan distance
+            const routeEstimatedDistance = pickupDistance + (nearest ? nearest.distance : nearestDeliveryDistance({ x, y }, this.#deliveryTileMap)); //Choice with delivery map access or fallback to nearest delivery by manhattan
+            let estimatedParcelLoss = 0;
+            for (const parcel of MyParcels) {
+                estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * distance_factor());
+            }
+            return (total + newParcel.reward - routeEstimatedDistance * distance_factor() - estimatedParcelLoss);
+    }
+
+    else if (action === 'explore') {
+        return EXPLORATION_INCENTIVE;
     }
 
     else {
@@ -222,7 +288,7 @@ export class IntentionRevision {
             score: this.intentionScore(intention.predicate)
         }));
 
-        const validIntentions = scoredIntentions.filter((entry) => entry.score !== Number.NEGATIVE_INFINITY);
+        const validIntentions = scoredIntentions.filter((entry) => entry.score > 0);
 
         validIntentions.sort((a, b) => {
             if (b.score !== a.score) {
@@ -260,8 +326,9 @@ export class IntentionRevision {
             if (this.intention_queue.length > 0) {
 
                 const intention = this.intention_queue[0];
-                const [action] = intention.predicate;   
+                const [action] = intention.predicate;
 
+                //Checking validity before committing
                 if (action === 'go_pick_up') {
                     const parcelId = intention.predicate[3];
                     const parcel = this.#parcels.get(parcelId);
@@ -325,35 +392,6 @@ export class IntentionRevision {
         const index = this.intention_queue.indexOf(intention);
         if (index !== -1) {
             this.intention_queue.splice(index, 1);
-        }
-    }
-}
-
-export class IntentionRevisionQueue extends IntentionRevision {
-    async push(predicate) {
-        if (this.intention_queue.find((i) => i.predicate.join(' ') === predicate.join(' '))) {
-            return;
-        }
-
-        console.log('IntentionRevisionQueue.push', predicate);
-        const intention = this.createIntention(predicate);
-        this.intention_queue.push(intention);
-    }
-}
-
-export class IntentionRevisionReplace extends IntentionRevision {
-    async push(predicate) {
-        const last = this.intention_queue.at(this.intention_queue.length - 1);
-        if (last && last.predicate.join(' ') === predicate.join(' ')) {
-            return;
-        }
-
-        console.log('IntentionRevisionReplace.push', predicate);
-        const intention = this.createIntention(predicate);
-        this.intention_queue.push(intention);
-
-        if (last) {
-            last.stop();
         }
     }
 }
