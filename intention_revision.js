@@ -1,4 +1,4 @@
-import { distance, EXPLORATION_INCENTIVE, PARCEL_DECAY, getTilesPerSecond } from './utils.js';
+import { distance, EXPLORATION_INCENTIVE, PARCEL_DECAY, DROP_DISINCENTIVE, getTilesPerSecond } from './utils.js';
 
 function distance_factor() {
     const tilesPerSec = getTilesPerSecond();
@@ -260,7 +260,7 @@ export class IntentionRevision {
             for (const parcel of MyParcels) {
                 estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * distance_factor());
             }
-            return (total - estimatedParcelLoss);
+            return (total - estimatedParcelLoss - DROP_DISINCENTIVE);
         }
         else if (action === 'go_pick_up') {
 
@@ -421,7 +421,6 @@ export class IntentionRevisionRevise extends IntentionRevision {
             return;
         }
 
-        console.log('IntentionRevisionRevise.push', predicate);
         const intention = this.createIntention(predicate);
         this.intention_queue.push(intention);
 
