@@ -56,7 +56,7 @@ const directions = [
     { dx: 0, dy: -1, move: 'down' }
 ];
 export const DISTANCE_FACTOR = 0.0; // Fattore di penalizzazione per la distanza, da calibrare
-const MAX_HEAT = 100; // Valore massimo di "calore" per una cella di spawn
+const MAX_HEAT = 1000; // Valore massimo di "calore" per una cella di spawn
 
 export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
     const dx = Math.abs(Math.round(x1) - Math.round(x2));
@@ -77,17 +77,25 @@ export function nearestDeliveryDistance({ x, y }, deliveryTiles) {
     return [bestDistance, tile];
 }
 
+function gaussianWeight(d, sigma) {
+    return Math.exp(-(d * d) / (2 * sigma * sigma));
+}
+
 export function updateSpawnVisitCount(me, spawnTiles, raggio_sensing) {
+    if (raggio_sensing === undefined) return;
+
+    const sigma = raggio_sensing / 2;
+
     for (const tile of spawnTiles) {
         const manhattanDist = Math.abs(tile.x - me.x) + Math.abs(tile.y - me.y);
+        const f = gaussianWeight(manhattanDist, sigma);
+
         if (manhattanDist <= raggio_sensing) {
-            // Tile dentro il rombo di sensing → raffredda
-            tile.visits = 0;
+            // Raffredda proporzionalmente alla vicinanza
+            tile.visits = tile.visits * (1 - f);
         } else {
-            // Tile fuori dal sensing → scalda
-            if (tile.visits < MAX_HEAT) {
-                tile.visits++;
-            }
+            // Riscalda proporzionalmente alla lontananza
+            tile.visits = Math.min(MAX_HEAT, Math.max(1, tile.visits) * (1 + (1 - f)));
         }
     }
 }
@@ -101,11 +109,13 @@ export function findCellToExplore(spawnTiles, me) {
     const maxVisits = Math.max(...candidates.map(t => t.visits));
     const maxDist = Math.max(...candidates.map(t => distance({ x: t.x, y: t.y }, me))) || 1;
 
-    // Score: calore normalizzato + vicinanza normalizzata
+    // Score: calore normalizzato e pesato + vicinanza normalizzata e pesata
+    const W_HEAT = 0.9; // W_DIST = 1 - W_HEAT = 0.3
+
     candidates.sort((a, b) => {
-        const scoreA = (a.visits / maxVisits) + (1 - distance({ x: a.x, y: a.y }, me) / maxDist);
-        const scoreB = (b.visits / maxVisits) + (1 - distance({ x: b.x, y: b.y }, me) / maxDist);
-        return scoreB - scoreA; // ordine decrescente: score alto = preferibile
+        const scoreA = W_HEAT * (a.visits / maxVisits) + (1 - W_HEAT) * (1 - distance({ x: a.x, y: a.y }, me) / maxDist);
+        const scoreB = W_HEAT * (b.visits / maxVisits) + (1 - W_HEAT) * (1 - distance({ x: b.x, y: b.y }, me) / maxDist);
+        return scoreB - scoreA;
     });
 
     return candidates[0];
