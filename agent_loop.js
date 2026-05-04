@@ -103,7 +103,7 @@ socket.onYou(({ id, name, x, y, score }) => {
     optionsGeneration(parcels, me, myAgent, deliveryTileMap, spawnTileMap);
 });
 
-const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels });
+const planLibrary = createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels, agents });
 const myAgent = new IntentionRevisionRevise({ parcels, planLibrary, me, deliveryTileMap, spawnTileMap });
 
 myAgent.loop();
