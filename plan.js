@@ -454,7 +454,6 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
                     if (consecutiveWaits > MAX_CONSECUTIVE_WAITS) {
                         throw 'wait limit exceeded';
                     }
-                    this.log('wait', 'no path', `count=${consecutiveWaits}`);
                     await new Promise((res) => setImmediate(res));
                     continue;
                 }

@@ -22,13 +22,27 @@ function pickupRouteDistance({ parcel, me, deliveryTileMap, spawnTileMap }) {
 
 function nearestDeliveryTileAt({ x, y }, deliveryTileMap) {
     const row = deliveryTileMap?.[Math.round(y)];
-    const mappedEntry = row?.[Math.round(x)];
+    const mappedEntries = row?.[Math.round(x)];
 
-    if (mappedEntry) {
-        return mappedEntry;  // { tile: deliveryTile, distance: dist }
+    if (!Array.isArray(mappedEntries) || mappedEntries.length === 0) {
+        return null;
     }
 
-    return null;
+    let best = null;
+    for (const entry of mappedEntries) {
+        if (!Number.isFinite(entry.distance)) {
+            continue;
+        }
+        if (!best || entry.distance < best.distance) {
+            best = entry;
+        }
+    }
+
+    if (!best) {
+        return null;
+    }
+
+    return { tile: { x: best.deliveryX, y: best.deliveryY }, distance: best.distance };
 }
 
 function spawnMapDistance(spawnTileMap, from, target) {
@@ -41,6 +55,25 @@ function spawnMapDistance(spawnTileMap, from, target) {
 
     const entry = fromEntries.find(
         (candidate) => candidate.spawnX === Math.round(target.x) && candidate.spawnY === Math.round(target.y)
+    );
+
+    if (!entry || !Number.isFinite(entry.distance)) {
+        return null;
+    }
+
+    return entry.distance;
+}
+
+function deliveryMapDistance(deliveryTileMap, from, target) {
+    const fromRow = deliveryTileMap?.[Math.round(from.y)];
+    const fromEntries = fromRow?.[Math.round(from.x)];
+
+    if (!Array.isArray(fromEntries)) {
+        return null;
+    }
+
+    const entry = fromEntries.find(
+        (candidate) => candidate.deliveryX === Math.round(target.x) && candidate.deliveryY === Math.round(target.y)
     );
 
     if (!entry || !Number.isFinite(entry.distance)) {
@@ -252,7 +285,11 @@ export class IntentionRevision {
         const action = predicate[0];
         if (action === 'go_drop_off') {
             const [, x, y] = predicate;
-            const routeEstimatedDistance = nearestDeliveryTileAt({ x: this.#me.x, y: this.#me.y }, this.#deliveryTileMap)?.distance;
+            const routeEstimatedDistance = deliveryMapDistance(
+                this.#deliveryTileMap,
+                { x: this.#me.x, y: this.#me.y },
+                { x, y }
+            );
 
             if (routeEstimatedDistance == null) {
                 return -1;
