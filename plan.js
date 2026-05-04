@@ -37,7 +37,7 @@ export class Plan {
     }
 }
 
-export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels = new Map(), shouldPause = () => false }) {
+export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels = new Map(), agents = new Map(), shouldPause = () => false }) {
     const planLibrary = [];
 
     function isOccupied(x, y, objects) {
@@ -45,6 +45,34 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
             if (obj.x === x && obj.y === y) return true;
         }
         return false;
+    }
+
+    function isAgentOccupied(x, y) {
+        for (const agent of agents.values()) {
+            if (agent.x === x && agent.y === y) return true;
+        }
+        return false;
+    }
+
+    const AGENT_AVOID_RADIUS = 5;
+    const AGENT_AVOID_WEIGHT = 100;
+
+    function agentProximityCost(x, y) {
+        let cost = 0;
+        const sigma = Math.max(AGENT_AVOID_RADIUS / 2, 1);
+        for (const agent of agents.values()) {
+            const dx = Math.abs(agent.x - x);
+            const dy = Math.abs(agent.y - y);
+            const dist = dx + dy;
+            if (dist <= 1) {
+                return Number.POSITIVE_INFINITY;
+            }
+            if (dist <= AGENT_AVOID_RADIUS) {
+                const gaussian = Math.exp(-(dist * dist) / (2 * sigma * sigma));
+                cost += gaussian * AGENT_AVOID_WEIGHT;
+            }
+        }
+        return cost;
     }
     
     async function waitWhilePaused() {
@@ -229,6 +257,7 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
                     if (map[newY][newX] == "→" && move === 'left') continue;
                     if (map[newY][newX] == "←" && move === 'right') continue;
                     if (isOccupied(newX, newY, crates)) continue;
+                    if (isAgentOccupied(newX, newY)) continue;
 
                     visited[newY][newX] = true;
 
@@ -263,6 +292,7 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
     const BASE_STEP_COST = 1;
     const MIN_EDGE_COST = 0.2;
     const PARCEL_REWARD_DISCOUNT = 0.1;
+    const MAX_CONSECUTIVE_WAITS = 50;
 
     class AStarMove extends Plan {
         static isApplicableTo(go_to, x, y) {
@@ -298,10 +328,15 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
             return rewards;
         }
 
-        #stepCostFor(key, rewardByKey) {
+        #stepCostFor(key, rewardByKey, x, y) {
             const reward = rewardByKey.get(key) ?? 0;
             const discounted = BASE_STEP_COST - reward * PARCEL_REWARD_DISCOUNT;
-            return Math.max(MIN_EDGE_COST, discounted);
+            const base = Math.max(MIN_EDGE_COST, discounted);
+            const agentCost = agentProximityCost(x, y);
+            if (!Number.isFinite(agentCost)) {
+                return Number.POSITIVE_INFINITY;
+            }
+            return base + agentCost;
         }
 
         async #tryPickupHere() {
@@ -377,9 +412,11 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
                     if (map[newY][newX] == "→" && move === 'left') continue;
                     if (map[newY][newX] == "←" && move === 'right') continue;
                     if (isOccupied(newX, newY, crates)) continue;
+                    if (isAgentOccupied(newX, newY)) continue;
 
                     const neighborKey = this.#key(newX, newY);
-                    const stepCost = this.#stepCostFor(neighborKey, rewardByKey);
+                    const stepCost = this.#stepCostFor(neighborKey, rewardByKey, newX, newY);
+                    if (!Number.isFinite(stepCost)) continue;
                     const tentativeGScore = (gScore.get(currentKey) ?? Number.MAX_VALUE) + stepCost;
 
                     if (tentativeGScore < (gScore.get(neighborKey) ?? Number.MAX_VALUE)) {
@@ -404,18 +441,56 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
             await waitWhilePaused();
             if (this.stopped) throw ['stopped'];
 
-            await this.#tryPickupHere();
+            let consecutiveWaits = 10;
 
-            const path = this.findPath(x, y);
+            while (me.x !== x || me.y !== y) {
+                await waitWhilePaused();
+                if (this.stopped) throw ['stopped'];
 
-            if (!path) {
-                throw 'path not found';
+                await this.#tryPickupHere();
+
+                const path = this.findPath(x, y);
+                if (!path) {
+                    consecutiveWaits += 1;
+                    if (consecutiveWaits > MAX_CONSECUTIVE_WAITS) {
+                        throw 'wait limit exceeded';
+                    }
+                    this.log('wait', 'no path', `count=${consecutiveWaits}`);
+                    await new Promise((res) => setImmediate(res));
+                    continue;
+                }
+
+                if (path.length === 0) {
+                    return true;
+                }
+
+                const move = path[0];
+                const next = {
+                    x: me.x + (move === 'right' ? 1 : move === 'left' ? -1 : 0),
+                    y: me.y + (move === 'up' ? 1 : move === 'down' ? -1 : 0)
+                };
+
+                const risk = agentProximityCost(next.x, next.y);
+                if (!Number.isFinite(risk)) {
+                    consecutiveWaits += 1;
+                    if (consecutiveWaits > MAX_CONSECUTIVE_WAITS) {
+                        throw 'wait limit exceeded';
+                    }
+                    await new Promise((res) => setImmediate(res));
+                    continue;
+                }
+
+                const moved = await socket.emitMove(move);
+                if (!moved) {
+                    throw 'movement failed';
+                }
+
+                me.x = moved.x;
+                me.y = moved.y;
+                consecutiveWaits = 0;
             }
 
-            await waitWhilePaused();
-            if (this.stopped) throw ['stopped'];
-
-            return await executePath(path, () => this.stopped, () => this.#tryPickupHere());
+            return true;
         }
     }
 
