@@ -281,7 +281,6 @@ export class IntentionRevision {
             if (MyParcels.length === 0) {
                 return newParcel.reward - routeEstimatedDistance * distance_factor();
             } else {
-                let estimatedParcelLoss = 0;
                 for (const parcel of MyParcels) {
                     estimatedParcelLoss += Math.min(parcel.reward, routeEstimatedDistance * distance_factor());
                 }

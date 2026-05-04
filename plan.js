@@ -37,7 +37,7 @@ export class Plan {
     }
 }
 
-export function createPlanLibrary({ socket, me, spawnTiles, map, crates, shouldPause = () => false }) {
+export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels = new Map(), shouldPause = () => false }) {
     const planLibrary = [];
 
     function isOccupied(x, y, objects) {
@@ -53,7 +53,7 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, shouldP
         }
     }
 
-    async function executePath(path, shouldStop = () => false) {
+    async function executePath(path, shouldStop = () => false, onStep = null) {
         for (const dir of path) {
             await waitWhilePaused();
             if (shouldStop()) {
@@ -67,6 +67,10 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, shouldP
 
             me.x = moved.x;
             me.y = moved.y;
+
+            if (onStep) {
+                await onStep();
+            }
 
             if (shouldStop()) {
                 throw ['stopped'];
@@ -256,6 +260,165 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, shouldP
         }
     }
 
+    const BASE_STEP_COST = 1;
+    const MIN_EDGE_COST = 0.2;
+    const PARCEL_REWARD_DISCOUNT = 0.1;
+
+    class AStarMove extends Plan {
+        static isApplicableTo(go_to, x, y) {
+            return go_to === 'go_to';
+        }
+
+        #key(x, y) {
+            return `${x},${y}`;
+        }
+
+        #heuristic(x, y, targetX, targetY) {
+            return (Math.abs(x - targetX) + Math.abs(y - targetY)) * MIN_EDGE_COST;
+        }
+
+        #reconstructPath(cameFrom, currentKey) {
+            const path = [];
+            let key = currentKey;
+            while (cameFrom.has(key)) {
+                const { prev, move } = cameFrom.get(key);
+                path.unshift(move);
+                key = prev;
+            }
+            return path;
+        }
+
+        #buildParcelRewardByKey() {
+            const rewards = new Map();
+            for (const parcel of parcels.values()) {
+                if (parcel.carriedBy) continue;
+                const key = this.#key(parcel.x, parcel.y);
+                rewards.set(key, (rewards.get(key) ?? 0) + (parcel.reward ?? 0));
+            }
+            return rewards;
+        }
+
+        #stepCostFor(key, rewardByKey) {
+            const reward = rewardByKey.get(key) ?? 0;
+            const discounted = BASE_STEP_COST - reward * PARCEL_REWARD_DISCOUNT;
+            return Math.max(MIN_EDGE_COST, discounted);
+        }
+
+        async #tryPickupHere() {
+            for (const parcel of parcels.values()) {
+                if (parcel.carriedBy) continue;
+                if (parcel.x === me.x && parcel.y === me.y) {
+                    await socket.emitPickup();
+                    return;
+                }
+            }
+        }
+
+        findPath(targetX, targetY) {
+            if (!map.length || !map[0]?.length) {
+                throw 'map not ready';
+            }
+
+            if (me.x === targetX && me.y === targetY) {
+                return [];
+            }
+
+            const height = map.length;
+            const width = map[0].length;
+
+            const openSet = [{ x: me.x, y: me.y }];
+            const openSetKeys = new Set([this.#key(me.x, me.y)]);
+
+            const cameFrom = new Map();
+            const gScore = new Map();
+            gScore.set(this.#key(me.x, me.y), 0);
+
+            const fScore = new Map();
+            fScore.set(
+                this.#key(me.x, me.y),
+                this.#heuristic(me.x, me.y, targetX, targetY)
+            );
+
+            const rewardByKey = this.#buildParcelRewardByKey();
+
+            const directions = [
+                { dx: 1, dy: 0, move: 'right' },
+                { dx: -1, dy: 0, move: 'left' },
+                { dx: 0, dy: 1, move: 'up' },
+                { dx: 0, dy: -1, move: 'down' }
+            ];
+
+            while (openSet.length > 0) {
+                openSet.sort((a, b) =>
+                    (fScore.get(this.#key(a.x, a.y)) ?? Number.MAX_VALUE) -
+                    (fScore.get(this.#key(b.x, b.y)) ?? Number.MAX_VALUE)
+                );
+
+                const current = openSet.shift();
+                const currentKey = this.#key(current.x, current.y);
+                openSetKeys.delete(currentKey);
+
+                if (current.x === targetX && current.y === targetY) {
+                    return this.#reconstructPath(cameFrom, currentKey);
+                }
+
+                for (const { dx, dy, move } of directions) {
+                    const newX = current.x + dx;
+                    const newY = current.y + dy;
+
+                    const insideMap =
+                        newX >= 0 && newX < width &&
+                        newY >= 0 && newY < height;
+
+                    if (!insideMap) continue;
+                    if (Number(map[newY][newX]) === 0) continue;
+                    if (map[newY][newX] == "↓" && move === 'up') continue;
+                    if (map[newY][newX] == "↑" && move === 'down') continue;
+                    if (map[newY][newX] == "→" && move === 'left') continue;
+                    if (map[newY][newX] == "←" && move === 'right') continue;
+                    if (isOccupied(newX, newY, crates)) continue;
+
+                    const neighborKey = this.#key(newX, newY);
+                    const stepCost = this.#stepCostFor(neighborKey, rewardByKey);
+                    const tentativeGScore = (gScore.get(currentKey) ?? Number.MAX_VALUE) + stepCost;
+
+                    if (tentativeGScore < (gScore.get(neighborKey) ?? Number.MAX_VALUE)) {
+                        cameFrom.set(neighborKey, { prev: currentKey, move });
+                        gScore.set(neighborKey, tentativeGScore);
+                        fScore.set(
+                            neighborKey,
+                            tentativeGScore + this.#heuristic(newX, newY, targetX, targetY)
+                        );
+                        if (!openSetKeys.has(neighborKey)) {
+                            openSet.push({ x: newX, y: newY });
+                            openSetKeys.add(neighborKey);
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        async execute(go_to, x, y) {
+            await waitWhilePaused();
+            if (this.stopped) throw ['stopped'];
+
+            await this.#tryPickupHere();
+
+            const path = this.findPath(x, y);
+
+            if (!path) {
+                throw 'path not found';
+            }
+
+            await waitWhilePaused();
+            if (this.stopped) throw ['stopped'];
+
+            return await executePath(path, () => this.stopped, () => this.#tryPickupHere());
+        }
+    }
+
     class SimpleExplore extends Plan {
         static isApplicableTo(explore) {
             return explore === 'explore';
@@ -277,6 +440,7 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, shouldP
     //planLibrary.push(BlindMove);
     planLibrary.push(GoDropOff);
     planLibrary.push(SimpleExplore);
+    planLibrary.push(AStarMove);
     planLibrary.push(BFSMove);
 
 
