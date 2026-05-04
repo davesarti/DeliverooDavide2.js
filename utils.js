@@ -57,7 +57,6 @@ const directions = [
     { dx: 0, dy: -1, move: 'down' }
 ];
 export const DISTANCE_FACTOR = 0.0; // Fattore di penalizzazione per la distanza, da calibrare
-const MAX_HEAT = 1000; // Valore massimo di "calore" per una cella di spawn
 
 export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
     const dx = Math.abs(Math.round(x1) - Math.round(x2));
@@ -96,7 +95,7 @@ export function updateSpawnVisitCount(me, spawnTiles, raggio_sensing) {
             tile.visits = tile.visits * (1 - f);
         } else {
             // Riscalda proporzionalmente alla lontananza
-            tile.visits = Math.min(MAX_HEAT, Math.max(1, tile.visits) * (1 + (1 - f)));
+            tile.visits = Math.max(1, tile.visits) * (1 + (1 - f));
         }
     }
 }

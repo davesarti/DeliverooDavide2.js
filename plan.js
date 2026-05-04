@@ -1,4 +1,5 @@
 import {findCellToExplore} from './utils.js';
+import {Heap} from 'heap-js';
 
 export class Plan {
     #stopped = false;
@@ -279,11 +280,11 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
 
         #reconstructPath(cameFrom, currentKey) {
             const path = [];
-            let key = currentKey;
-            while (cameFrom.has(key)) {
-                const { prev, move } = cameFrom.get(key);
+            let k = currentKey;
+            while (cameFrom.has(k)) {
+                const { prev, move } = cameFrom.get(k);
                 path.unshift(move);
-                key = prev;
+                k = prev;
             }
             return path;
         }
@@ -292,16 +293,30 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
             const rewards = new Map();
             for (const parcel of parcels.values()) {
                 if (parcel.carriedBy) continue;
-                const key = this.#key(parcel.x, parcel.y);
-                rewards.set(key, (rewards.get(key) ?? 0) + (parcel.reward ?? 0));
+                const k = this.#key(parcel.x, parcel.y);
+                rewards.set(k, (rewards.get(k) ?? 0) + (parcel.reward ?? 0));
             }
             return rewards;
         }
 
-        #stepCostFor(key, rewardByKey) {
-            const reward = rewardByKey.get(key) ?? 0;
-            const discounted = BASE_STEP_COST - reward * PARCEL_REWARD_DISCOUNT;
-            return Math.max(MIN_EDGE_COST, discounted);
+        // Restituisce il costo per entrare nella cella (nx, ny) con la mossa `move`.
+        // Restituisce Infinity se la cella è invalida (muro, fuori mappa,
+        // direzione vietata, cassa) — così il loop principale non ha bisogno
+        // di nessun `continue` esplicito per i controlli di validità.
+        #moveCost(nx, ny, move, width, height, rewardByKey) {
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) return Infinity;
+            const cell = map[ny][nx];
+            if (Number(cell) === 0)                return Infinity;
+            if (cell === '↓' && move === 'up')     return Infinity;
+            if (cell === '↑' && move === 'down')   return Infinity;
+            if (cell === '→' && move === 'left')   return Infinity;
+            if (cell === '←' && move === 'right')  return Infinity;
+            if (isOccupied(nx, ny, crates))        return Infinity;
+
+            // Cella valida: costo base ridotto dalla reward del pacco (se presente),
+            // ma mai sotto MIN_EDGE_COST per non rompere A*.
+            const reward = rewardByKey.get(this.#key(nx, ny)) ?? 0;
+            return Math.max(MIN_EDGE_COST, BASE_STEP_COST - reward * PARCEL_REWARD_DISCOUNT);
         }
 
         async #tryPickupHere() {
@@ -315,82 +330,72 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
         }
 
         findPath(targetX, targetY) {
-            if (!map.length || !map[0]?.length) {
-                throw 'map not ready';
-            }
-
-            if (me.x === targetX && me.y === targetY) {
-                return [];
-            }
+            if (!map.length || !map[0]?.length) throw 'map not ready';
+            if (me.x === targetX && me.y === targetY) return [];
 
             const height = map.length;
-            const width = map[0].length;
-
-            const openSet = [{ x: me.x, y: me.y }];
-            const openSetKeys = new Set([this.#key(me.x, me.y)]);
-
-            const cameFrom = new Map();
-            const gScore = new Map();
-            gScore.set(this.#key(me.x, me.y), 0);
-
-            const fScore = new Map();
-            fScore.set(
-                this.#key(me.x, me.y),
-                this.#heuristic(me.x, me.y, targetX, targetY)
-            );
-
+            const width  = map[0].length;
             const rewardByKey = this.#buildParcelRewardByKey();
 
+            const gScore   = new Map();
+            const fScore   = new Map();
+            const cameFrom = new Map();
+            const closedSet   = new Set();  // nodi già espansi: non vengono mai rivisitati
+
+            const startKey = this.#key(me.x, me.y);
+            gScore.set(startKey, 0);
+            fScore.set(startKey, this.#heuristic(me.x, me.y, targetX, targetY));
+
+            // Min-heap ordinata per fScore crescente: pop() estrae sempre
+            // il nodo con f più basso in O(log n) invece di O(n log n) del sort.
+            const openSet = new Heap((a, b) =>
+                (fScore.get(this.#key(a.x, a.y)) ?? Infinity) -
+                (fScore.get(this.#key(b.x, b.y)) ?? Infinity)
+            );
+            const openSetKeys = new Set([startKey]);
+            openSet.push({ x: me.x, y: me.y });
+
             const directions = [
-                { dx: 1, dy: 0, move: 'right' },
-                { dx: -1, dy: 0, move: 'left' },
-                { dx: 0, dy: 1, move: 'up' },
-                { dx: 0, dy: -1, move: 'down' }
+                { dx:  1, dy:  0, move: 'right' },
+                { dx: -1, dy:  0, move: 'left'  },
+                { dx:  0, dy:  1, move: 'up'    },
+                { dx:  0, dy: -1, move: 'down'  }
             ];
 
-            while (openSet.length > 0) {
-                openSet.sort((a, b) =>
-                    (fScore.get(this.#key(a.x, a.y)) ?? Number.MAX_VALUE) -
-                    (fScore.get(this.#key(b.x, b.y)) ?? Number.MAX_VALUE)
-                );
-
-                const current = openSet.shift();
+            while (openSet.size() > 0) {
+                const current    = openSet.pop();
                 const currentKey = this.#key(current.x, current.y);
                 openSetKeys.delete(currentKey);
+
+                // Il nodo potrebbe essere nell'heap con un fScore vecchio
+                // (aggiornato ma non rimosso): lo saltiamo se già espanso.
+                if (closedSet.has(currentKey)) continue;
+                closedSet.add(currentKey);
 
                 if (current.x === targetX && current.y === targetY) {
                     return this.#reconstructPath(cameFrom, currentKey);
                 }
 
                 for (const { dx, dy, move } of directions) {
-                    const newX = current.x + dx;
-                    const newY = current.y + dy;
+                    const nx = current.x + dx;
+                    const ny = current.y + dy;
+                    const neighborKey = this.#key(nx, ny);
 
-                    const insideMap =
-                        newX >= 0 && newX < width &&
-                        newY >= 0 && newY < height;
+                    if (closedSet.has(neighborKey)) continue;
 
-                    if (!insideMap) continue;
-                    if (Number(map[newY][newX]) === 0) continue;
-                    if (map[newY][newX] == "↓" && move === 'up') continue;
-                    if (map[newY][newX] == "↑" && move === 'down') continue;
-                    if (map[newY][newX] == "→" && move === 'left') continue;
-                    if (map[newY][newX] == "←" && move === 'right') continue;
-                    if (isOccupied(newX, newY, crates)) continue;
+                    // #moveCost restituisce Infinity per celle non valide:
+                    // non servono più i continue espliciti per ogni controllo.
+                    const cost = this.#moveCost(nx, ny, move, width, height, rewardByKey);
+                    if (!isFinite(cost)) continue;
 
-                    const neighborKey = this.#key(newX, newY);
-                    const stepCost = this.#stepCostFor(neighborKey, rewardByKey);
-                    const tentativeGScore = (gScore.get(currentKey) ?? Number.MAX_VALUE) + stepCost;
+                    const tentativeG = (gScore.get(currentKey) ?? Infinity) + cost;
 
-                    if (tentativeGScore < (gScore.get(neighborKey) ?? Number.MAX_VALUE)) {
+                    if (tentativeG < (gScore.get(neighborKey) ?? Infinity)) {
                         cameFrom.set(neighborKey, { prev: currentKey, move });
-                        gScore.set(neighborKey, tentativeGScore);
-                        fScore.set(
-                            neighborKey,
-                            tentativeGScore + this.#heuristic(newX, newY, targetX, targetY)
-                        );
+                        gScore.set(neighborKey, tentativeG);
+                        fScore.set(neighborKey, tentativeG + this.#heuristic(nx, ny, targetX, targetY));
                         if (!openSetKeys.has(neighborKey)) {
-                            openSet.push({ x: newX, y: newY });
+                            openSet.push({ x: nx, y: ny });
                             openSetKeys.add(neighborKey);
                         }
                     }
@@ -407,10 +412,7 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
             await this.#tryPickupHere();
 
             const path = this.findPath(x, y);
-
-            if (!path) {
-                throw 'path not found';
-            }
+            if (!path) throw 'path not found';
 
             await waitWhilePaused();
             if (this.stopped) throw ['stopped'];
