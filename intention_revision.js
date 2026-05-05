@@ -1,4 +1,4 @@
-import { distance, EXPLORATION_INCENTIVE, PARCEL_DECAY, DROP_DISINCENTIVE, getTilesPerSecond } from './utils.js';
+import { distance, EXPLORATION_INCENTIVE, PARCEL_DECAY, DROP_DISINCENTIVE, FAILED_INTENTION_RETRY_MS, getTilesPerSecond } from './utils.js';
 
 function distance_factor() {
     const tilesPerSec = getTilesPerSecond();
@@ -110,17 +110,37 @@ function generatePickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) {
 }
 
 function generateDeliveryOptions({ parcels, me, deliveryTileMap }) {
-    let bestOption = null;
-
-    if (Array.from(parcels.values()).find((p) => p.carriedBy === me.id)) {
-        const nearest = nearestDeliveryTileAt({ x: me.x, y: me.y }, deliveryTileMap);
-        if (nearest) {
-            const deliveryTile = nearest.tile;
-            bestOption = ['go_drop_off', deliveryTile.x, deliveryTile.y];
-        }
+    if (!Array.isArray(deliveryTileMap) || deliveryTileMap.length === 0) {
+        return [];
     }
 
-    return bestOption;
+    if (!Array.from(parcels.values()).find((p) => p.carriedBy === me.id)) {
+        return [];
+    }
+
+    const row = deliveryTileMap?.[Math.round(me.y)];
+    const mappedEntries = row?.[Math.round(me.x)];
+
+    if (!Array.isArray(mappedEntries) || mappedEntries.length === 0) {
+        return [];
+    }
+
+    const options = [];
+    const seen = new Set();
+
+    for (const entry of mappedEntries) {
+        if (!Number.isFinite(entry.distance)) {
+            continue;
+        }
+        const key = `${entry.deliveryX},${entry.deliveryY}`;
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        options.push(['go_drop_off', entry.deliveryX, entry.deliveryY]);
+    }
+
+    return options;
 }
 
 export function optionsGeneration(parcels, me, agent, deliveryTileMap, spawnTileMap) {
@@ -128,13 +148,20 @@ export function optionsGeneration(parcels, me, agent, deliveryTileMap, spawnTile
         return;
     }
 
+    const isFailedIntention = (predicate) =>
+        typeof agent?.isPredicateInFailedPool === 'function' && agent.isPredicateInFailedPool(predicate);
+
     const pickupOptions = generatePickupOptions({ parcels, me, deliveryTileMap, spawnTileMap }) ?? [];
     for (const option of pickupOptions) {
-        agent.push(option);
+        if (!isFailedIntention(option)) {
+            agent.push(option);
+        }
     }
-    const deliveryOption = generateDeliveryOptions({ parcels, me, deliveryTileMap });
-    if (deliveryOption) {
-        agent.push(deliveryOption);
+    const deliveryOptions = generateDeliveryOptions({ parcels, me, deliveryTileMap });
+    for (const option of deliveryOptions) {
+        if (!isFailedIntention(option)) {
+            agent.push(option);
+        }
     }
 };
 
@@ -161,6 +188,10 @@ function isStoppedPlanError(error) {
 
 function isPreemptedIntentionError(error) {
     return Array.isArray(error) && error[0] === PREEMPTED_INTENTION;
+}
+
+function isStoppedIntentionError(error) {
+    return Array.isArray(error) && error[0] === STOPPED_INTENTION;
 }
 
 class Intention {
@@ -252,6 +283,8 @@ export class IntentionRevision {
     #me;
     #deliveryTileMap;
     #spawnTileMap;
+    #failedIntentionPool = new Map();
+    #failedIntentionRetryMs = FAILED_INTENTION_RETRY_MS;
 
     constructor({ parcels, planLibrary, me, deliveryTileMap = [], spawnTileMap = [] }) {
         this.#parcels = parcels;
@@ -275,6 +308,47 @@ export class IntentionRevision {
 
     log(...args) {
         console.log(...args);
+    }
+
+    #predicateKey(predicate) {
+        return predicate.join(' ');
+    }
+
+    isPredicateInFailedPool(predicate) {
+        return this.#failedIntentionPool.has(this.#predicateKey(predicate));
+    }
+
+    #recordFailedIntention(predicate) {
+        const key = this.#predicateKey(predicate);
+        this.#failedIntentionPool.set(key, { predicate: [...predicate], addedAtMs: Date.now() });
+    }
+
+    #requeueFailedIntentions() {
+        const now = Date.now();
+        let requeued = false;
+
+        for (const [key, entry] of this.#failedIntentionPool.entries()) {
+            if (now - entry.addedAtMs < this.#failedIntentionRetryMs) {
+                continue;
+            }
+
+            this.#failedIntentionPool.delete(key);
+
+            if (this.#currentIntention && this.#predicateKey(this.#currentIntention.predicate) === key) {
+                continue;
+            }
+
+            if (samePredicateInQueue(this.intention_queue, entry.predicate)) {
+                continue;
+            }
+
+            this.intention_queue.push(this.createIntention(entry.predicate));
+            requeued = true;
+        }
+
+        if (requeued) {
+            this.sortQueueByScore();
+        }
     }
 
     intentionScore(predicate) {
@@ -378,6 +452,8 @@ export class IntentionRevision {
 
     async loop() {
         while (true) {
+            this.#requeueFailedIntentions();
+
             if (this.intention_queue.length > 0) {
 
                 const intention = this.intention_queue[0];
@@ -411,6 +487,7 @@ export class IntentionRevision {
 
                 await intention.achieve().catch((error) => {
                     const wasPreempted = isPreemptedIntentionError(error);
+                    const wasStopped = isStoppedIntentionError(error);
 
                     // Se l'intenzione e stata preemptata, la rigenero per mantenerla in coda.
                     if (wasPreempted) {
@@ -419,6 +496,11 @@ export class IntentionRevision {
                             this.intention_queue.splice(index, 1, this.createIntention(intention.predicate));
                             keepIntentionInQueue = true;
                         }
+                        return;
+                    }
+
+                    if (!wasStopped) {
+                        this.#recordFailedIntention(intention.predicate);
                     }
                 }).finally(() => {
                     if (this.#currentIntention === intention) {
@@ -431,7 +513,6 @@ export class IntentionRevision {
                 }
             }
             else if (this.intention_queue.length === 0) {
-                this.log('Intention queue is empty, start exploring');
                 this.push(['explore']);
             }
 
@@ -453,6 +534,9 @@ export class IntentionRevision {
 
 export class IntentionRevisionRevise extends IntentionRevision {
     async push(predicate) {
+        if (this.isPredicateInFailedPool(predicate)) {
+            return;
+        }
         if (samePredicateInQueue(this.intention_queue, predicate)) {
             return;
         }

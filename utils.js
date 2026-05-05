@@ -2,6 +2,15 @@ export const EXPLORATION_INCENTIVE = 0.01; // Incentivo per l'esplorazione, da c
 let tiles_per_sec = 10.0;
 export const PARCEL_DECAY = 1;
 export const DROP_DISINCENTIVE = 0; // Penalità per il rilascio di un pacco, da calibrare
+export const AGENT_AVOID_RADIUS = 5;
+export const AGENT_AVOID_WEIGHT = 100;
+export const BASE_STEP_COST = 1;
+export const MIN_EDGE_COST = 0.1;
+export const PARCEL_REWARD_DISCOUNT = 0.2;
+export const MAX_CONSECUTIVE_WAITS = 50;
+export const HEAT_UPDATE_MS = 100;
+export const ASTAR_WAIT_MS = 15;
+export const FAILED_INTENTION_RETRY_MS = 3000;
 
 const MOVING_WINDOW_MS = 10000;
 
@@ -88,14 +97,19 @@ export function updateSpawnVisitCount(me, spawnTiles, raggio_sensing) {
 
     for (const tile of spawnTiles) {
         const manhattanDist = Math.abs(tile.x - me.x) + Math.abs(tile.y - me.y);
+        if (manhattanDist === 0) {
+            // Se siamo sulla tile, raffredda drasticamente
+            tile.visits = 0;
+            continue;
+        }
         const f = gaussianWeight(manhattanDist, sigma);
-
+        const current = tile.visits ?? 0;
         if (manhattanDist <= raggio_sensing) {
             // Raffredda proporzionalmente alla vicinanza
-            tile.visits = tile.visits * (1 - f);
+            tile.visits = Math.max(0, current - f);
         } else {
             // Riscalda proporzionalmente alla lontananza
-            tile.visits = Math.max(1, tile.visits) * (1 + (1 - f));
+            tile.visits = current + (1 - f);
         }
     }
 }
@@ -110,7 +124,7 @@ export function findCellToExplore(spawnTiles, me) {
     const maxDist = Math.max(...candidates.map(t => distance({ x: t.x, y: t.y }, me))) || 1;
 
     // Score: calore normalizzato e pesato + vicinanza normalizzata e pesata
-    const W_HEAT = 0.9; // W_DIST = 1 - W_HEAT = 0.3
+    const W_HEAT = 0.7; // W_DIST = 1 - W_HEAT = 0.3
 
     candidates.sort((a, b) => {
         const scoreA = W_HEAT * (a.visits / maxVisits) + (1 - W_HEAT) * (1 - distance({ x: a.x, y: a.y }, me) / maxDist);

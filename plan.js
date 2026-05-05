@@ -1,5 +1,16 @@
-import {findCellToExplore} from './utils.js';
+import {
+    AGENT_AVOID_RADIUS,
+    AGENT_AVOID_WEIGHT,
+    BASE_STEP_COST,
+    MIN_EDGE_COST,
+    PARCEL_REWARD_DISCOUNT,
+    MAX_CONSECUTIVE_WAITS,
+    ASTAR_WAIT_MS,
+    findCellToExplore
+} from './utils.js';
 import {Heap} from 'heap-js';
+
+const GO_TO_TIMEOUT_MS = 5000;
 
 export class Plan {
     #stopped = false;
@@ -55,9 +66,6 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
         return false;
     }
 
-    const AGENT_AVOID_RADIUS = 5;
-    const AGENT_AVOID_WEIGHT = 100;
-
     function agentProximityCost(x, y) {
         let cost = 0;
         const sigma = Math.max(AGENT_AVOID_RADIUS / 2, 1);
@@ -82,11 +90,15 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
         }
     }
 
-    async function executePath(path, shouldStop = () => false, onStep = null) {
+    async function executePath(path, shouldStop = () => false, onStep = null, timeoutMs = null) {
+        const startedAt = Date.now();
         for (const dir of path) {
             await waitWhilePaused();
             if (shouldStop()) {
                 throw ['stopped'];
+            }
+            if (timeoutMs != null && Date.now() - startedAt > timeoutMs) {
+                throw 'go_to timeout';
             }
 
             const moved = await socket.emitMove(dir);
@@ -160,12 +172,15 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
         }
 
         async execute(go_to, x, y) {
+            const startedAt = Date.now();
             while (me.x !== x || me.y !== y) {
                 await waitWhilePaused();
                 if (this.stopped) {
                     throw ['stopped'];
                 }
-
+                if (Date.now() - startedAt > GO_TO_TIMEOUT_MS) {
+                    throw 'go_to timeout';
+                }
                 let movedHorizontally;
                 let movedVertically;
 
@@ -286,14 +301,9 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
             await waitWhilePaused();
             if (this.stopped) throw ['stopped'];
 
-            return await executePath(path, () => this.stopped);
+            return await executePath(path, () => this.stopped, null, GO_TO_TIMEOUT_MS);
         }
     }
-
-    const BASE_STEP_COST = 1;
-    const MIN_EDGE_COST = 0.2;
-    const PARCEL_REWARD_DISCOUNT = 0.1;
-    const MAX_CONSECUTIVE_WAITS = 50;
 
     class AStarMove extends Plan {
         static isApplicableTo(go_to, x, y) {
@@ -441,10 +451,14 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
             if (this.stopped) throw ['stopped'];
 
             let consecutiveWaits = 10;
+            const startedAt = Date.now();
 
             while (me.x !== x || me.y !== y) {
                 await waitWhilePaused();
                 if (this.stopped) throw ['stopped'];
+                if (Date.now() - startedAt > GO_TO_TIMEOUT_MS) {
+                    throw 'go_to timeout';
+                }
 
                 await this.#tryPickupHere();
 
@@ -454,7 +468,7 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
                     if (consecutiveWaits > MAX_CONSECUTIVE_WAITS) {
                         throw 'wait limit exceeded';
                     }
-                    await new Promise((res) => setImmediate(res));
+                    await new Promise((res) => setTimeout(res, ASTAR_WAIT_MS));
                     continue;
                 }
 
@@ -474,7 +488,7 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
                     if (consecutiveWaits > MAX_CONSECUTIVE_WAITS) {
                         throw 'wait limit exceeded';
                     }
-                    await new Promise((res) => setImmediate(res));
+                    await new Promise((res) => setTimeout(res, ASTAR_WAIT_MS));
                     continue;
                 }
 
@@ -515,7 +529,6 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
     planLibrary.push(SimpleExplore);
     planLibrary.push(AStarMove);
     planLibrary.push(BFSMove);
-
 
     return planLibrary;
 }
