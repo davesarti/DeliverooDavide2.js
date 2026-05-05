@@ -6,7 +6,8 @@ import {
     PARCEL_REWARD_DISCOUNT,
     MAX_CONSECUTIVE_WAITS,
     ASTAR_WAIT_MS,
-    findCellToExplore
+    findCellsToExplore,
+    FAILED_INTENTION_RETRY_MS
 } from './utils.js';
 import {Heap} from 'heap-js';
 
@@ -512,12 +513,23 @@ export function createPlanLibrary({ socket, me, spawnTiles, map, crates, parcels
         }
 
         async execute(explore) {
-            const cell = findCellToExplore(spawnTiles, me);
-            if (!cell) {
+            const candidates = findCellsToExplore(spawnTiles, me);
+            if (!candidates || candidates.length === 0) {
                  throw ['no spawn tiles available'];
             }
-            await this.subIntention(['go_to', cell.x, cell.y]);
-            return true;
+
+            for (const cell of candidates) {
+                try {
+                    await this.subIntention(['go_to', cell.x, cell.y]);
+                    return true;
+                } catch (err) {
+                    // Rilancia immediatamente se è uno stop esplicito
+                    if (err === 'stopped' || (Array.isArray(err) && err.includes('stopped'))) throw err;
+                    continue;
+                }
+            }
+
+            throw ['no spawn tiles available'];
         }
     }
 

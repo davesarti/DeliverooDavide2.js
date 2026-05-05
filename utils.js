@@ -9,7 +9,7 @@ export const MIN_EDGE_COST = 0.1;
 export const PARCEL_REWARD_DISCOUNT = 0.2;
 export const MAX_CONSECUTIVE_WAITS = 50;
 export const HEAT_UPDATE_MS = 100;
-export const ASTAR_WAIT_MS = 15;
+export const ASTAR_WAIT_MS = 10;
 export const FAILED_INTENTION_RETRY_MS = 3000;
 
 const MOVING_WINDOW_MS = 10000;
@@ -114,25 +114,22 @@ export function updateSpawnVisitCount(me, spawnTiles, raggio_sensing) {
     }
 }
 
-export function findCellToExplore(spawnTiles, me) {
-    // Escludi la cella corrente
+export function findCellsToExplore(spawnTiles, me) {
+    // Restituisce la lista di candidati ordinata (migliore primo)
     const candidates = spawnTiles.filter(t => !(t.x === me.x && t.y === me.y));
-
-    if (candidates.length === 0) return null;
+    if (candidates.length === 0) return [];
 
     const maxVisits = Math.max(...candidates.map(t => t.visits));
     const maxDist = Math.max(...candidates.map(t => distance({ x: t.x, y: t.y }, me))) || 1;
 
-    // Score: calore normalizzato e pesato + vicinanza normalizzata e pesata
-    const W_HEAT = 0.7; // W_DIST = 1 - W_HEAT = 0.3
-
+    const W_HEAT = 0.7;
     candidates.sort((a, b) => {
         const scoreA = W_HEAT * (a.visits / maxVisits) + (1 - W_HEAT) * (1 - distance({ x: a.x, y: a.y }, me) / maxDist);
         const scoreB = W_HEAT * (b.visits / maxVisits) + (1 - W_HEAT) * (1 - distance({ x: b.x, y: b.y }, me) / maxDist);
         return scoreB - scoreA;
     });
 
-    return candidates[0];
+    return candidates;
 }
 
 export function canEnterTile(tileValue, move) {
