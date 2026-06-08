@@ -1,10 +1,8 @@
 import { socket } from "../socket.js";
 import { beliefState } from "./beliefState.js";
-import {
-  buildGrid,
-  buildDeliveryDistanceMap,
-  buildSpawnDistanceMap,
-} from "./mapState.js";
+import { updateSpawnStaleness, updateTilesPerSecond } from "../utils/mapUtils.js";
+import { buildGrid, buildDeliveryDistanceMap, buildSpawnDistanceMap,} from "./mapState.js";
+
 // ==========================================
 // Agent State
 // ==========================================
@@ -23,12 +21,25 @@ socket.onYou(({ id, name, x, y, score }) => {
   beliefState.me.y = y;
   beliefState.me.score = score;
 
-  console.log("[YOU]", { id, name, x, y, score });
+  updateSpawnStaleness(
+    beliefState.me,
+    beliefState.map.spawnTiles,
+    raggioSensing
+  );
+
+  updateTilesPerSecond(x, y);
+
+  //console.log("[YOU]", { id, name, x, y, score });
 });
 
 // ==========================================
 // Map State
 // ==========================================
+let observationDistance;
+
+socket.onConfig((config) => {
+  observationDistance = config.GAME.player.observation_distance;
+});
 
 socket.onMap((width, height, tiles) => {
   beliefState.map.width = width;
@@ -37,9 +48,10 @@ socket.onMap((width, height, tiles) => {
   beliefState.map.grid = buildGrid(width, height, tiles);
 
   beliefState.map.deliveryTiles = tiles.filter((tile) => tile.type == 2);
+  
   beliefState.map.spawnTiles = tiles
     .filter((tile) => tile.type == 1)
-    .map((tile) => ({ ...tile, visits: 0 }));
+    .map((tile) => ({ ...tile, staleness: 0 }));
 
   beliefState.map.deliveryDistanceMap = buildDeliveryDistanceMap(
     width,
