@@ -4,6 +4,15 @@ import { updateSpawnStaleness, updateTilesPerSecond } from "../utils/mapUtils.js
 import { buildGrid, buildDeliveryDistanceMap, buildSpawnDistanceMap,} from "./mapState.js";
 
 // ==========================================
+// Constants
+// ==========================================
+let observationDistance;
+
+socket.onConfig((config) => {
+  observationDistance = config.GAME.player.observation_distance;
+});
+
+// ==========================================
 // Agent State
 // ==========================================
 
@@ -24,7 +33,7 @@ socket.onYou(({ id, name, x, y, score }) => {
   updateSpawnStaleness(
     beliefState.me,
     beliefState.map.spawnTiles,
-    raggioSensing
+    observationDistance
   );
 
   updateTilesPerSecond(x, y);
@@ -35,11 +44,6 @@ socket.onYou(({ id, name, x, y, score }) => {
 // ==========================================
 // Map State
 // ==========================================
-let observationDistance;
-
-socket.onConfig((config) => {
-  observationDistance = config.GAME.player.observation_distance;
-});
 
 socket.onMap((width, height, tiles) => {
   beliefState.map.width = width;
