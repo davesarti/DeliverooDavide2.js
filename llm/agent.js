@@ -6,8 +6,7 @@ import {
 } from "../utils/stateUtils.js";
 
 /*
- * Costruisce lo stato compatto che verrà passato all'LLM.
- * Qui non ci sono decisioni: prepariamo solo i dati in modo leggibile.
+ * Costruisce lo stato del mondo di gioco compatto da passare all'LLM.
  */
 export function buildLLMState() {
   const me = beliefState.me;
@@ -66,3 +65,5 @@ export function buildLLMState() {
     },
   };
 }
+
+
