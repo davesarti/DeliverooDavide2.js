@@ -131,6 +131,15 @@ In particular, evaluate:
 - whether nearby agents make some opportunities riskier;
 - whether exploration is preferable to pickup or delivery.
 
+Build the plan as an ordered sequence of actions.
+
+The order of actions must be logically coherent:
+- use go_pick_up only for parcels that are part of the current strategy;
+- pickups should normally lead to a later go_drop_off;
+- if parcels are already being carried, consider whether go_drop_off should happen before further pickups;
+- use explore mainly when there is no convenient pickup or delivery plan;
+- avoid adding actions that do not contribute to the current plan.
+
 Generate a complete and executable plan for the current state.
 
 Return only the required JSON, without explanations, markdown, or additional text.
