@@ -1,9 +1,6 @@
 import { beliefState } from "../beliefs/beliefState.js";
-import { distance } from "../utils/mapUtils.js";
-import {
-  enrichParcelForDecision,
-  buildNearbyDeliveryTiles,
-} from "../utils/stateUtils.js";
+import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
+import { enrichParcelForDecision, buildNearbyDeliveryTiles, distance, isDeliveryTile} from "../utils/stateUtils.js";
 
 const MAX_DELIVERY_OPTIONS_PER_PARCEL = 3;
 
@@ -73,3 +70,95 @@ export function buildLLMState() {
     nearbyAgents,
   };
 }
+
+/*
+ * Converte il piano JSON dell'LLM in predicate eseguibili.
+ * Corregge solo gli errori sicuri, come coordinate pickup sbagliate
+ * o delivery non valida sostituibile con la delivery raggiungibile più vicina.
+ */
+export function normalizeLLMPlan(llmPlan) {
+  if (!llmPlan || !Array.isArray(llmPlan.plan)) {
+    return [];
+  }
+
+  const predicates = [];
+
+  for (const step of llmPlan.plan) {
+    const predicate = normalizeLLMStep(step);
+
+    if (predicate) {
+      predicates.push(predicate);
+    }
+  }
+
+  return predicates;
+}
+
+/*
+ * Normalizza una singola azione prodotta dall'LLM.
+ */
+function normalizeLLMStep(step) {
+  if (!step || typeof step.action !== "string") {
+    return null;
+  }
+
+  if (step.action === "go_pick_up") {
+    return normalizePickupStep(step);
+  }
+
+  if (step.action === "go_drop_off") {
+    return normalizeDropoffStep(step);
+  }
+
+  if (step.action === "explore") {
+    return ["explore"];
+  }
+
+  return null;
+}
+
+/*
+ * Valida una pickup.
+ * Se il parcelId è corretto, usa sempre le coordinate reali del pacco.
+ */
+function normalizePickupStep(step) {
+  const parcel = beliefState.parcels.get(step.parcelId);
+
+  if (!parcel) return null;
+  if (parcel.carriedBy) return null;
+
+  return [
+    "go_pick_up",
+    Math.round(parcel.x),
+    Math.round(parcel.y),
+    parcel.id,
+  ];
+}
+
+/*
+ * Valida una dropoff.
+ * Se la delivery indicata non è valida, prova a sostituirla
+ * con la delivery raggiungibile più vicina alla posizione attuale.
+ */
+function normalizeDropoffStep(step) {
+  const x = Math.round(step.x);
+  const y = Math.round(step.y);
+
+  if (isDeliveryTile(x, y)) {
+    return ["go_drop_off", x, y];
+  }
+
+  const nearest = nearestDeliveryTileAt(
+    beliefState.me,
+    beliefState.map.deliveryDistanceMap
+  );
+
+  if (!nearest) return null;
+
+  return [
+    "go_drop_off",
+    nearest.tile.x,
+    nearest.tile.y,
+  ];
+}
+

@@ -34,7 +34,6 @@ export function buildNearbyDeliveryTiles(position, deliveryTiles) {
 
 /*
  * Cerca la delivery raggiungibile più vicina a una posizione.
- * La teniamo per compatibilità con logiche semplici o future parti BDI.
  */
 export function nearestDeliveryTileAt(position, deliveryDistanceMap) {
   const row = deliveryDistanceMap?.[Math.round(position.y)];
