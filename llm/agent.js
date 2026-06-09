@@ -9,7 +9,7 @@ const MAX_DELIVERY_OPTIONS_PER_PARCEL = 3;
 
 /*
  * Costruisce lo stato corrente da passare all'LLM.
- * Questa funzione descrive solo l'ambiente: non aggiunge errori, obiettivi o decisioni.
+ * Questa funzione descrive solo l'ambiente di gioco e passa informazioni utili per la pianificazione.
  */
 export function buildLLMState() {
   const me = beliefState.me;
