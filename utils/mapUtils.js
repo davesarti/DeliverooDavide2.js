@@ -211,12 +211,12 @@ export function findCellsToExplore(spawnTiles, me) {
 }
 
 /*
- * Controlla se una coordinata corrisponde a una delivery tile reale.
+ * Controlla se una posizione corrisponde a una delivery tile.
  */
-function isDeliveryTile(x, y) {
-  return beliefState.map.deliveryTiles.some(
+export function isDeliveryTile(x, y, deliveryTiles) {
+  return deliveryTiles.some(
     (tile) =>
-      Math.round(tile.x) === x &&
-      Math.round(tile.y) === y
+      Math.round(tile.x) === Math.round(x) &&
+      Math.round(tile.y) === Math.round(y)
   );
 }

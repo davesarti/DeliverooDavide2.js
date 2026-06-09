@@ -1,6 +1,10 @@
 import { beliefState } from "../beliefs/beliefState.js";
-import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
-import { enrichParcelForDecision, buildNearbyDeliveryTiles, distance, isDeliveryTile} from "../utils/stateUtils.js";
+import { distance, isDeliveryTile } from "../utils/mapUtils.js";
+import {
+  nearestDeliveryTileAt,
+  enrichParcelForDecision,
+  buildNearbyDeliveryTiles,
+} from "../utils/stateUtils.js";
 
 const MAX_DELIVERY_OPTIONS_PER_PARCEL = 3;
 
@@ -144,7 +148,7 @@ function normalizeDropoffStep(step) {
   const x = Math.round(step.x);
   const y = Math.round(step.y);
 
-  if (isDeliveryTile(x, y)) {
+  if (isDeliveryTile(x, y, beliefState.map.deliveryTiles)) {
     return ["go_drop_off", x, y];
   }
 
