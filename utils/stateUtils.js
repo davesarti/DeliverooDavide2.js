@@ -7,7 +7,7 @@ import { PARCEL_DECAY } from "./constants.js";
 
 /*
  * Restituisce una versione minima di un pacco.
- * È utile quando non servono informazioni di pathfinding o stime.
+ * Utile quando servono solo posizione e reward, senza calcoli aggiuntivi.
  */
 export function formatParcelBasic(parcel) {
   return {
@@ -19,8 +19,22 @@ export function formatParcelBasic(parcel) {
 }
 
 /*
+ * Ordina le delivery rispetto a una posizione.
+ * Serve per sapere quali punti di consegna sono più comodi dalla posizione attuale.
+ */
+export function buildNearbyDeliveryTiles(position, deliveryTiles) {
+  return deliveryTiles
+    .map((tile) => ({
+      x: tile.x,
+      y: tile.y,
+      distanceFromPosition: distance(position, tile),
+    }))
+    .sort((a, b) => a.distanceFromPosition - b.distanceFromPosition);
+}
+
+/*
  * Cerca la delivery raggiungibile più vicina a una posizione.
- * Usa la mappa precalcolata delle distanze statiche verso le delivery.
+ * La teniamo per compatibilità con logiche semplici o future parti BDI.
  */
 export function nearestDeliveryTileAt(position, deliveryDistanceMap) {
   const row = deliveryDistanceMap?.[Math.round(position.y)];
@@ -92,44 +106,76 @@ export function spawnMapDistance(spawnDistanceMap, from, target) {
 }
 
 /*
- * Costruisce una descrizione arricchita di un pacco.
- * Serve sia al BDI per stimare convenienza, sia all'LLM per ragionare.
+ * Arricchisce un pacco libero con dati utili alla pianificazione.
+ * Non sceglie cosa fare: aggiunge distanza dal player e alcune delivery candidate.
  */
-export function enrichParcelForDecision(parcel, me, deliveryDistanceMap) {
-  const nearestDelivery = nearestDeliveryTileAt(
+export function enrichParcelForDecision(
+  parcel,
+  me,
+  deliveryDistanceMap,
+  {
+    maxDeliveryOptions = 3,
+  } = {}
+) {
+  const deliveryOptions = buildParcelDeliveryOptions(
     { x: parcel.x, y: parcel.y },
-    deliveryDistanceMap
-  );
-
-  const distanceToMe = distance(me, parcel);
-  const distanceToNearestDelivery = nearestDelivery?.distance ?? null;
-
-  const tilesPerSecond = getTilesPerSecond();
-  const rewardLossPerTile =
-    !tilesPerSecond || tilesPerSecond <= 0
-      ? 0
-      : PARCEL_DECAY / tilesPerSecond;
-
-  const estimatedRewardAtDelivery =
-    distanceToNearestDelivery == null
-      ? null
-      : Math.max(
-          0,
-          parcel.reward - distanceToNearestDelivery * rewardLossPerTile
-        );
+    deliveryDistanceMap,
+    parcel.reward
+  ).slice(0, maxDeliveryOptions);
 
   return {
     id: parcel.id,
     x: Math.round(parcel.x),
     y: Math.round(parcel.y),
     reward: parcel.reward,
-
-    distanceToMe,
-
-    nearestDelivery: nearestDelivery?.tile ?? null,
-    distanceToNearestDelivery,
-
-    rewardLossPerTile,
-    estimatedRewardAtDelivery,
+    distanceToMe: distance(me, parcel),
+    rewardLossPerTile: getRewardLossPerTile(),
+    deliveryOptions,
   };
+}
+
+/*
+ * Costruisce le delivery candidate per un pacco.
+ * Per ogni delivery raggiungibile calcola distanza e reward stimata alla consegna.
+ */
+function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward) {
+  const row = deliveryDistanceMap?.[Math.round(position.y)];
+  const entries = row?.[Math.round(position.x)];
+
+  if (!Array.isArray(entries)) return [];
+
+  const rewardLossPerTile = getRewardLossPerTile();
+
+  return entries
+    .filter((entry) => Number.isFinite(entry.distance))
+    .map((entry) => ({
+      x: entry.deliveryX,
+      y: entry.deliveryY,
+      distanceFromParcel: entry.distance,
+      estimatedRewardAtDelivery: Math.max(
+        0,
+        parcelReward - entry.distance * rewardLossPerTile
+      ),
+    }))
+    .sort((a, b) => {
+      if (b.estimatedRewardAtDelivery !== a.estimatedRewardAtDelivery) {
+        return b.estimatedRewardAtDelivery - a.estimatedRewardAtDelivery;
+      }
+
+      return a.distanceFromParcel - b.distanceFromParcel;
+    });
+}
+
+/*
+ * Stima quanta reward viene persa per ogni tile percorsa.
+ * Usa il decay del pacco e la velocità recente dell'agente.
+ */
+function getRewardLossPerTile() {
+  const tilesPerSecond = getTilesPerSecond();
+
+  if (!tilesPerSecond || tilesPerSecond <= 0) {
+    return 0;
+  }
+
+  return PARCEL_DECAY / tilesPerSecond;
 }
