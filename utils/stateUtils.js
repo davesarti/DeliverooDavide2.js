@@ -1,4 +1,9 @@
-import { distance } from "./mapUtils.js";
+import {
+  distance,
+  getTilesPerSecond,
+} from "./mapUtils.js";
+
+import { PARCEL_DECAY } from "./constants.js";
 
 /*
  * Restituisce una versione minima di un pacco.
@@ -99,19 +104,32 @@ export function enrichParcelForDecision(parcel, me, deliveryDistanceMap) {
   const distanceToMe = distance(me, parcel);
   const distanceToNearestDelivery = nearestDelivery?.distance ?? null;
 
+  const tilesPerSecond = getTilesPerSecond();
+  const rewardLossPerTile =
+    !tilesPerSecond || tilesPerSecond <= 0
+      ? 0
+      : PARCEL_DECAY / tilesPerSecond;
+
   const estimatedRewardAtDelivery =
     distanceToNearestDelivery == null
       ? null
-      : Math.max(0, parcel.reward - distanceToNearestDelivery);
+      : Math.max(
+          0,
+          parcel.reward - distanceToNearestDelivery * rewardLossPerTile
+        );
 
   return {
     id: parcel.id,
     x: Math.round(parcel.x),
     y: Math.round(parcel.y),
     reward: parcel.reward,
+
     distanceToMe,
+
     nearestDelivery: nearestDelivery?.tile ?? null,
     distanceToNearestDelivery,
+
+    rewardLossPerTile,
     estimatedRewardAtDelivery,
   };
 }

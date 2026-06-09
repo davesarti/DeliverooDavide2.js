@@ -1,5 +1,4 @@
 import {
-  PARCEL_DECAY,
   MOVING_WINDOW_MS,
   STALENESS_WEIGHT,
 } from "./constants.js";
