@@ -277,18 +277,29 @@ async function executePlan(predicates) {
 }
 
 /*
+  * Restituisce un timestamp ISO per i log.
+*/
+function timestamp() {
+  return new Date().toISOString();
+}
+
+function logWithTime(...args) {
+  console.log(`[${timestamp()}]`, ...args);
+}
+
+/*
  * Avvia il loop principale dell'agente LLM.
  * A ogni ciclo costruisce lo stato, chiede un piano al modello, lo normalizza, lo valida ed esegue.
  */
 export async function startLLMAgent() {
-  console.log("[LLM] Waiting for initial beliefs...");
+  logWithTime("[LLM] Waiting for initial beliefs...");
 
   await waitUntil(
     isReady,
     RUNTIME.READINESS_CHECK_DELAY_MS
   );
 
-  console.log("[LLM] Agent ready");
+  logWithTime("[LLM] Agent ready");
 
   while (true) {
     try {
@@ -296,11 +307,21 @@ export async function startLLMAgent() {
 
       const messages = buildPlanningMessages(state);
 
+      const planningStartedAt = Date.now();
+
+      logWithTime("[LLM] Planning started");
+
       const llmPlan = await callLLMJson({
         messages,
         schema: PLAN_SCHEMA,
         temperature: 0,
       });
+
+      const planningDurationMs = Date.now() - planningStartedAt;
+
+      logWithTime(
+        `[LLM] Planning finished in ${planningDurationMs} ms`
+      );
 
       let predicates = normalizeLLMPlan(llmPlan);
 
@@ -308,13 +329,21 @@ export async function startLLMAgent() {
         predicates = [["explore"]];
       }
 
-      console.log("[LLM] Plan:", predicates);
+      logWithTime("[LLM] Plan:", predicates);
+
+      const executionStartedAt = Date.now();
 
       await executePlan(predicates);
 
+      const executionDurationMs = Date.now() - executionStartedAt;
+
+      logWithTime(
+        `[LLM] Plan execution finished in ${executionDurationMs} ms`
+      );
+
       await wait(RUNTIME.LLM_LOOP_DELAY_MS);
     } catch (error) {
-      console.log("[LLM] Error:", error?.message ?? error);
+      logWithTime("[LLM] Error:", error?.message ?? error);
       await wait(RUNTIME.LLM_ERROR_DELAY_MS);
     }
   }
