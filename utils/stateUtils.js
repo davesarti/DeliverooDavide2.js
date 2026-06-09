@@ -1,3 +1,5 @@
+import { beliefState } from "../beliefs/beliefState.js";
+
 import {
   distance,
   getTilesPerSecond,
@@ -166,8 +168,53 @@ function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward)
 }
 
 /*
+ * Converte una durata espressa come stringa del server in millisecondi.
+ * Supporta formati come "1s", "500ms", "2s".
+ */
+function parseDurationMs(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+
+  if (trimmed.endsWith("ms")) {
+    const number = Number(trimmed.slice(0, -2));
+    return Number.isFinite(number) ? number : null;
+  }
+
+  if (trimmed.endsWith("s")) {
+    const number = Number(trimmed.slice(0, -1));
+    return Number.isFinite(number) ? number * 1000 : null;
+  }
+
+  const number = Number(trimmed);
+  return Number.isFinite(number) ? number : null;
+}
+
+/*
+ * Restituisce quanta reward perde un pacco ogni secondo.
+ * Usa parcels.decaying_event dal server; se manca, usa PARCEL_DECAY come fallback.
+ */
+function getParcelDecayPerSecond() {
+  const decayEventMs = parseDurationMs(
+    beliefState.config.parcelDecayingEvent
+  );
+
+  if (!decayEventMs || decayEventMs <= 0) {
+    return PARCEL_DECAY;
+  }
+
+  return 1000 / decayEventMs;
+}
+
+/*
  * Stima quanta reward viene persa per ogni tile percorsa.
- * Usa il decay del pacco e la velocità recente dell'agente.
+ * Combina il decay reale del server con la velocità stimata dell'agente.
  */
 function getRewardLossPerTile() {
   const tilesPerSecond = getTilesPerSecond();
@@ -176,5 +223,5 @@ function getRewardLossPerTile() {
     return 0;
   }
 
-  return PARCEL_DECAY / tilesPerSecond;
+  return getParcelDecayPerSecond() / tilesPerSecond;
 }

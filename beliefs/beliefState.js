@@ -23,5 +23,15 @@ export const beliefState = {
     grid: [],
   },
 
+  config: {
+    observationDistance: null,
+    movementDuration: null,
+    playerCapacity: null,
+
+    parcelDecayingEvent: null,
+    parcelGenerationEvent: null,
+    maxParcels: null,
+  },
+
   onUpdate: null,
 };

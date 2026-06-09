@@ -1,16 +1,39 @@
 import { beliefState } from "../beliefs/beliefState.js";
+import { callLLMJson } from "./client.js";
+import { buildPlanningMessages, PLAN_SCHEMA } from "./prompts.js";
+import { executePredicate } from "../actions/actions.js";
 import { distance, isDeliveryTile } from "../utils/mapUtils.js";
 import {
   nearestDeliveryTileAt,
   enrichParcelForDecision,
   buildNearbyDeliveryTiles,
 } from "../utils/stateUtils.js";
+import { wait, waitUntil } from "../utils/asyncUtils.js";
+import { RUNTIME } from "../utils/constants.js";
 
 const MAX_DELIVERY_OPTIONS_PER_PARCEL = 3;
 
+
+
 /*
- * Costruisce lo stato corrente da passare all'LLM.
- * Questa funzione descrive solo l'ambiente di gioco e passa informazioni utili per la pianificazione.
+ * Controlla se l'agente ha già ricevuto le informazioni minime per partire:
+ * identità, posizione, mappa e delivery tiles.
+ */
+function isReady() {
+  return (
+    beliefState.me.id &&
+    beliefState.me.x != null &&
+    beliefState.me.y != null &&
+    Array.isArray(beliefState.map.grid) &&
+    beliefState.map.grid.length > 0 &&
+    Array.isArray(beliefState.map.deliveryTiles) &&
+    beliefState.map.deliveryTiles.length > 0
+  );
+}
+
+/*
+ * Costruisce lo stato compatto da passare all'LLM.
+ * Lo stato contiene solo informazioni utili alla decisione, non tutto il beliefState grezzo.
  */
 export function buildLLMState() {
   const me = beliefState.me;
@@ -76,9 +99,8 @@ export function buildLLMState() {
 }
 
 /*
- * Converte il piano JSON dell'LLM in predicate eseguibili.
- * Corregge solo gli errori sicuri, come coordinate pickup sbagliate
- * o delivery non valida sostituibile con la delivery raggiungibile più vicina.
+ * Converte il piano JSON dell'LLM in predicate eseguibili dal runtime.
+ * Il JSON è già valido strutturalmente perché viene controllato in client.js.
  */
 export function normalizeLLMPlan(llmPlan) {
   if (!llmPlan || !Array.isArray(llmPlan.plan)) {
@@ -99,13 +121,10 @@ export function normalizeLLMPlan(llmPlan) {
 }
 
 /*
- * Normalizza una singola azione prodotta dall'LLM.
+ * Normalizza un singolo step JSON in una predicate interna.
+ * Le predicate sono il formato che l'esecutore sa interpretare.
  */
 function normalizeLLMStep(step) {
-  if (!step || typeof step.action !== "string") {
-    return null;
-  }
-
   if (step.action === "go_pick_up") {
     return normalizePickupStep(step);
   }
@@ -122,8 +141,8 @@ function normalizeLLMStep(step) {
 }
 
 /*
- * Valida una pickup.
- * Se il parcelId è corretto, usa sempre le coordinate reali del pacco.
+ * Normalizza una pickup.
+ * Usa sempre le coordinate reali del pacco presenti nel beliefState, non quelle eventualmente inventate dall'LLM.
  */
 function normalizePickupStep(step) {
   const parcel = beliefState.parcels.get(step.parcelId);
@@ -140,9 +159,8 @@ function normalizePickupStep(step) {
 }
 
 /*
- * Valida una dropoff.
- * Se la delivery indicata non è valida, prova a sostituirla
- * con la delivery raggiungibile più vicina alla posizione attuale.
+ * Normalizza una dropoff.
+ * Se la tile indicata dall'LLM non è una delivery tile valida, usa la delivery più vicina.
  */
 function normalizeDropoffStep(step) {
   const x = Math.round(step.x);
@@ -166,3 +184,138 @@ function normalizeDropoffStep(step) {
   ];
 }
 
+/*
+ * Controlla se l'agente sta trasportando almeno un pacco.
+ * Serve per capire se una dropoff ha senso prima di eseguirla.
+ */
+function hasCarriedParcels() {
+  return [...beliefState.parcels.values()].some(
+    (parcel) => parcel.carriedBy === beliefState.me.id
+  );
+}
+
+/*
+ * Valida una predicate rispetto al beliefState corrente.
+ * Questa non è validazione JSON: controlla se l'azione è davvero sensata ora.
+ */
+function validatePredicate(predicate) {
+  if (!Array.isArray(predicate) || predicate.length === 0) {
+    return {
+      ok: false,
+      error: "Invalid predicate.",
+    };
+  }
+
+  const [action, x, y, parcelId] = predicate;
+
+  if (action === "go_pick_up") {
+    const parcel = beliefState.parcels.get(parcelId);
+
+    if (!parcel) {
+      return {
+        ok: false,
+        error: `Parcel ${parcelId} not found.`,
+      };
+    }
+
+    if (parcel.carriedBy) {
+      return {
+        ok: false,
+        error: `Parcel ${parcelId} is already carried.`,
+      };
+    }
+
+    return { ok: true };
+  }
+
+  if (action === "go_drop_off") {
+    if (!hasCarriedParcels()) {
+      return {
+        ok: false,
+        error: "No carried parcels to deliver.",
+      };
+    }
+
+    if (!isDeliveryTile(x, y, beliefState.map.deliveryTiles)) {
+      return {
+        ok: false,
+        error: `Tile (${x}, ${y}) is not a delivery tile.`,
+      };
+    }
+
+    return { ok: true };
+  }
+
+  if (action === "explore") {
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    error: `Unknown predicate action "${action}".`,
+  };
+}
+
+/*
+ * Esegue una lista di predicate una alla volta.
+ * Se una predicate è invalida o fallisce, interrompe il piano e lascia ripianificare il loop principale.
+ */
+async function executePlan(predicates) {
+  for (const predicate of predicates) {
+    const validation = validatePredicate(predicate);
+
+    if (!validation.ok) {
+      console.log("[LLM] Invalid predicate:", predicate, validation.error);
+      return false;
+    }
+
+    console.log("[LLM] Executing:", predicate);
+    await executePredicate(predicate);
+  }
+
+  return true;
+}
+
+/*
+ * Avvia il loop principale dell'agente LLM.
+ * A ogni ciclo costruisce lo stato, chiede un piano al modello, lo normalizza, lo valida ed esegue.
+ */
+export async function startLLMAgent() {
+  console.log("[LLM] Waiting for initial beliefs...");
+
+  await waitUntil(
+    isReady,
+    RUNTIME.READINESS_CHECK_DELAY_MS
+  );
+
+  console.log("[LLM] Agent ready");
+
+  while (true) {
+    try {
+      const state = buildLLMState();
+
+      const messages = buildPlanningMessages(state);
+
+      const llmPlan = await callLLMJson({
+        messages,
+        schema: PLAN_SCHEMA,
+        temperature: 0,
+      });
+
+      let predicates = normalizeLLMPlan(llmPlan);
+
+      if (predicates.length === 0) {
+        predicates = [["explore"]];
+      }
+
+      console.log("[LLM] Plan:", predicates);
+
+      await executePlan(predicates);
+
+      await wait(RUNTIME.LLM_LOOP_DELAY_MS);
+    } catch (error) {
+      console.log("[LLM] Error:", error?.message ?? error);
+      await wait(RUNTIME.LLM_ERROR_DELAY_MS);
+    }
+  }
+}

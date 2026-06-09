@@ -4,12 +4,29 @@ import { updateSpawnStaleness, updateTilesPerSecond } from "../utils/mapUtils.js
 import { buildGrid, buildDeliveryDistanceMap, buildSpawnDistanceMap,} from "./mapState.js";
 
 // ==========================================
-// Constants
+// Configuration
 // ==========================================
-let observationDistance;
 
 socket.onConfig((config) => {
-  observationDistance = config.GAME.player.observation_distance;
+  const gameConfig = config.GAME ?? config;
+
+  beliefState.config.observationDistance =
+    gameConfig.player?.observation_distance ?? null;
+
+  beliefState.config.movementDuration =
+    gameConfig.player?.movement_duration ?? null;
+
+  beliefState.config.playerCapacity =
+    gameConfig.player?.capacity ?? null;
+
+  beliefState.config.parcelDecayingEvent =
+    gameConfig.parcels?.decaying_event ?? null;
+
+  beliefState.config.parcelGenerationEvent =
+    gameConfig.parcels?.generation_event ?? null;
+
+  beliefState.config.maxParcels =
+    gameConfig.parcels?.max ?? null;
 });
 
 // ==========================================
@@ -33,7 +50,7 @@ socket.onYou(({ id, name, x, y, score }) => {
   updateSpawnStaleness(
     beliefState.me,
     beliefState.map.spawnTiles,
-    observationDistance
+    beliefState.config.observationDistance
   );
 
   updateTilesPerSecond(x, y);

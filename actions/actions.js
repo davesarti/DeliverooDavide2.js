@@ -2,12 +2,9 @@ import { socket } from "../socket.js";
 import { AGENT_CONFIG } from "../config.js";
 import { beliefState } from "../beliefs/beliefState.js";
 import { findPath } from "../pathfinding/pathfinding.js";
-import { GO_TO_TIMEOUT_MS } from "../utils/constants.js";
+import { RUNTIME } from "../utils/constants.js";
+import { yieldControl } from "../utils/asyncUtils.js";
 import { findCellsToExplore } from "../utils/mapUtils.js";
-
-function sleepImmediate() {
-  return new Promise((resolve) => setImmediate(resolve));
-}
 
 /*
  * Esegue un singolo movimento sul server e aggiorna subito la posizione locale.
@@ -47,7 +44,7 @@ export async function executePath(
   {
     shouldStop = () => false,
     onStep = null,
-    timeoutMs = GO_TO_TIMEOUT_MS,
+    timeoutMs = RUNTIME.GO_TO_TIMEOUT_MS,
   } = {}
 ) {
   const startedAt = Date.now();
@@ -67,7 +64,7 @@ export async function executePath(
 
     if (shouldStop()) throw ["stopped"];
 
-    await sleepImmediate();
+    await yieldControl();
   }
 
   return true;
@@ -82,7 +79,7 @@ export async function goTo(
   y,
   {
     shouldStop = () => false,
-    timeoutMs = GO_TO_TIMEOUT_MS,
+    timeoutMs = RUNTIME.GO_TO_TIMEOUT_MS,
   } = {}
 ) {
   const result = findPath(
