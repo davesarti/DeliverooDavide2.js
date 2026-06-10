@@ -23,6 +23,9 @@ export const AGENT_CONFIG = {
   },
 };
 
+/*
+ * Controlla che le variabili di ambiente e le opzioni base siano coerenti.
+ */
 export function validateConfig() {
   if (!DELIVEROO_CONFIG.host) {
     throw new Error("Missing HOST");

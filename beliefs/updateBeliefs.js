@@ -5,6 +5,9 @@ import {
   buildSpawnDistanceMap,
 } from "./mapState.js";
 
+/*
+ * Collega gli eventi del socket allo stato interno dell'agente.
+ */
 export function setupBeliefUpdates(socket, bs) {
 
   // ==========================================
@@ -12,6 +15,9 @@ export function setupBeliefUpdates(socket, bs) {
   // ==========================================
 
   socket.onConfig((config) => {
+    /*
+     * Salva i parametri di gioco che servono alle altre parti dell'agente.
+     */
     const gameConfig = config.GAME ?? config;
 
     bs.config.observationDistance =
@@ -35,6 +41,9 @@ export function setupBeliefUpdates(socket, bs) {
   let lastYou = null;
 
   socket.onYou(({ id, name, x, y, score }) => {
+    /*
+     * Aggiorna la posizione e il punteggio del nostro agente.
+     */
     const current = `${id}|${x}|${y}|${score}`;
     if (current === lastYou) return;
     lastYou = current;
@@ -59,6 +68,9 @@ export function setupBeliefUpdates(socket, bs) {
   // ==========================================
 
   socket.onMap((width, height, tiles) => {
+    /*
+     * Ricostruisce la mappa interna quando arriva la descrizione completa del livello.
+     */
     bs.map.width = width;
     bs.map.height = height;
     bs.map.tiles = tiles;
@@ -88,6 +100,9 @@ export function setupBeliefUpdates(socket, bs) {
   // ==========================================
 
   socket.onSensing((sensing) => {
+    /*
+     * Allinea oggetti visibili e agenti osservati con l'ultimo sensing ricevuto.
+     */
     for (const parcel of sensing.parcels ?? []) {
       bs.parcels.set(parcel.id, parcel);
     }

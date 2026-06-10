@@ -4,6 +4,9 @@ import {
   isOccupied,
 } from "../utils/mapUtils.js";
 
+/*
+ * Calcola un percorso BFS usando lo stato completo dell'agente.
+ */
 export function bfs(start, goal, bs) {
   return bfsOnState({
     map: bs.map.grid,
@@ -14,6 +17,9 @@ export function bfs(start, goal, bs) {
   });
 }
 
+/*
+ * Cerca il percorso più corto sulla griglia evitando ostacoli e occupanti.
+ */
 export function bfsOnState({ map, crates = new Map(), agents = new Map(), start, goal }) {
   if (!map.length || !map[0]?.length) {
     throw new Error("map not ready");

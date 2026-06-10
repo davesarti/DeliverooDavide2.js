@@ -5,12 +5,18 @@ import { PARCEL_DECAY } from "../utils/constants.js";
 export const EXPLORATION_INCENTIVE = 0.01;
 export const DROP_DISINCENTIVE = 0;
 
+/*
+ * Traduce la velocità dell'agente nel costo stimato del decay.
+ */
 export function distanceFactor() {
   const tilesPerSec = getTilesPerSecond();
   if (!tilesPerSec || tilesPerSec <= 0) return 0;
   return PARCEL_DECAY / tilesPerSec;
 }
 
+/*
+ * Stima quanto costa prendere un pacco e portarlo fino alla delivery più vicina.
+ */
 export function pickupRouteDistance(parcel, me, bs) {
   const nearest = nearestDeliveryTileAt(
     { x: parcel.x, y: parcel.y },
@@ -28,6 +34,9 @@ export function pickupRouteDistance(parcel, me, bs) {
   return pickupDist + nearest.distance;
 }
 
+/*
+ * Genera i pickup che valgono ancora la pena nello stato corrente.
+ */
 function generatePickupOptions(parcels, me, bs) {
   const deliveryDistanceMap = bs.map.deliveryDistanceMap;
   if (!Array.isArray(deliveryDistanceMap) || deliveryDistanceMap.length === 0) return null;
@@ -49,6 +58,9 @@ function generatePickupOptions(parcels, me, bs) {
   return pickupOptions;
 }
 
+/*
+ * Genera le consegne disponibili per i pacchi già trasportati.
+ */
 function generateDeliveryOptions(parcels, me, bs) {
   const deliveryDistanceMap = bs.map.deliveryDistanceMap;
   if (!Array.isArray(deliveryDistanceMap) || deliveryDistanceMap.length === 0) return [];
@@ -74,6 +86,9 @@ function generateDeliveryOptions(parcels, me, bs) {
   return options;
 }
 
+/*
+ * Aggiorna la coda delle intenzioni con opzioni sensate per il momento.
+ */
 export function optionsGeneration(agent, bs) {
   const { me, parcels } = bs;
   const deliveryDistanceMap = bs.map.deliveryDistanceMap;

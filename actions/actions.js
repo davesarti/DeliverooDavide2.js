@@ -9,8 +9,14 @@ import { findCellsToExplore } from "../utils/mapUtils.js";
  * Riceve socket e beliefState dell'agente invece di importarli come singleton.
  * Ritorna un oggetto con tutte le funzioni di azione disponibili.
  */
+/*
+ * Espone le azioni operative dell'agente sopra al socket di gioco.
+ */
 export function createActions(socket, bs) {
 
+  /*
+   * Muove l'agente in una direzione e aggiorna la posizione locale.
+   */
   async function move(direction) {
     const moved = await socket.emitMove(direction);
 
@@ -24,14 +30,23 @@ export function createActions(socket, bs) {
     return moved;
   }
 
+  /*
+   * Chiede al server di raccogliere il pacco sulla cella corrente.
+   */
   async function pickup() {
     return await socket.emitPickup();
   }
 
+  /*
+   * Rilascia il pacco trasportato sulla cella corrente.
+   */
   async function putdown() {
     return await socket.emitPutdown();
   }
 
+  /*
+   * Esegue un percorso passo per passo, con stop e timeout.
+   */
   async function executePath(
     path,
     {
@@ -61,6 +76,9 @@ export function createActions(socket, bs) {
     return true;
   }
 
+  /*
+   * Raggiunge una posizione della mappa usando il pathfinding attivo.
+   */
   async function goTo(
     x,
     y,
@@ -83,6 +101,9 @@ export function createActions(socket, bs) {
     return await executePath(result.path, { shouldStop, timeoutMs });
   }
 
+  /*
+   * Va sul pacco e prova a raccoglierlo.
+   */
   async function goPickUp(
     x,
     y,
@@ -94,6 +115,9 @@ export function createActions(socket, bs) {
     return await pickup();
   }
 
+  /*
+   * Va su una delivery tile e deposita i pacchi trasportati.
+   */
   async function goDropOff(
     x,
     y,
@@ -104,6 +128,9 @@ export function createActions(socket, bs) {
     return await putdown();
   }
 
+  /*
+   * Prova a esplorare una spawn tile non troppo recente.
+   */
   async function explore({ shouldStop = () => false } = {}) {
     const candidates = findCellsToExplore(
       bs.map.spawnTiles,
@@ -129,6 +156,9 @@ export function createActions(socket, bs) {
     throw new Error("No reachable spawn tile");
   }
 
+  /*
+   * Traduce un predicato pianificato nell'azione concreta da eseguire.
+   */
   async function executePredicate(
     predicate,
     { shouldStop = () => false } = {}

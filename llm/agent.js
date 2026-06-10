@@ -15,6 +15,9 @@ const MAX_DELIVERY_OPTIONS_PER_PARCEL = 3;
 // Readiness check
 // ==========================================
 
+/*
+ * Verifica che lo stato minimo dell'LLM sia disponibile.
+ */
 function isReady(bs) {
   return (
     bs.me.id &&
@@ -31,6 +34,9 @@ function isReady(bs) {
 // State builder
 // ==========================================
 
+/*
+ * Prepara una vista compatta dello stato da inviare al modello.
+ */
 export function buildLLMState(bs) {
   const me = bs.me;
 
@@ -97,6 +103,9 @@ export function buildLLMState(bs) {
 // Plan normalization
 // ==========================================
 
+/*
+ * Converte il piano del modello in una lista di predicati eseguibili.
+ */
 export function normalizeLLMPlan(llmPlan, bs) {
   if (!llmPlan || !Array.isArray(llmPlan.plan)) return [];
 
@@ -110,6 +119,9 @@ export function normalizeLLMPlan(llmPlan, bs) {
   return predicates;
 }
 
+/*
+ * Normalizza un singolo step del piano del modello.
+ */
 function normalizeLLMStep(step, bs) {
   if (step.action === "go_pick_up") return normalizePickupStep(step, bs);
   if (step.action === "go_drop_off") return normalizeDropoffStep(step, bs);
@@ -117,6 +129,9 @@ function normalizeLLMStep(step, bs) {
   return null;
 }
 
+/*
+ * Porta uno step di pickup al formato interno usato dall'agente.
+ */
 function normalizePickupStep(step, bs) {
   const parcel = bs.parcels.get(step.parcelId);
   if (!parcel) return null;
@@ -130,6 +145,9 @@ function normalizePickupStep(step, bs) {
   ];
 }
 
+/*
+ * Porta uno step di dropoff su una delivery tile valida.
+ */
 function normalizeDropoffStep(step, bs) {
   const x = Math.round(step.x);
   const y = Math.round(step.y);
@@ -152,12 +170,18 @@ function normalizeDropoffStep(step, bs) {
 // Predicate validation
 // ==========================================
 
+/*
+ * Controlla se l'agente sta già trasportando almeno un pacco.
+ */
 function hasCarriedParcels(bs) {
   return [...bs.parcels.values()].some(
     (parcel) => parcel.carriedBy === bs.me.id
   );
 }
 
+/*
+ * Verifica che il predicato abbia senso nello stato corrente.
+ */
 function validatePredicate(predicate, bs) {
   if (!Array.isArray(predicate) || predicate.length === 0) {
     return { ok: false, error: "Invalid predicate." };
@@ -191,6 +215,9 @@ function validatePredicate(predicate, bs) {
 // Plan execution
 // ==========================================
 
+/*
+ * Esegue il piano validando ogni passo prima di partire.
+ */
 async function executePlan(predicates, bs, actions) {
   for (const predicate of predicates) {
     const validation = validatePredicate(predicate, bs);
@@ -211,14 +238,23 @@ async function executePlan(predicates, bs, actions) {
 // Entry point
 // ==========================================
 
+/*
+ * Restituisce un timestamp leggibile nei log.
+ */
 function timestamp() {
   return new Date().toISOString();
 }
 
+/*
+ * Scrive un log con l'orario e il nome dell'agente.
+ */
 function logWithTime(name, ...args) {
   console.log(`[${timestamp()}] [${name ?? "LLM"}]`, ...args);
 }
 
+/*
+ * Avvia il ciclo principale dell'agente LLM.
+ */
 export async function startLLMAgent(socket, bs, actions) {
   logWithTime(bs.me.name, "Waiting for initial beliefs...");
 

@@ -10,6 +10,9 @@ const client = new OpenAI({
  * Chiama il modello chiedendo una risposta JSON.
  * Questa funzione gestisce parsing, validazione strutturale e un retry automatico.
  */
+/*
+ * Esegue una richiesta LLM, valida il JSON e riprova una volta se serve.
+ */
 export async function callLLMJson({
   messages,
   schema,
@@ -49,6 +52,9 @@ export async function callLLMJson({
  * Esegue una singola richiesta al modello e controlla che la risposta sia JSON valido
  * e che rispetti la struttura del piano attesa dall'agente.
  */
+/*
+ * Fa una richiesta al modello e controlla che la risposta sia un JSON valido.
+ */
 async function requestJson({ messages, schema, temperature }) {
   const content = await callModel(messages, {
     schema,
@@ -85,6 +91,9 @@ async function requestJson({ messages, schema, temperature }) {
  * Incapsula la chiamata OpenAI-compatible.
  * Riceve i messaggi già costruiti e restituisce il contenuto testuale del modello.
  */
+/*
+ * Invia i messaggi al client LLM e restituisce il testo della risposta.
+ */
 async function callModel(messages, { schema = null, temperature = 0 } = {}) {
   const request = {
     model: LLM_CONFIG.model,
@@ -108,6 +117,9 @@ async function callModel(messages, { schema = null, temperature = 0 } = {}) {
  * Prova a convertire una stringa in JSON.
  * Non lancia eccezioni: restituisce sempre un oggetto con ok true/false.
  */
+/*
+ * Prova a leggere una stringa come JSON senza sollevare eccezioni.
+ */
 function safeJsonParse(text) {
   try {
     return {
@@ -125,6 +137,9 @@ function safeJsonParse(text) {
 /*
  * Valida la struttura logica del piano JSON prodotto dall'LLM.
  * Qui controlliamo solo il formato del piano, non se sia davvero eseguibile nel mondo corrente.
+ */
+/*
+ * Controlla la struttura generale del piano prodotto dal modello.
  */
 function validatePlanJson(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -165,6 +180,9 @@ function validatePlanJson(value) {
 /*
  * Valida un singolo step del piano JSON.
  * Controlla che l'azione esista e che i parametri richiesti siano presenti.
+ */
+/*
+ * Verifica che uno step del piano abbia i campi richiesti.
  */
 function validatePlanStep(step) {
   if (!step || typeof step !== "object" || Array.isArray(step)) {
@@ -216,6 +234,9 @@ function validatePlanStep(step) {
 /*
  * Costruisce i messaggi per il secondo tentativo.
  * Mostra al modello la risposta sbagliata e gli chiede di correggere solo il JSON.
+ */
+/*
+ * Costruisce un secondo tentativo quando il primo output non è valido.
  */
 function buildRetryMessages(messages, invalidOutput, error) {
   return [

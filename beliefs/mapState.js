@@ -1,5 +1,8 @@
 import { canEnterTile, DIRECTIONS } from "../utils/mapUtils.js";
 
+/*
+ * Costruisce per ogni cella la distanza verso tutte le delivery tile.
+ */
 export function buildDeliveryDistanceMap(width, height, tiles, deliveryTiles) {
     const tileMap = Array.from({ length: height + 1 }, () => Array(width + 1).fill(0));
 
@@ -55,6 +58,9 @@ export function buildDeliveryDistanceMap(width, height, tiles, deliveryTiles) {
     return deliveryTileMap;
 }
 
+/*
+ * Costruisce per ogni cella la distanza verso tutte le spawn tile.
+ */
 export function buildSpawnDistanceMap(width, height, tiles, spawnTiles) {
     const tileMap = Array.from({ length: height + 1 }, () => Array(width + 1).fill(0));
 
@@ -109,6 +115,9 @@ export function buildSpawnDistanceMap(width, height, tiles, spawnTiles) {
     return spawnTileMap;
 }
 
+/*
+ * Converte i tile della mappa in una griglia veloce da consultare.
+ */
 export function buildGrid(width, height, tiles) {
   const grid = Array.from({ length: height + 1 }, () =>
     Array(width + 1).fill(0)

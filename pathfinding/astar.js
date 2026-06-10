@@ -10,6 +10,9 @@ import {
   PARCEL_REWARD_DISCOUNT,
 } from "../utils/constants.js";
 
+/*
+ * Calcola un percorso A* usando lo stato completo dell'agente.
+ */
 export function astar(start, goal, bs) {
   return astarOnState({
     map: bs.map.grid,
@@ -21,6 +24,9 @@ export function astar(start, goal, bs) {
   });
 }
 
+/*
+ * Cerca un percorso con A* tenendo conto di ostacoli e costo stimato.
+ */
 export function astarOnState({
   map,
   crates = new Map(),

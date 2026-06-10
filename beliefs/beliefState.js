@@ -1,3 +1,6 @@
+/*
+ * Crea lo stato iniziale delle credenze dell'agente.
+ */
 export function createBeliefState() {
   return {
     me: {
