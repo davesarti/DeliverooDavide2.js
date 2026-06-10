@@ -114,13 +114,14 @@ export function enrichParcelForDecision(
   deliveryDistanceMap,
   {
     maxDeliveryOptions = 3,
+    parcelDecayingEvent = null,
   } = {}
 ) {
   const deliveryOptions = buildParcelDeliveryOptions(
     { x: parcel.x, y: parcel.y },
     deliveryDistanceMap,
-    parcelDecayingEvent,
-    parcel.reward
+    parcel.reward,
+    parcelDecayingEvent
   ).slice(0, maxDeliveryOptions);
 
   return {
@@ -138,7 +139,7 @@ export function enrichParcelForDecision(
  * Costruisce le delivery candidate per un pacco.
  * Per ogni delivery raggiungibile calcola distanza e reward stimata alla consegna.
  */
-function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward) {
+function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward, parcelDecayingEvent) {
   const row = deliveryDistanceMap?.[Math.round(position.y)];
   const entries = row?.[Math.round(position.x)];
 
