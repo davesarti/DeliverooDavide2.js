@@ -16,7 +16,7 @@ export const AGENT_CONFIG = {
   // "BDI"  → avvia solo il BDI (usa TOKEN_BDI)
   // "LLM"  → avvia solo l'LLM (usa TOKEN_LLM)
   // "BOTH" → avvia entrambi (usa TOKEN_BDI e TOKEN_LLM)
-  mode: "BOTH",
+  mode: "LLM",
 
   pathfinding: {
     algorithm: "bfs",

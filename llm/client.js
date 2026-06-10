@@ -7,23 +7,20 @@ const client = new OpenAI({
 });
 
 /*
- * Chiama il modello chiedendo una risposta JSON.
- * Questa funzione gestisce parsing, validazione strutturale e un retry automatico.
+ * Chiama il modello usando function calling nativo.
+ * Restituisce { action: { name, params }, toolCall } dove:
+ *   - action.name   è il nome del tool scelto
+ *   - action.params è l'oggetto dei parametri già parsato
+ *   - toolCall      è l'oggetto raw (con id) da reinserire nella history
+ * Riprova una volta automaticamente in caso di errore.
  */
-/*
- * Esegue una richiesta LLM, valida il JSON e riprova una volta se serve.
- */
-export async function callLLMJson({
+export async function callLLMTool({
   messages,
-  schema,
+  tools,
   temperature = 0,
   retryOnInvalid = true,
 }) {
-  const firstResult = await requestJson({
-    messages,
-    schema,
-    temperature,
-  });
+  const firstResult = await requestTool({ messages, tools, temperature });
 
   if (firstResult.ok) return firstResult.value;
 
@@ -31,17 +28,9 @@ export async function callLLMJson({
     throw new Error(firstResult.error);
   }
 
-  const retryMessages = buildRetryMessages(
-    messages,
-    firstResult.rawContent,
-    firstResult.error
-  );
+  console.warn(`[callLLMTool] First attempt failed: ${firstResult.error}. Retrying...`);
 
-  const retryResult = await requestJson({
-    messages: retryMessages,
-    schema,
-    temperature,
-  });
+  const retryResult = await requestTool({ messages, tools, temperature });
 
   if (retryResult.ok) return retryResult.value;
 
@@ -49,208 +38,49 @@ export async function callLLMJson({
 }
 
 /*
- * Esegue una singola richiesta al modello e controlla che la risposta sia JSON valido
- * e che rispetti la struttura del piano attesa dall'agente.
+ * Esegue una singola richiesta al modello con function calling
+ * e restituisce { ok, value } o { ok, error }.
  */
-/*
- * Fa una richiesta al modello e controlla che la risposta sia un JSON valido.
- */
-async function requestJson({ messages, schema, temperature }) {
-  const content = await callModel(messages, {
-    schema,
+async function requestTool({ messages, tools, temperature }) {
+  const request = {
+    model: LLM_CONFIG.model,
+    messages,
+    tools,
+    tool_choice: "required",
     temperature,
-  });
+  };
 
-  const parsed = safeJsonParse(content);
+  const response = await client.chat.completions.create(request);
 
-  if (!parsed.ok) {
-    return {
-      ok: false,
-      rawContent: content,
-      error: `Invalid JSON: ${parsed.error}`,
-    };
+  const toolCall = response.choices?.[0]?.message?.tool_calls?.[0];
+
+  if (!toolCall) {
+    return { ok: false, error: "Model did not return a tool call." };
   }
 
-  const validation = validatePlanJson(parsed.value);
+  const name = toolCall.function.name;
+  const parsed = safeJsonParse(toolCall.function.arguments);
 
-  if (!validation.ok) {
-    return {
-      ok: false,
-      rawContent: content,
-      error: `Invalid plan JSON: ${validation.error}`,
-    };
+  if (!parsed.ok) {
+    return { ok: false, error: `Invalid tool arguments: ${parsed.error}` };
   }
 
   return {
     ok: true,
-    value: parsed.value,
+    value: {
+      action: { name, params: parsed.value },
+      toolCall,
+    },
   };
 }
 
-/*
- * Incapsula la chiamata OpenAI-compatible.
- * Riceve i messaggi già costruiti e restituisce il contenuto testuale del modello.
- */
-/*
- * Invia i messaggi al client LLM e restituisce il testo della risposta.
- */
-async function callModel(messages, { schema = null, temperature = 0 } = {}) {
-  const request = {
-    model: LLM_CONFIG.model,
-    messages,
-    temperature,
-  };
-
-  if (schema) {
-    request.response_format = {
-      type: "json_schema",
-      json_schema: schema,
-    };
-  }
-
-  const response = await client.chat.completions.create(request);
-
-  return response.choices?.[0]?.message?.content ?? "";
-}
-
-/*
- * Prova a convertire una stringa in JSON.
- * Non lancia eccezioni: restituisce sempre un oggetto con ok true/false.
- */
 /*
  * Prova a leggere una stringa come JSON senza sollevare eccezioni.
  */
 function safeJsonParse(text) {
   try {
-    return {
-      ok: true,
-      value: JSON.parse(text),
-    };
+    return { ok: true, value: JSON.parse(text) };
   } catch (error) {
-    return {
-      ok: false,
-      error: error.message,
-    };
+    return { ok: false, error: error.message };
   }
-}
-
-/*
- * Valida la struttura logica del piano JSON prodotto dall'LLM.
- * Qui controlliamo solo il formato del piano, non se sia davvero eseguibile nel mondo corrente.
- */
-/*
- * Controlla la struttura generale del piano prodotto dal modello.
- */
-function validatePlanJson(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {
-      ok: false,
-      error: "The response must be a JSON object.",
-    };
-  }
-
-  if (!Array.isArray(value.plan)) {
-    return {
-      ok: false,
-      error: "The response must contain a plan array.",
-    };
-  }
-
-  if (value.plan.length === 0) {
-    return {
-      ok: false,
-      error: "The plan array cannot be empty.",
-    };
-  }
-
-  for (const [index, step] of value.plan.entries()) {
-    const validation = validatePlanStep(step);
-
-    if (!validation.ok) {
-      return {
-        ok: false,
-        error: `Invalid step at index ${index}: ${validation.error}`,
-      };
-    }
-  }
-
-  return { ok: true };
-}
-
-/*
- * Valida un singolo step del piano JSON.
- * Controlla che l'azione esista e che i parametri richiesti siano presenti.
- */
-/*
- * Verifica che uno step del piano abbia i campi richiesti.
- */
-function validatePlanStep(step) {
-  if (!step || typeof step !== "object" || Array.isArray(step)) {
-    return {
-      ok: false,
-      error: "Each step must be an object.",
-    };
-  }
-
-  if (typeof step.action !== "string") {
-    return {
-      ok: false,
-      error: "Each step must contain an action string.",
-    };
-  }
-
-  if (step.action === "go_pick_up") {
-    if (typeof step.parcelId !== "string") {
-      return {
-        ok: false,
-        error: "go_pick_up requires parcelId as string.",
-      };
-    }
-
-    return { ok: true };
-  }
-
-  if (step.action === "go_drop_off") {
-    if (!Number.isFinite(step.x) || !Number.isFinite(step.y)) {
-      return {
-        ok: false,
-        error: "go_drop_off requires numeric x and y.",
-      };
-    }
-
-    return { ok: true };
-  }
-
-  if (step.action === "explore") {
-    return { ok: true };
-  }
-
-  return {
-    ok: false,
-    error: `Unknown action "${step.action}".`,
-  };
-}
-
-/*
- * Costruisce i messaggi per il secondo tentativo.
- * Mostra al modello la risposta sbagliata e gli chiede di correggere solo il JSON.
- */
-/*
- * Costruisce un secondo tentativo quando il primo output non è valido.
- */
-function buildRetryMessages(messages, invalidOutput, error) {
-  return [
-    ...messages,
-    {
-      role: "assistant",
-      content: invalidOutput || "",
-    },
-    {
-      role: "user",
-      content:
-        `Your previous response was rejected.\n` +
-        `Reason: ${error}\n\n` +
-        `Return only corrected JSON. Do not add explanations.`,
-    },
-  ];
 }

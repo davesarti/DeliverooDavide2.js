@@ -1,300 +1,146 @@
-import { callLLMJson } from "./client.js";
-import { buildPlanningMessages, PLAN_SCHEMA } from "./prompts.js";
-import { distance, isDeliveryTile } from "../utils/mapUtils.js";
-import {
-  nearestDeliveryTileAt,
-  enrichParcelForDecision,
-  buildNearbyDeliveryTiles,
-} from "../utils/stateUtils.js";
-import { wait, waitUntil } from "../utils/asyncUtils.js";
-import { RUNTIME } from "../utils/constants.js";
-
-const MAX_DELIVERY_OPTIONS_PER_PARCEL = 3;
+import { callLLMTool } from "./client.js";
+import { SYSTEM_PROMPT, buildMissionUserPrompt, MISSION_TOOLS } from "./prompts.js";
+import { calculate, getMyPosition, findDeliveryTile } from "./tools.js";
 
 // ==========================================
-// Readiness check
+// Logging
 // ==========================================
 
-/*
- * Verifica che lo stato minimo dell'LLM sia disponibile.
- */
-function isReady(bs) {
-  return (
-    bs.me.id &&
-    bs.me.x != null &&
-    bs.me.y != null &&
-    Array.isArray(bs.map.grid) &&
-    bs.map.grid.length > 0 &&
-    Array.isArray(bs.map.deliveryTiles) &&
-    bs.map.deliveryTiles.length > 0
-  );
+function timestamp() {
+  return new Date().toISOString();
+}
+
+function logWithTime(name, ...args) {
+  console.log(`[${timestamp()}] [${name ?? "LLM"}]`, ...args);
 }
 
 // ==========================================
-// State builder
+// Tool execution
 // ==========================================
 
 /*
- * Prepara una vista compatta dello stato da inviare al modello.
+ * Esegue l'azione atomica scelta dal modello e restituisce l'osservazione.
+ * action = { name: string, params: object }
  */
-export function buildLLMState(bs) {
-  const me = bs.me;
+async function executeTool(action, bs, actions) {
+  const { name, params } = action;
 
-  const carriedParcels = [...bs.parcels.values()].filter(
-    (parcel) => parcel.carriedBy === me.id
-  );
+  switch (name) {
 
-  const visibleParcels = [...bs.parcels.values()]
-    .filter((parcel) => !parcel.carriedBy)
-    .map((parcel) =>
-      enrichParcelForDecision(
-        parcel,
-        me,
-        bs.map.deliveryDistanceMap,
-        {
-          maxDeliveryOptions: MAX_DELIVERY_OPTIONS_PER_PARCEL,
-          parcelDecayingEvent: bs.config.parcelDecayingEvent,
-          agentId: me.id ?? "default",
-        }
-      )
-    )
-    .filter((parcel) => parcel.deliveryOptions.length > 0)
-    .sort((a, b) => {
-      if (b.reward !== a.reward) return b.reward - a.reward;
-      return a.distanceToMe - b.distanceToMe;
-    });
+    case "calculate":
+      return calculate(params);
 
-  const nearbyDeliveryTiles = buildNearbyDeliveryTiles(
-    me,
-    bs.map.deliveryTiles
-  );
+    case "get_my_position":
+      return getMyPosition(bs);
 
-  const nearbyAgents = [...bs.agents.values()]
-    .map((agent) => ({
-      id: agent.id,
-      name: agent.name,
-      x: Math.round(agent.x),
-      y: Math.round(agent.y),
-      distanceToMe: distance(me, agent),
-    }))
-    .sort((a, b) => a.distanceToMe - b.distanceToMe);
+    case "find_delivery_tile":
+      return findDeliveryTile(params, bs);
 
-  return {
-    me: {
-      id: me.id,
-      name: me.name,
-      x: Math.round(me.x),
-      y: Math.round(me.y),
-      score: me.score,
-    },
-    carried: {
-      count: carriedParcels.length,
-      totalReward: carriedParcels.reduce(
-        (sum, parcel) => sum + (parcel.reward ?? 0),
-        0
-      ),
-    },
-    visibleParcels,
-    nearbyDeliveryTiles,
-    nearbyAgents,
-  };
-}
-
-// ==========================================
-// Plan normalization
-// ==========================================
-
-/*
- * Converte il piano del modello in una lista di predicati eseguibili.
- */
-export function normalizeLLMPlan(llmPlan, bs) {
-  if (!llmPlan || !Array.isArray(llmPlan.plan)) return [];
-
-  const predicates = [];
-
-  for (const step of llmPlan.plan) {
-    const predicate = normalizeLLMStep(step, bs);
-    if (predicate) predicates.push(predicate);
-  }
-
-  return predicates;
-}
-
-/*
- * Normalizza un singolo step del piano del modello.
- */
-function normalizeLLMStep(step, bs) {
-  if (step.action === "go_pick_up") return normalizePickupStep(step, bs);
-  if (step.action === "go_drop_off") return normalizeDropoffStep(step, bs);
-  if (step.action === "explore") return ["explore"];
-  return null;
-}
-
-/*
- * Porta uno step di pickup al formato interno usato dall'agente.
- */
-function normalizePickupStep(step, bs) {
-  const parcel = bs.parcels.get(step.parcelId);
-  if (!parcel) return null;
-  if (parcel.carriedBy) return null;
-
-  return [
-    "go_pick_up",
-    Math.round(parcel.x),
-    Math.round(parcel.y),
-    parcel.id,
-  ];
-}
-
-/*
- * Porta uno step di dropoff su una delivery tile valida.
- */
-function normalizeDropoffStep(step, bs) {
-  const x = Math.round(step.x);
-  const y = Math.round(step.y);
-
-  if (isDeliveryTile(x, y, bs.map.deliveryTiles)) {
-    return ["go_drop_off", x, y];
-  }
-
-  const nearest = nearestDeliveryTileAt(
-    bs.me,
-    bs.map.deliveryDistanceMap
-  );
-
-  if (!nearest) return null;
-
-  return ["go_drop_off", nearest.tile.x, nearest.tile.y];
-}
-
-// ==========================================
-// Predicate validation
-// ==========================================
-
-/*
- * Controlla se l'agente sta già trasportando almeno un pacco.
- */
-function hasCarriedParcels(bs) {
-  return [...bs.parcels.values()].some(
-    (parcel) => parcel.carriedBy === bs.me.id
-  );
-}
-
-/*
- * Verifica che il predicato abbia senso nello stato corrente.
- */
-function validatePredicate(predicate, bs) {
-  if (!Array.isArray(predicate) || predicate.length === 0) {
-    return { ok: false, error: "Invalid predicate." };
-  }
-
-  const [action, x, y, parcelId] = predicate;
-
-  if (action === "go_pick_up") {
-    const parcel = bs.parcels.get(parcelId);
-    if (!parcel) return { ok: false, error: `Parcel ${parcelId} not found.` };
-    if (parcel.carriedBy) return { ok: false, error: `Parcel ${parcelId} is already carried.` };
-    return { ok: true };
-  }
-
-  if (action === "go_drop_off") {
-    if (!hasCarriedParcels(bs)) {
-      return { ok: false, error: "No carried parcels to deliver." };
-    }
-    if (!isDeliveryTile(x, y, bs.map.deliveryTiles)) {
-      return { ok: false, error: `Tile (${x}, ${y}) is not a delivery tile.` };
-    }
-    return { ok: true };
-  }
-
-  if (action === "explore") return { ok: true };
-
-  return { ok: false, error: `Unknown predicate action "${action}".` };
-}
-
-// ==========================================
-// Plan execution
-// ==========================================
-
-/*
- * Esegue il piano validando ogni passo prima di partire.
- */
-async function executePlan(predicates, bs, actions) {
-  for (const predicate of predicates) {
-    const validation = validatePredicate(predicate, bs);
-
-    if (!validation.ok) {
-      console.log(`[${bs.me.name ?? "LLM"}] Invalid predicate:`, predicate, validation.error);
-      return false;
+    case "go_to": {
+      try {
+        await actions.goTo(params.x, params.y);
+        return `Arrived at (${params.x}, ${params.y}).`;
+      } catch (error) {
+        return `Could not reach (${params.x}, ${params.y}): ${error?.message ?? error}. The tile may be unreachable or outside the map.`;
+      }
     }
 
-    console.log(`[${bs.me.name ?? "LLM"}] Executing:`, predicate);
-    await actions.executePredicate(predicate);
-  }
+    case "go_pick_up": {
+      try {
+        await actions.goPickUp(params.x, params.y, params.parcelId);
+        return `Picked up parcel ${params.parcelId ?? ""} at (${params.x}, ${params.y}).`;
+      } catch (error) {
+        return `Could not pick up at (${params.x}, ${params.y}): ${error?.message ?? error}.`;
+      }
+    }
 
-  return true;
+    case "go_drop_off": {
+      try {
+        await actions.goDropOff(params.x, params.y);
+        return `Delivered parcels at (${params.x}, ${params.y}).`;
+      } catch (error) {
+        return `Could not deliver at (${params.x}, ${params.y}): ${error?.message ?? error}.`;
+      }
+    }
+
+    case "explore": {
+      try {
+        await actions.explore();
+        return "Exploration complete.";
+      } catch (error) {
+        return `Could not explore: ${error?.message ?? error}.`;
+      }
+    }
+
+    default:
+      return `Unknown action: ${name}.`;
+  }
 }
 
 // ==========================================
 // Entry point
 // ==========================================
 
-/*
- * Restituisce un timestamp leggibile nei log.
- */
-function timestamp() {
-  return new Date().toISOString();
-}
+const MAX_ITERATIONS = 15;
 
 /*
- * Scrive un log con l'orario e il nome dell'agente.
- */
-function logWithTime(name, ...args) {
-  console.log(`[${timestamp()}] [${name ?? "LLM"}]`, ...args);
-}
-
-/*
- * Avvia il ciclo principale dell'agente LLM.
+ * Avvia il listener delle missioni speciali via chat.
+ * Per ogni messaggio ricevuto esegue il loop ReAct mantenendo
+ * una conversation history reale (ruoli assistant + tool),
+ * finché il modello produce final_reply.
  */
 export async function startLLMAgent(socket, bs, actions) {
-  logWithTime(bs.me.name, "Waiting for initial beliefs...");
+  logWithTime(bs.me.name, "LLM chat listener started");
 
-  await waitUntil(() => isReady(bs), RUNTIME.READINESS_CHECK_DELAY_MS);
+  socket.onMsg(async (id, name, msg) => {
+    if (!msg || msg.trim() === "") return;
+    if (id === bs.me.id) return;
 
-  logWithTime(bs.me.name, "Agent ready");
+    logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
 
-  while (true) {
+    // Conversation history reale: cresce ad ogni iterazione.
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: buildMissionUserPrompt(msg) },
+    ];
+
     try {
-      const state = buildLLMState(bs);
-      const messages = buildPlanningMessages(state);
-      const planningStartedAt = Date.now();
+      for (let i = 0; i < MAX_ITERATIONS; i++) {
+        const { action, toolCall } = await callLLMTool({
+          messages,
+          tools: MISSION_TOOLS,
+          temperature: 0,
+        });
 
-      logWithTime(bs.me.name, "Planning started");
+        logWithTime(bs.me.name, `Action: ${action.name}(${JSON.stringify(action.params)})`);
 
-      const llmPlan = await callLLMJson({
-        messages,
-        schema: PLAN_SCHEMA,
-        temperature: 0,
-      });
+        // Salva nella history la chiamata dell'assistant nel formato nativo.
+        messages.push({
+          role: "assistant",
+          content: null,
+          tool_calls: [toolCall],
+        });
 
-      logWithTime(bs.me.name, `Planning finished in ${Date.now() - planningStartedAt}ms`);
+        if (action.name === "final_reply") {
+          await socket.emitSay(id, action.params.message);
+          break;
+        }
 
-      let predicates = normalizeLLMPlan(llmPlan, bs);
+        const observation = await executeTool(action, bs, actions);
+        logWithTime(bs.me.name, "Observation:", observation);
 
-      if (predicates.length === 0) {
-        predicates = [["explore"]];
+        // Salva nella history il risultato del tool nel ruolo "tool".
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: observation,
+        });
       }
-
-      logWithTime(bs.me.name, "Plan:", predicates);
-
-      const executionStartedAt = Date.now();
-      await executePlan(predicates, bs, actions);
-      logWithTime(bs.me.name, `Execution finished in ${Date.now() - executionStartedAt}ms`);
-
-      await wait(RUNTIME.LLM_LOOP_DELAY_MS);
     } catch (error) {
-      logWithTime(bs.me.name, "Error:", error?.message ?? error);
-      await wait(RUNTIME.LLM_ERROR_DELAY_MS);
+      logWithTime(bs.me.name, "Mission error:", error?.message ?? error);
+      try {
+        await socket.emitSay(id, "Sorry, I could not complete the mission.");
+      } catch {}
     }
-  }
+  });
 }
