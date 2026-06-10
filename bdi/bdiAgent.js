@@ -146,7 +146,7 @@ class IntentionRevision {
       if (routeDist == null) return -1;
 
       for (const parcel of myParcels) {
-        estimatedLoss += Math.min(parcel.reward, routeDist * distanceFactor());
+        estimatedLoss += Math.min(parcel.reward, routeDist * distanceFactor(this.#bs));
       }
       return totalReward - estimatedLoss - DROP_DISINCENTIVE;
     }
@@ -160,13 +160,13 @@ class IntentionRevision {
       if (routeDist == null) return -1;
 
       if (myParcels.length === 0) {
-        return newParcel.reward - routeDist * distanceFactor();
+        return newParcel.reward - routeDist * distanceFactor(this.#bs);
       }
 
       for (const parcel of myParcels) {
-        estimatedLoss += Math.min(parcel.reward, routeDist * distanceFactor());
+        estimatedLoss += Math.min(parcel.reward, routeDist * distanceFactor(this.#bs));
       }
-      return totalReward + newParcel.reward - routeDist * distanceFactor() - estimatedLoss;
+      return totalReward + newParcel.reward - routeDist * distanceFactor(this.#bs) - estimatedLoss;
     }
 
     if (action === "explore") return EXPLORATION_INCENTIVE;

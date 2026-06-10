@@ -7,9 +7,11 @@ export const DROP_DISINCENTIVE = 0;
 
 /*
  * Traduce la velocità dell'agente nel costo stimato del decay.
+ * Richiede bs per identificare l'agente corretto nella Map di velocità condivisa.
  */
-export function distanceFactor() {
-  const tilesPerSec = getTilesPerSecond();
+export function distanceFactor(bs = null) {
+  const agentId = bs?.me?.id ?? "default";
+  const tilesPerSec = getTilesPerSecond(agentId);
   if (!tilesPerSec || tilesPerSec <= 0) return 0;
   return PARCEL_DECAY / tilesPerSec;
 }
@@ -49,7 +51,7 @@ function generatePickupOptions(parcels, me, bs) {
     const routeDist = pickupRouteDistance(parcel, me, bs);
     if (routeDist == null) continue;
 
-    const expectedScore = parcel.reward - routeDist * distanceFactor();
+    const expectedScore = parcel.reward - routeDist * distanceFactor(bs);
     if (expectedScore > 0) {
       pickupOptions.push(["go_pick_up", parcel.x, parcel.y, parcel.id]);
     }

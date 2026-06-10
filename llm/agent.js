@@ -54,6 +54,7 @@ export function buildLLMState(bs) {
         {
           maxDeliveryOptions: MAX_DELIVERY_OPTIONS_PER_PARCEL,
           parcelDecayingEvent: bs.config.parcelDecayingEvent,
+          agentId: me.id ?? "default",
         }
       )
     )

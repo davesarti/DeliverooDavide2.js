@@ -115,13 +115,15 @@ export function enrichParcelForDecision(
   {
     maxDeliveryOptions = 3,
     parcelDecayingEvent = null,
+    agentId = "default",
   } = {}
 ) {
   const deliveryOptions = buildParcelDeliveryOptions(
     { x: parcel.x, y: parcel.y },
     deliveryDistanceMap,
     parcel.reward,
-    parcelDecayingEvent
+    parcelDecayingEvent,
+    agentId
   ).slice(0, maxDeliveryOptions);
 
   return {
@@ -130,7 +132,7 @@ export function enrichParcelForDecision(
     y: Math.round(parcel.y),
     reward: parcel.reward,
     distanceToMe: distance(me, parcel),
-    rewardLossPerTile: getRewardLossPerTile(parcelDecayingEvent),
+    rewardLossPerTile: getRewardLossPerTile(parcelDecayingEvent, agentId),
     deliveryOptions,
   };
 }
@@ -139,13 +141,13 @@ export function enrichParcelForDecision(
  * Costruisce le delivery candidate per un pacco.
  * Per ogni delivery raggiungibile calcola distanza e reward stimata alla consegna.
  */
-function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward, parcelDecayingEvent) {
+function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward, parcelDecayingEvent, agentId = "default") {
   const row = deliveryDistanceMap?.[Math.round(position.y)];
   const entries = row?.[Math.round(position.x)];
 
   if (!Array.isArray(entries)) return [];
 
-  const rewardLossPerTile = getRewardLossPerTile(parcelDecayingEvent);
+  const rewardLossPerTile = getRewardLossPerTile(parcelDecayingEvent, agentId);
 
   return entries
     .filter((entry) => Number.isFinite(entry.distance))
@@ -208,10 +210,10 @@ function getParcelDecayPerSecond(parcelDecayingEvent) {
 
 /*
  * Stima quanta reward viene persa per ogni tile percorsa.
- * Combina il decay reale del server con la velocità stimata dell'agente.
+ * agentId identifica l'agente corretto nella Map di velocità condivisa.
  */
-function getRewardLossPerTile(parcelDecayingEvent) {
-  const tilesPerSecond = getTilesPerSecond();
+function getRewardLossPerTile(parcelDecayingEvent, agentId = "default") {
+  const tilesPerSecond = getTilesPerSecond(agentId);
   if (!tilesPerSecond || tilesPerSecond <= 0) return 0;
   return getParcelDecayPerSecond(parcelDecayingEvent) / tilesPerSecond;
 }

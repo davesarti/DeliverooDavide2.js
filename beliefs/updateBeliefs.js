@@ -60,7 +60,7 @@ export function setupBeliefUpdates(socket, bs) {
       bs.config.observationDistance
     );
 
-    updateTilesPerSecond(x, y);
+    updateTilesPerSecond(x, y, bs.me.id ?? "default");
   });
 
   // ==========================================

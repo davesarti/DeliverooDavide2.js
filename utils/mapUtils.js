@@ -7,79 +7,72 @@ import {
 // Movement and reward estimation
 // ==========================================
 
-let tilesPerSecond = 10.0;
-
-const movementStats = {
-  lastX: null,
-  lastY: null,
-  lastTimeMs: null,
-  samples: [],
-  lastReportMs: 0,
-};
-
 /*
- * Aggiorna una stima della velocità reale dell'agente.
- * Serve per stimare quanta reward perderà un pacco durante uno spostamento.
+ * Mappa per-agente: agentId → { tilesPerSecond, lastX, lastY, lastTimeMs, samples, lastReportMs }
+ * Necessario in modalità BOTH dove BDI e LLM possono avere velocità diverse.
  */
-export function updateTilesPerSecond(x, y) {
-  const nowMs = Date.now();
+const _agentMovementStats = new Map();
 
-  if (movementStats.lastTimeMs === null) {
-    movementStats.lastX = x;
-    movementStats.lastY = y;
-    movementStats.lastTimeMs = nowMs;
-    return;
+function _getOrCreateStats(agentId) {
+  if (!_agentMovementStats.has(agentId)) {
+    _agentMovementStats.set(agentId, {
+      tilesPerSecond: 10.0,
+      lastX: null,
+      lastY: null,
+      lastTimeMs: null,
+      samples: [],
+      lastReportMs: 0,
+    });
   }
-
-  const dx = Math.abs(x - movementStats.lastX);
-  const dy = Math.abs(y - movementStats.lastY);
-  const movedTiles = dx + dy;
-
-  movementStats.samples.push({
-    timeMs: nowMs,
-    tiles: movedTiles,
-  });
-
-  const cutoffMs = nowMs - MOVING_WINDOW_MS;
-
-  while (
-    movementStats.samples.length > 0 &&
-    movementStats.samples[0].timeMs < cutoffMs
-  ) {
-    movementStats.samples.shift();
-  }
-
-  if (
-    nowMs - movementStats.lastReportMs >= 1000 &&
-    movementStats.samples.length > 0
-  ) {
-    const windowTiles = movementStats.samples.reduce(
-      (sum, sample) => sum + sample.tiles,
-      0
-    );
-
-    const windowDurationMs = Math.max(
-      nowMs - movementStats.samples[0].timeMs,
-      1
-    );
-
-    const computedTilesPerSecond =
-      windowTiles / (windowDurationMs / 1000);
-
-    tilesPerSecond = Number(computedTilesPerSecond.toFixed(2));
-    movementStats.lastReportMs = nowMs;
-  }
-
-  movementStats.lastX = x;
-  movementStats.lastY = y;
-  movementStats.lastTimeMs = nowMs;
+  return _agentMovementStats.get(agentId);
 }
 
 /*
- * Restituisce la velocità stimata dell'agente in tile al secondo.
+ * Aggiorna la stima della velocità reale per uno specifico agente.
+ * agentId deve essere bs.me.id; se non disponibile usa 'default'.
  */
-export function getTilesPerSecond() {
-  return tilesPerSecond;
+export function updateTilesPerSecond(x, y, agentId = "default") {
+  const stats = _getOrCreateStats(agentId);
+  const nowMs = Date.now();
+
+  if (stats.lastTimeMs === null) {
+    stats.lastX = x;
+    stats.lastY = y;
+    stats.lastTimeMs = nowMs;
+    return;
+  }
+
+  const dx = Math.abs(x - stats.lastX);
+  const dy = Math.abs(y - stats.lastY);
+  const movedTiles = dx + dy;
+
+  stats.samples.push({ timeMs: nowMs, tiles: movedTiles });
+
+  const cutoffMs = nowMs - MOVING_WINDOW_MS;
+  while (stats.samples.length > 0 && stats.samples[0].timeMs < cutoffMs) {
+    stats.samples.shift();
+  }
+
+  if (nowMs - stats.lastReportMs >= 1000 && stats.samples.length > 0) {
+    const windowTiles = stats.samples.reduce((sum, s) => sum + s.tiles, 0);
+    const windowDurationMs = Math.max(nowMs - stats.samples[0].timeMs, 1);
+    stats.tilesPerSecond = Number(
+      (windowTiles / (windowDurationMs / 1000)).toFixed(2)
+    );
+    stats.lastReportMs = nowMs;
+  }
+
+  stats.lastX = x;
+  stats.lastY = y;
+  stats.lastTimeMs = nowMs;
+}
+
+/*
+ * Restituisce la velocità stimata in tile/s per uno specifico agente.
+ * agentId deve essere bs.me.id; se non disponibile usa 'default'.
+ */
+export function getTilesPerSecond(agentId = "default") {
+  return _getOrCreateStats(agentId).tilesPerSecond;
 }
 
 // ==========================================
