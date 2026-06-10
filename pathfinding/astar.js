@@ -1,14 +1,21 @@
 import { Heap } from "heap-js";
-import { beliefState } from "../beliefs/beliefState.js";
-import {canEnterTile, DIRECTIONS, isOccupied} from "../utils/mapUtils.js";
-import { BASE_STEP_COST, MIN_EDGE_COST, PARCEL_REWARD_DISCOUNT } from "../utils/constants.js";
+import {
+  canEnterTile,
+  DIRECTIONS,
+  isOccupied,
+} from "../utils/mapUtils.js";
+import {
+  BASE_STEP_COST,
+  MIN_EDGE_COST,
+  PARCEL_REWARD_DISCOUNT,
+} from "../utils/constants.js";
 
-export function astar(start, goal) {
+export function astar(start, goal, bs) {
   return astarOnState({
-    map: beliefState.map.grid,
-    crates: beliefState.crates,
-    agents: beliefState.agents,
-    parcels: beliefState.parcels,
+    map: bs.map.grid,
+    crates: bs.crates,
+    agents: bs.agents,
+    parcels: bs.parcels,
     start,
     goal,
   });
@@ -32,180 +39,67 @@ export function astarOnState({
   const goalY = Math.round(goal.y);
 
   if (startX === goalX && startY === goalY) {
-    return {
-      path: [],
-      distance: 0,
-    };
+    return { path: [], distance: 0 };
   }
 
-  const height = map.length;
-  const width = map[0].length;
+  const heuristic = (x, y) =>
+    (Math.abs(x - goalX) + Math.abs(y - goalY)) * MIN_EDGE_COST;
 
-  const rewardByKey = buildParcelRewardByKey(parcels);
+  const heap = new Heap((a, b) => a.f - b.f);
+  heap.push({ x: startX, y: startY, g: 0, f: heuristic(startX, startY), path: [] });
 
-  const gScore = new Map();
-  const fScore = new Map();
-  const cameFrom = new Map();
-  const closedSet = new Set();
+  const visited = new Map();
 
-  const startKey = key(startX, startY);
+  while (!heap.isEmpty()) {
+    const current = heap.pop();
+    const key = `${current.x},${current.y}`;
 
-  gScore.set(startKey, 0);
-  fScore.set(startKey, heuristic(startX, startY, goalX, goalY));
-
-  const openSet = new Heap((a, b) => {
-    const fa = fScore.get(key(a.x, a.y)) ?? Infinity;
-    const fb = fScore.get(key(b.x, b.y)) ?? Infinity;
-    return fa - fb;
-  });
-
-  const openSetKeys = new Set([startKey]);
-  openSet.push({ x: startX, y: startY });
-
-  while (openSet.size() > 0) {
-    const current = openSet.pop();
-    const currentKey = key(current.x, current.y);
-
-    openSetKeys.delete(currentKey);
-
-    if (closedSet.has(currentKey)) continue;
-    closedSet.add(currentKey);
+    if (visited.has(key)) continue;
+    visited.set(key, true);
 
     if (current.x === goalX && current.y === goalY) {
-      const path = reconstructPath(cameFrom, currentKey);
-
       return {
-        path,
-        distance: path.length,
+        path: current.path,
+        distance: current.path.length,
       };
     }
 
     for (const { dx, dy, move } of DIRECTIONS) {
       const nextX = current.x + dx;
       const nextY = current.y + dy;
-      const nextKey = key(nextX, nextY);
 
-      if (closedSet.has(nextKey)) continue;
+      const insideMap =
+        nextX >= 0 &&
+        nextX < map[0].length &&
+        nextY >= 0 &&
+        nextY < map.length;
 
-      const cost = moveCost({
+      if (!insideMap) continue;
+      if (visited.has(`${nextX},${nextY}`)) continue;
+      if (!canEnterTile(map[nextY][nextX], move)) continue;
+      if (isOccupied(nextX, nextY, crates)) continue;
+      if (isOccupied(nextX, nextY, agents)) continue;
+
+      const parcel = [...parcels.values()].find(
+        (p) => Math.round(p.x) === nextX && Math.round(p.y) === nextY && !p.carriedBy
+      );
+
+      const edgeCost = parcel
+        ? Math.max(MIN_EDGE_COST, BASE_STEP_COST - parcel.reward * PARCEL_REWARD_DISCOUNT)
+        : BASE_STEP_COST;
+
+      const g = current.g + edgeCost;
+      const f = g + heuristic(nextX, nextY);
+
+      heap.push({
         x: nextX,
         y: nextY,
-        move,
-        width,
-        height,
-        map,
-        crates,
-        agents,
-        rewardByKey,
+        g,
+        f,
+        path: [...current.path, move],
       });
-
-      if (!Number.isFinite(cost)) continue;
-
-      const tentativeG = (gScore.get(currentKey) ?? Infinity) + cost;
-
-      if (tentativeG < (gScore.get(nextKey) ?? Infinity)) {
-        cameFrom.set(nextKey, {
-          prev: currentKey,
-          move,
-        });
-
-        gScore.set(nextKey, tentativeG);
-        fScore.set(
-          nextKey,
-          tentativeG + heuristic(nextX, nextY, goalX, goalY)
-        );
-
-        if (!openSetKeys.has(nextKey)) {
-          openSet.push({ x: nextX, y: nextY });
-          openSetKeys.add(nextKey);
-        }
-      }
     }
   }
 
   return null;
-}
-
-
-
-
-function key(x, y) {
-  return `${x},${y}`;
-}
-
-function heuristic(x, y, goalX, goalY) {
-  return (
-    (Math.abs(x - goalX) + Math.abs(y - goalY)) *
-    MIN_EDGE_COST
-  );
-}
-
-function reconstructPath(cameFrom, currentKey) {
-  const path = [];
-  let current = currentKey;
-
-  while (cameFrom.has(current)) {
-    const { prev, move } = cameFrom.get(current);
-    path.unshift(move);
-    current = prev;
-  }
-
-  return path;
-}
-
-function buildParcelRewardByKey(parcels) {
-  const rewards = new Map();
-
-  for (const parcel of parcels.values()) {
-    if (parcel.carriedBy) continue;
-
-    const parcelKey = key(
-      Math.round(parcel.x),
-      Math.round(parcel.y)
-    );
-
-    rewards.set(
-      parcelKey,
-      (rewards.get(parcelKey) ?? 0) + (parcel.reward ?? 0)
-    );
-  }
-
-  return rewards;
-}
-
-function moveCost({
-  x,
-  y,
-  move,
-  width,
-  height,
-  map,
-  crates,
-  agents,
-  rewardByKey,
-}) {
-  if (x < 0 || x >= width || y < 0 || y >= height) {
-    return Infinity;
-  }
-
-  const cell = map[y][x];
-
-  if (!canEnterTile(cell, move)) {
-    return Infinity;
-  }
-
-  if (isOccupied(x, y, crates)) {
-    return Infinity;
-  }
-
-  if (isOccupied(x, y, agents)) {
-    return Infinity;
-  }
-
-  const reward = rewardByKey.get(key(x, y)) ?? 0;
-
-  return Math.max(
-    MIN_EDGE_COST,
-    BASE_STEP_COST - reward * PARCEL_REWARD_DISCOUNT
-  );
 }

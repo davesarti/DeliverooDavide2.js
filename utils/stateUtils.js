@@ -1,5 +1,3 @@
-import { beliefState } from "../beliefs/beliefState.js";
-
 import {
   distance,
   getTilesPerSecond,
@@ -121,6 +119,7 @@ export function enrichParcelForDecision(
   const deliveryOptions = buildParcelDeliveryOptions(
     { x: parcel.x, y: parcel.y },
     deliveryDistanceMap,
+    parcelDecayingEvent,
     parcel.reward
   ).slice(0, maxDeliveryOptions);
 
@@ -130,7 +129,7 @@ export function enrichParcelForDecision(
     y: Math.round(parcel.y),
     reward: parcel.reward,
     distanceToMe: distance(me, parcel),
-    rewardLossPerTile: getRewardLossPerTile(),
+    rewardLossPerTile: getRewardLossPerTile(parcelDecayingEvent),
     deliveryOptions,
   };
 }
@@ -145,7 +144,7 @@ function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward)
 
   if (!Array.isArray(entries)) return [];
 
-  const rewardLossPerTile = getRewardLossPerTile();
+  const rewardLossPerTile = getRewardLossPerTile(parcelDecayingEvent);
 
   return entries
     .filter((entry) => Number.isFinite(entry.distance))
@@ -200,15 +199,9 @@ function parseDurationMs(value) {
  * Restituisce quanta reward perde un pacco ogni secondo.
  * Usa parcels.decaying_event dal server; se manca, usa PARCEL_DECAY come fallback.
  */
-function getParcelDecayPerSecond() {
-  const decayEventMs = parseDurationMs(
-    beliefState.config.parcelDecayingEvent
-  );
-
-  if (!decayEventMs || decayEventMs <= 0) {
-    return PARCEL_DECAY;
-  }
-
+function getParcelDecayPerSecond(parcelDecayingEvent) {
+  const decayEventMs = parseDurationMs(parcelDecayingEvent);
+  if (!decayEventMs || decayEventMs <= 0) return PARCEL_DECAY;
   return 1000 / decayEventMs;
 }
 
@@ -216,12 +209,8 @@ function getParcelDecayPerSecond() {
  * Stima quanta reward viene persa per ogni tile percorsa.
  * Combina il decay reale del server con la velocità stimata dell'agente.
  */
-function getRewardLossPerTile() {
+function getRewardLossPerTile(parcelDecayingEvent) {
   const tilesPerSecond = getTilesPerSecond();
-
-  if (!tilesPerSecond || tilesPerSecond <= 0) {
-    return 0;
-  }
-
-  return getParcelDecayPerSecond() / tilesPerSecond;
+  if (!tilesPerSecond || tilesPerSecond <= 0) return 0;
+  return getParcelDecayPerSecond(parcelDecayingEvent) / tilesPerSecond;
 }

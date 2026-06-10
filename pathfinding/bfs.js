@@ -1,16 +1,14 @@
-import { beliefState } from "../beliefs/beliefState.js";
 import {
   canEnterTile,
   DIRECTIONS,
   isOccupied,
 } from "../utils/mapUtils.js";
 
-
-export function bfs(start, goal) {
+export function bfs(start, goal, bs) {
   return bfsOnState({
-    map: beliefState.map.grid,
-    crates: beliefState.crates,
-    agents: beliefState.agents,
+    map: bs.map.grid,
+    crates: bs.crates,
+    agents: bs.agents,
     start,
     goal,
   });

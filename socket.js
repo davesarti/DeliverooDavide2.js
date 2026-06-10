@@ -1,6 +1,12 @@
 import "dotenv/config";
 import { DjsConnect } from "@unitn-asa/deliveroo-js-sdk/client";
 
-export const socket = DjsConnect();
+export function createSocket(host, token) {
+  const socket = DjsConnect(host, token);
 
-console.log("Connected to DeliverooJS");
+  socket.onceYou((agent) => {
+    console.log(`L'agente con ID ${agent.id} si è collegato a Deliveroo`);
+  });
+
+  return socket;
+}

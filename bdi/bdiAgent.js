@@ -1,4 +1,3 @@
-import { beliefState } from "../beliefs/beliefState.js";
 import {
   Intention,
   samePredicateInQueue,
@@ -21,13 +20,13 @@ import { waitUntil } from "../utils/asyncUtils.js";
 // Readiness check
 // ==========================================
 
-function isReady() {
+function isReady(bs) {
   return (
-    beliefState.me.id != null &&
-    beliefState.me.x != null &&
-    beliefState.me.y != null &&
-    Array.isArray(beliefState.map.deliveryDistanceMap) &&
-    beliefState.map.deliveryDistanceMap.length > 0
+    bs.me.id != null &&
+    bs.me.x != null &&
+    bs.me.y != null &&
+    Array.isArray(bs.map.deliveryDistanceMap) &&
+    bs.map.deliveryDistanceMap.length > 0
   );
 }
 
@@ -40,13 +39,20 @@ class IntentionRevision {
   #currentIntention = null;
   #failedIntentionPool = new Map();
   #failedIntentionRetryMs = RUNTIME.FAILED_INTENTION_RETRY_MS;
+  #bs;
+  #executePredicate;
+
+  constructor(bs, executePredicate) {
+    this.#bs = bs;
+    this.#executePredicate = executePredicate;
+  }
 
   get intention_queue() {
     return this.#intentionQueue;
   }
 
   log(...args) {
-    console.log(...args);
+    console.log(`[${this.#bs.me.name ?? "BDI"}]`, ...args);
   }
 
   #predicateKey(predicate) {
@@ -65,9 +71,6 @@ class IntentionRevision {
     });
   }
 
-  /*
-   * Reintroduce in coda le intenzioni fallite il cui timeout di retry è scaduto.
-   */
   #requeueFailedIntentions() {
     const now = Date.now();
     let requeued = false;
@@ -77,7 +80,6 @@ class IntentionRevision {
 
       this.#failedIntentionPool.delete(key);
 
-      // Non reinserire se è l'intenzione attualmente in esecuzione.
       if (
         this.#currentIntention &&
         this.#predicateKey(this.#currentIntention.predicate) === key
@@ -94,14 +96,10 @@ class IntentionRevision {
     if (requeued) this.sortQueueByScore();
   }
 
-  /*
-   * Score di un predicato rispetto allo stato corrente del beliefState.
-   * Usato per ordinare la coda e decidere se preemptare l'intenzione corrente.
-   */
   intentionScore(predicate) {
-    const me = beliefState.me;
-    const parcels = beliefState.parcels;
-    const deliveryDistanceMap = beliefState.map.deliveryDistanceMap;
+    const me = this.#bs.me;
+    const parcels = this.#bs.parcels;
+    const deliveryDistanceMap = this.#bs.map.deliveryDistanceMap;
 
     const myParcels = [...parcels.values()].filter(
       (p) => p.carriedBy === me.id
@@ -131,7 +129,7 @@ class IntentionRevision {
       const newParcel = parcels.get(parcelId);
       if (!newParcel) return -1;
 
-      const routeDist = pickupRouteDistance(newParcel, me);
+      const routeDist = pickupRouteDistance(newParcel, me, this.#bs);
       if (routeDist == null) return -1;
 
       if (myParcels.length === 0) {
@@ -149,10 +147,6 @@ class IntentionRevision {
     return 0;
   }
 
-  /*
-   * Riordina la coda per score decrescente e, se necessario, preempta
-   * l'intenzione corrente a favore di una più conveniente.
-   */
   sortQueueByScore() {
     const running = this.#currentIntention;
 
@@ -173,25 +167,15 @@ class IntentionRevision {
       ...valid.map((e) => e.intention)
     );
 
-    this.log(
-      "Queue sorted by score",
-      valid.map((e) => ({
-        predicate: e.intention.predicate,
-        score: e.score,
-      }))
-    );
-
     const best = this.intention_queue[0];
     if (running && best && running !== best) {
-      this.log(
-        "Preemption: stopping the current job and loading the higher-score one"
-      );
+      this.log("Preemption: stopping current intention");
       running.stop(STOP_REASON_PREEMPTION);
     }
   }
 
   createIntention(predicate) {
-    return new Intention(this, predicate);
+    return new Intention(this, predicate, this.#executePredicate);
   }
 
   removeIntention(intention) {
@@ -199,11 +183,6 @@ class IntentionRevision {
     if (index !== -1) this.intention_queue.splice(index, 1);
   }
 
-  /*
-   * Loop principale del BDI agent.
-   * A ogni ciclo: controlla retry dei fallimenti, valida l'intenzione in testa,
-   * la esegue e gestisce i vari esiti (successo, preemption, stop, fallimento).
-   */
   async loop() {
     while (true) {
       this.#requeueFailedIntentions();
@@ -212,15 +191,11 @@ class IntentionRevision {
         const intention = this.intention_queue[0];
         const [action] = intention.predicate;
 
-        // Validazione preventiva: scarta intenzioni già non più perseguibili.
         if (action === "go_pick_up") {
           const parcelId = intention.predicate[3];
-          const parcel = beliefState.parcels.get(parcelId);
+          const parcel = this.#bs.parcels.get(parcelId);
           if (!parcel || parcel.carriedBy) {
-            console.log(
-              "Skipping intention because it is no longer valid",
-              intention.predicate
-            );
+            this.log("Skipping invalid intention", intention.predicate);
             this.removeIntention(intention);
             await new Promise((res) => setImmediate(res));
             continue;
@@ -228,14 +203,11 @@ class IntentionRevision {
         }
 
         if (action === "go_drop_off") {
-          const carrying = Array.from(beliefState.parcels.values()).some(
-            (p) => p.carriedBy === beliefState.me.id
+          const carrying = Array.from(this.#bs.parcels.values()).some(
+            (p) => p.carriedBy === this.#bs.me.id
           );
           if (!carrying) {
-            console.log(
-              "Skipping intention because it is no longer valid",
-              intention.predicate
-            );
+            this.log("Skipping invalid intention", intention.predicate);
             this.removeIntention(intention);
             await new Promise((res) => setImmediate(res));
             continue;
@@ -252,8 +224,6 @@ class IntentionRevision {
             const wasStopped = isStoppedIntentionError(error);
 
             if (wasPreempted) {
-              // L'intenzione era stata preemptata: la rigeneriamo in coda
-              // così potrà essere ripresa se tornerà ad avere lo score più alto.
               const index = this.intention_queue.indexOf(intention);
               if (index !== -1) {
                 this.intention_queue.splice(
@@ -267,7 +237,6 @@ class IntentionRevision {
             }
 
             if (!wasStopped) {
-              // Fallimento genuino: blocca il predicato per FAILED_INTENTION_RETRY_MS.
               this.#recordFailedIntention(intention.predicate);
             }
           })
@@ -281,7 +250,6 @@ class IntentionRevision {
           this.removeIntention(intention);
         }
       } else {
-        // Coda vuota: esplora.
         this.push(["explore"]);
       }
 
@@ -291,14 +259,9 @@ class IntentionRevision {
 }
 
 // ==========================================
-// IntentionRevisionRevise (strategia di push)
+// IntentionRevisionRevise
 // ==========================================
 
-/*
- * Variante del revision agent che, ad ogni push, ri-ordina immediatamente
- * la coda per score e può preemptare l'intenzione corrente se ne arriva una
- * più conveniente.
- */
 class IntentionRevisionRevise extends IntentionRevision {
   async push(predicate) {
     if (this.isPredicateInFailedPool(predicate)) return;
@@ -314,25 +277,16 @@ class IntentionRevisionRevise extends IntentionRevision {
 // Entry point
 // ==========================================
 
-/*
- * Inizializza l'agente BDI e avvia il suo loop.
- * Attende che il beliefState sia pronto (mappa + identità ricevute),
- * poi aggancia optionsGeneration su beliefState.onUpdate in modo che
- * ogni nuovo sensing produca automaticamente nuove opzioni.
- *
- * Da chiamare da index.js quando AGENT_CONFIG.mode === "BDI".
- */
-export async function startBDIAgent() {
-  console.log("[BDI] Waiting for initial beliefs...");
+export async function startBDIAgent(socket, bs, actions) {
+  console.log(`[${bs.me.name ?? "BDI"}] Waiting for initial beliefs...`);
 
-  await waitUntil(isReady, RUNTIME.READINESS_CHECK_DELAY_MS);
+  await waitUntil(() => isReady(bs), RUNTIME.READINESS_CHECK_DELAY_MS);
 
-  console.log("[BDI] Agent ready");
+  console.log(`[${bs.me.name ?? "BDI"}] Agent ready`);
 
-  const agent = new IntentionRevisionRevise();
+  const agent = new IntentionRevisionRevise(bs, actions.executePredicate);
 
-  // Ogni volta che onSensing aggiorna il beliefState, rigenera le opzioni.
-  beliefState.onUpdate = () => optionsGeneration(agent);
+  bs.onUpdate = () => optionsGeneration(agent, bs);
 
   agent.loop();
 }

@@ -1,138 +1,123 @@
-import { socket } from "../socket.js";
-import { beliefState } from "./beliefState.js";
 import { updateSpawnStaleness, updateTilesPerSecond } from "../utils/mapUtils.js";
-import { buildGrid, buildDeliveryDistanceMap, buildSpawnDistanceMap,} from "./mapState.js";
+import {
+  buildGrid,
+  buildDeliveryDistanceMap,
+  buildSpawnDistanceMap,
+} from "./mapState.js";
 
-// ==========================================
-// Configuration
-// ==========================================
+export function setupBeliefUpdates(socket, bs) {
 
-socket.onConfig((config) => {
-  const gameConfig = config.GAME ?? config;
+  // ==========================================
+  // Configuration
+  // ==========================================
 
-  beliefState.config.observationDistance =
-    gameConfig.player?.observation_distance ?? null;
+  socket.onConfig((config) => {
+    const gameConfig = config.GAME ?? config;
 
-  beliefState.config.movementDuration =
-    gameConfig.player?.movement_duration ?? null;
+    bs.config.observationDistance =
+      gameConfig.player?.observation_distance ?? null;
+    bs.config.movementDuration =
+      gameConfig.player?.movement_duration ?? null;
+    bs.config.playerCapacity =
+      gameConfig.player?.capacity ?? null;
+    bs.config.parcelDecayingEvent =
+      gameConfig.parcels?.decaying_event ?? null;
+    bs.config.parcelGenerationEvent =
+      gameConfig.parcels?.generation_event ?? null;
+    bs.config.maxParcels =
+      gameConfig.parcels?.max ?? null;
+  });
 
-  beliefState.config.playerCapacity =
-    gameConfig.player?.capacity ?? null;
+  // ==========================================
+  // Agent State
+  // ==========================================
 
-  beliefState.config.parcelDecayingEvent =
-    gameConfig.parcels?.decaying_event ?? null;
+  let lastYou = null;
 
-  beliefState.config.parcelGenerationEvent =
-    gameConfig.parcels?.generation_event ?? null;
+  socket.onYou(({ id, name, x, y, score }) => {
+    const current = `${id}|${x}|${y}|${score}`;
+    if (current === lastYou) return;
+    lastYou = current;
 
-  beliefState.config.maxParcels =
-    gameConfig.parcels?.max ?? null;
-});
+    bs.me.id = id;
+    bs.me.name = name;
+    bs.me.x = x;
+    bs.me.y = y;
+    bs.me.score = score;
 
-// ==========================================
-// Agent State
-// ==========================================
+    updateSpawnStaleness(
+      bs.me,
+      bs.map.spawnTiles,
+      bs.config.observationDistance
+    );
 
-let lastYou = null;
+    updateTilesPerSecond(x, y);
+  });
 
-socket.onYou(({ id, name, x, y, score }) => {
-  const current = `${id}|${x}|${y}|${score}`;
+  // ==========================================
+  // Map State
+  // ==========================================
 
-  if (current === lastYou) return;
-  lastYou = current;
+  socket.onMap((width, height, tiles) => {
+    bs.map.width = width;
+    bs.map.height = height;
+    bs.map.tiles = tiles;
+    bs.map.grid = buildGrid(width, height, tiles);
 
-  beliefState.me.id = id;
-  beliefState.me.name = name;
-  beliefState.me.x = x;
-  beliefState.me.y = y;
-  beliefState.me.score = score;
+    bs.map.deliveryTiles = tiles.filter((tile) => tile.type == 2);
+    bs.map.spawnTiles = tiles
+      .filter((tile) => tile.type == 1)
+      .map((tile) => ({ ...tile, staleness: 0 }));
 
-  updateSpawnStaleness(
-    beliefState.me,
-    beliefState.map.spawnTiles,
-    beliefState.config.observationDistance
-  );
+    bs.map.deliveryDistanceMap = buildDeliveryDistanceMap(
+      width, height, tiles, bs.map.deliveryTiles
+    );
+    bs.map.spawnDistanceMap = buildSpawnDistanceMap(
+      width, height, tiles, bs.map.spawnTiles
+    );
 
-  updateTilesPerSecond(x, y);
+    console.log(
+      `[${bs.me.name ?? "agent"}] Map: ` +
+      `${bs.map.spawnTiles.length} spawn, ` +
+      `${bs.map.deliveryTiles.length} delivery`
+    );
+  });
 
-  //console.log("[YOU]", { id, name, x, y, score });
-});
+  // ==========================================
+  // Sensing
+  // ==========================================
 
-// ==========================================
-// Map State
-// ==========================================
-
-socket.onMap((width, height, tiles) => {
-  beliefState.map.width = width;
-  beliefState.map.height = height;
-  beliefState.map.tiles = tiles;
-  beliefState.map.grid = buildGrid(width, height, tiles);
-
-  beliefState.map.deliveryTiles = tiles.filter((tile) => tile.type == 2);
-  
-  beliefState.map.spawnTiles = tiles
-    .filter((tile) => tile.type == 1)
-    .map((tile) => ({ ...tile, staleness: 0 }));
-
-  beliefState.map.deliveryDistanceMap = buildDeliveryDistanceMap(
-    width,
-    height,
-    tiles,
-    beliefState.map.deliveryTiles
-  );
-
-  beliefState.map.spawnDistanceMap = buildSpawnDistanceMap(
-    width,
-    height,
-    tiles,
-    beliefState.map.spawnTiles
-  );
-
-  console.log(
-    `Map received: ${beliefState.map.spawnTiles.length} spawn tiles, ${beliefState.map.deliveryTiles.length} delivery tiles`
-  );
-});
-
-// ==========================================
-// Sensing: Parcels, Crates, Agents
-// ==========================================
-
-socket.onSensing((sensing) => {
-  for (const parcel of sensing.parcels ?? []) {
-    beliefState.parcels.set(parcel.id, parcel);
-  }
-
-  for (const crate of sensing.crates ?? []) {
-    beliefState.crates.set(crate.id, crate);
-  }
-
-  if (Array.isArray(sensing.agents)) {
-    for (const agent of sensing.agents) {
-      if (agent.id === beliefState.me.id) continue;
-      beliefState.agents.set(agent.id, agent);
+  socket.onSensing((sensing) => {
+    for (const parcel of sensing.parcels ?? []) {
+      bs.parcels.set(parcel.id, parcel);
     }
 
-    const sensedIdsAgents = new Set(sensing.agents.map((a) => a.id));
-    for (const knownAgent of beliefState.agents.values()) {
-      if (!sensedIdsAgents.has(knownAgent.id)) {
-        beliefState.agents.delete(knownAgent.id);
+    for (const crate of sensing.crates ?? []) {
+      bs.crates.set(crate.id, crate);
+    }
+
+    if (Array.isArray(sensing.agents)) {
+      for (const agent of sensing.agents) {
+        if (agent.id === bs.me.id) continue;
+        bs.agents.set(agent.id, agent);
+      }
+
+      const sensedIds = new Set(sensing.agents.map((a) => a.id));
+      for (const known of bs.agents.values()) {
+        if (!sensedIds.has(known.id)) bs.agents.delete(known.id);
       }
     }
-  }
 
-  const sensedIdsCrates = new Set((sensing.crates ?? []).map((crate) => crate.id));
-  for (const knownCrate of beliefState.crates.values()) {
-    if (!sensedIdsCrates.has(knownCrate.id)) {
-      beliefState.crates.delete(knownCrate.id);
+    const sensedCrates = new Set((sensing.crates ?? []).map((c) => c.id));
+    for (const known of bs.crates.values()) {
+      if (!sensedCrates.has(known.id)) bs.crates.delete(known.id);
     }
-  }
 
-  const sensedIdsParcels = new Set((sensing.parcels ?? []).map((parcel) => parcel.id));
-  for (const knownParcel of beliefState.parcels.values()) {
-    if (!sensedIdsParcels.has(knownParcel.id)) {
-      beliefState.parcels.delete(knownParcel.id);
+    const sensedParcels = new Set((sensing.parcels ?? []).map((p) => p.id));
+    for (const known of bs.parcels.values()) {
+      if (!sensedParcels.has(known.id)) bs.parcels.delete(known.id);
     }
-  }
 
-  beliefState.onUpdate?.();
-});
+    bs.onUpdate?.();
+  });
+}

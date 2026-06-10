@@ -1,7 +1,5 @@
-import { beliefState } from "../beliefs/beliefState.js";
 import { callLLMJson } from "./client.js";
 import { buildPlanningMessages, PLAN_SCHEMA } from "./prompts.js";
-import { executePredicate } from "../actions/actions.js";
 import { distance, isDeliveryTile } from "../utils/mapUtils.js";
 import {
   nearestDeliveryTileAt,
@@ -13,44 +11,43 @@ import { RUNTIME } from "../utils/constants.js";
 
 const MAX_DELIVERY_OPTIONS_PER_PARCEL = 3;
 
+// ==========================================
+// Readiness check
+// ==========================================
 
-
-/*
- * Controlla se l'agente ha già ricevuto le informazioni minime per partire:
- * identità, posizione, mappa e delivery tiles.
- */
-function isReady() {
+function isReady(bs) {
   return (
-    beliefState.me.id &&
-    beliefState.me.x != null &&
-    beliefState.me.y != null &&
-    Array.isArray(beliefState.map.grid) &&
-    beliefState.map.grid.length > 0 &&
-    Array.isArray(beliefState.map.deliveryTiles) &&
-    beliefState.map.deliveryTiles.length > 0
+    bs.me.id &&
+    bs.me.x != null &&
+    bs.me.y != null &&
+    Array.isArray(bs.map.grid) &&
+    bs.map.grid.length > 0 &&
+    Array.isArray(bs.map.deliveryTiles) &&
+    bs.map.deliveryTiles.length > 0
   );
 }
 
-/*
- * Costruisce lo stato compatto da passare all'LLM.
- * Lo stato contiene solo informazioni utili alla decisione, non tutto il beliefState grezzo.
- */
-export function buildLLMState() {
-  const me = beliefState.me;
+// ==========================================
+// State builder
+// ==========================================
 
-  const carriedParcels = [...beliefState.parcels.values()].filter(
+export function buildLLMState(bs) {
+  const me = bs.me;
+
+  const carriedParcels = [...bs.parcels.values()].filter(
     (parcel) => parcel.carriedBy === me.id
   );
 
-  const visibleParcels = [...beliefState.parcels.values()]
+  const visibleParcels = [...bs.parcels.values()]
     .filter((parcel) => !parcel.carriedBy)
     .map((parcel) =>
       enrichParcelForDecision(
         parcel,
         me,
-        beliefState.map.deliveryDistanceMap,
+        bs.map.deliveryDistanceMap,
         {
           maxDeliveryOptions: MAX_DELIVERY_OPTIONS_PER_PARCEL,
+          parcelDecayingEvent: bs.config.parcelDecayingEvent,
         }
       )
     )
@@ -62,10 +59,10 @@ export function buildLLMState() {
 
   const nearbyDeliveryTiles = buildNearbyDeliveryTiles(
     me,
-    beliefState.map.deliveryTiles
+    bs.map.deliveryTiles
   );
 
-  const nearbyAgents = [...beliefState.agents.values()]
+  const nearbyAgents = [...bs.agents.values()]
     .map((agent) => ({
       id: agent.id,
       name: agent.name,
@@ -83,7 +80,6 @@ export function buildLLMState() {
       y: Math.round(me.y),
       score: me.score,
     },
-
     carried: {
       count: carriedParcels.length,
       totalReward: carriedParcels.reduce(
@@ -91,62 +87,38 @@ export function buildLLMState() {
         0
       ),
     },
-
     visibleParcels,
     nearbyDeliveryTiles,
     nearbyAgents,
   };
 }
 
-/*
- * Converte il piano JSON dell'LLM in predicate eseguibili dal runtime.
- * Il JSON è già valido strutturalmente perché viene controllato in client.js.
- */
-export function normalizeLLMPlan(llmPlan) {
-  if (!llmPlan || !Array.isArray(llmPlan.plan)) {
-    return [];
-  }
+// ==========================================
+// Plan normalization
+// ==========================================
+
+export function normalizeLLMPlan(llmPlan, bs) {
+  if (!llmPlan || !Array.isArray(llmPlan.plan)) return [];
 
   const predicates = [];
 
   for (const step of llmPlan.plan) {
-    const predicate = normalizeLLMStep(step);
-
-    if (predicate) {
-      predicates.push(predicate);
-    }
+    const predicate = normalizeLLMStep(step, bs);
+    if (predicate) predicates.push(predicate);
   }
 
   return predicates;
 }
 
-/*
- * Normalizza un singolo step JSON in una predicate interna.
- * Le predicate sono il formato che l'esecutore sa interpretare.
- */
-function normalizeLLMStep(step) {
-  if (step.action === "go_pick_up") {
-    return normalizePickupStep(step);
-  }
-
-  if (step.action === "go_drop_off") {
-    return normalizeDropoffStep(step);
-  }
-
-  if (step.action === "explore") {
-    return ["explore"];
-  }
-
+function normalizeLLMStep(step, bs) {
+  if (step.action === "go_pick_up") return normalizePickupStep(step, bs);
+  if (step.action === "go_drop_off") return normalizeDropoffStep(step, bs);
+  if (step.action === "explore") return ["explore"];
   return null;
 }
 
-/*
- * Normalizza una pickup.
- * Usa sempre le coordinate reali del pacco presenti nel beliefState, non quelle eventualmente inventate dall'LLM.
- */
-function normalizePickupStep(step) {
-  const parcel = beliefState.parcels.get(step.parcelId);
-
+function normalizePickupStep(step, bs) {
+  const parcel = bs.parcels.get(step.parcelId);
   if (!parcel) return null;
   if (parcel.carriedBy) return null;
 
@@ -158,158 +130,109 @@ function normalizePickupStep(step) {
   ];
 }
 
-/*
- * Normalizza una dropoff.
- * Se la tile indicata dall'LLM non è una delivery tile valida, usa la delivery più vicina.
- */
-function normalizeDropoffStep(step) {
+function normalizeDropoffStep(step, bs) {
   const x = Math.round(step.x);
   const y = Math.round(step.y);
 
-  if (isDeliveryTile(x, y, beliefState.map.deliveryTiles)) {
+  if (isDeliveryTile(x, y, bs.map.deliveryTiles)) {
     return ["go_drop_off", x, y];
   }
 
   const nearest = nearestDeliveryTileAt(
-    beliefState.me,
-    beliefState.map.deliveryDistanceMap
+    bs.me,
+    bs.map.deliveryDistanceMap
   );
 
   if (!nearest) return null;
 
-  return [
-    "go_drop_off",
-    nearest.tile.x,
-    nearest.tile.y,
-  ];
+  return ["go_drop_off", nearest.tile.x, nearest.tile.y];
 }
 
-/*
- * Controlla se l'agente sta trasportando almeno un pacco.
- * Serve per capire se una dropoff ha senso prima di eseguirla.
- */
-function hasCarriedParcels() {
-  return [...beliefState.parcels.values()].some(
-    (parcel) => parcel.carriedBy === beliefState.me.id
+// ==========================================
+// Predicate validation
+// ==========================================
+
+function hasCarriedParcels(bs) {
+  return [...bs.parcels.values()].some(
+    (parcel) => parcel.carriedBy === bs.me.id
   );
 }
 
-/*
- * Valida una predicate rispetto al beliefState corrente.
- * Questa non è validazione JSON: controlla se l'azione è davvero sensata ora.
- */
-function validatePredicate(predicate) {
+function validatePredicate(predicate, bs) {
   if (!Array.isArray(predicate) || predicate.length === 0) {
-    return {
-      ok: false,
-      error: "Invalid predicate.",
-    };
+    return { ok: false, error: "Invalid predicate." };
   }
 
   const [action, x, y, parcelId] = predicate;
 
   if (action === "go_pick_up") {
-    const parcel = beliefState.parcels.get(parcelId);
-
-    if (!parcel) {
-      return {
-        ok: false,
-        error: `Parcel ${parcelId} not found.`,
-      };
-    }
-
-    if (parcel.carriedBy) {
-      return {
-        ok: false,
-        error: `Parcel ${parcelId} is already carried.`,
-      };
-    }
-
+    const parcel = bs.parcels.get(parcelId);
+    if (!parcel) return { ok: false, error: `Parcel ${parcelId} not found.` };
+    if (parcel.carriedBy) return { ok: false, error: `Parcel ${parcelId} is already carried.` };
     return { ok: true };
   }
 
   if (action === "go_drop_off") {
-    if (!hasCarriedParcels()) {
-      return {
-        ok: false,
-        error: "No carried parcels to deliver.",
-      };
+    if (!hasCarriedParcels(bs)) {
+      return { ok: false, error: "No carried parcels to deliver." };
     }
-
-    if (!isDeliveryTile(x, y, beliefState.map.deliveryTiles)) {
-      return {
-        ok: false,
-        error: `Tile (${x}, ${y}) is not a delivery tile.`,
-      };
+    if (!isDeliveryTile(x, y, bs.map.deliveryTiles)) {
+      return { ok: false, error: `Tile (${x}, ${y}) is not a delivery tile.` };
     }
-
     return { ok: true };
   }
 
-  if (action === "explore") {
-    return { ok: true };
-  }
+  if (action === "explore") return { ok: true };
 
-  return {
-    ok: false,
-    error: `Unknown predicate action "${action}".`,
-  };
+  return { ok: false, error: `Unknown predicate action "${action}".` };
 }
 
-/*
- * Esegue una lista di predicate una alla volta.
- * Se una predicate è invalida o fallisce, interrompe il piano e lascia ripianificare il loop principale.
- */
-async function executePlan(predicates) {
+// ==========================================
+// Plan execution
+// ==========================================
+
+async function executePlan(predicates, bs, actions) {
   for (const predicate of predicates) {
-    const validation = validatePredicate(predicate);
+    const validation = validatePredicate(predicate, bs);
 
     if (!validation.ok) {
-      console.log("[LLM] Invalid predicate:", predicate, validation.error);
+      console.log(`[${bs.me.name ?? "LLM"}] Invalid predicate:`, predicate, validation.error);
       return false;
     }
 
-    console.log("[LLM] Executing:", predicate);
-    await executePredicate(predicate);
+    console.log(`[${bs.me.name ?? "LLM"}] Executing:`, predicate);
+    await actions.executePredicate(predicate);
   }
 
   return true;
 }
 
-/*
-  * Restituisce un timestamp ISO per i log.
-*/
+// ==========================================
+// Entry point
+// ==========================================
+
 function timestamp() {
   return new Date().toISOString();
 }
 
-function logWithTime(...args) {
-  console.log(`[${timestamp()}]`, ...args);
+function logWithTime(name, ...args) {
+  console.log(`[${timestamp()}] [${name ?? "LLM"}]`, ...args);
 }
 
-/*
- * Avvia il loop principale dell'agente LLM.
- * A ogni ciclo costruisce lo stato, chiede un piano al modello, lo normalizza, lo valida ed esegue.
- */
-export async function startLLMAgent() {
-  logWithTime("[LLM] Waiting for initial beliefs...");
+export async function startLLMAgent(socket, bs, actions) {
+  logWithTime(bs.me.name, "Waiting for initial beliefs...");
 
-  await waitUntil(
-    isReady,
-    RUNTIME.READINESS_CHECK_DELAY_MS
-  );
+  await waitUntil(() => isReady(bs), RUNTIME.READINESS_CHECK_DELAY_MS);
 
-  logWithTime("[LLM] Agent ready");
+  logWithTime(bs.me.name, "Agent ready");
 
   while (true) {
     try {
-      const state = buildLLMState();
-
+      const state = buildLLMState(bs);
       const messages = buildPlanningMessages(state);
-
       const planningStartedAt = Date.now();
 
-      logWithTime("[LLM] Planning started");
+      logWithTime(bs.me.name, "Planning started");
 
       const llmPlan = await callLLMJson({
         messages,
@@ -317,33 +240,23 @@ export async function startLLMAgent() {
         temperature: 0,
       });
 
-      const planningDurationMs = Date.now() - planningStartedAt;
+      logWithTime(bs.me.name, `Planning finished in ${Date.now() - planningStartedAt}ms`);
 
-      logWithTime(
-        `[LLM] Planning finished in ${planningDurationMs} ms`
-      );
-
-      let predicates = normalizeLLMPlan(llmPlan);
+      let predicates = normalizeLLMPlan(llmPlan, bs);
 
       if (predicates.length === 0) {
         predicates = [["explore"]];
       }
 
-      logWithTime("[LLM] Plan:", predicates);
+      logWithTime(bs.me.name, "Plan:", predicates);
 
       const executionStartedAt = Date.now();
-
-      await executePlan(predicates);
-
-      const executionDurationMs = Date.now() - executionStartedAt;
-
-      logWithTime(
-        `[LLM] Plan execution finished in ${executionDurationMs} ms`
-      );
+      await executePlan(predicates, bs, actions);
+      logWithTime(bs.me.name, `Execution finished in ${Date.now() - executionStartedAt}ms`);
 
       await wait(RUNTIME.LLM_LOOP_DELAY_MS);
     } catch (error) {
-      logWithTime("[LLM] Error:", error?.message ?? error);
+      logWithTime(bs.me.name, "Error:", error?.message ?? error);
       await wait(RUNTIME.LLM_ERROR_DELAY_MS);
     }
   }
