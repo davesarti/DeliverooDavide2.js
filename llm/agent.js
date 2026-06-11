@@ -1,5 +1,6 @@
 import { callLLMTool } from "./client.js";
 import {MAX_ITERATIONS, MAX_MISSION_HISTORY} from "../utils/constants.js";
+import { validateActionAgainstPersistentRules } from "./rulesValidator.js";
 import { SYSTEM_PROMPT, buildMissionUserPrompt, MISSION_TOOLS } from "./prompts/index.js";
 import { calculate, getMyPosition, findDeliveryTile, get_environment_state, updatePersistentMemory, blockTile, unblockTile } from "./tools.js";
 
@@ -167,6 +168,24 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           break;
         }
 
+        const validationError = validateActionAgainstPersistentRules(
+          action,
+          bs,
+          llmState
+        );
+
+        if (validationError) {
+          const observation = `Action rejected by persistent rules: ${validationError}`;
+
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: observation,
+          });
+
+          continue;
+        }
+        
         const observation = await executeTool(action, bs, llmState, actions);
         logWithTime(bs.me.name, "Observation:", observation);
 
