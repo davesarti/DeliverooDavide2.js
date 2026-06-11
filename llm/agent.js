@@ -1,4 +1,5 @@
 import { callLLMTool } from "./client.js";
+import {MAX_ITERATIONS, MAX_MISSION_HISTORY} from "../utils/constants.js";
 import { SYSTEM_PROMPT, buildMissionUserPrompt, MISSION_TOOLS } from "./prompts.js";
 import { calculate, getMyPosition, findDeliveryTile, get_environment_state, updatePersistentMemory, blockTile, unblockTile } from "./tools.js";
 
@@ -93,7 +94,24 @@ async function executeTool(action, bs, actions) {
 // Entry point
 // ==========================================
 
-const MAX_ITERATIONS = 15;
+/*
+ * Salva la storia delle missioni completate, mantenendo solo le ultime N.
+ */
+function saveMissionHistory(bs, { request, reply }) {
+  if (!Array.isArray(bs.missionHistory)) {
+    bs.missionHistory = [];
+  }
+
+  bs.missionHistory.push({
+    request,
+    reply,
+    completedAt: Date.now(),
+  });
+
+  if (bs.missionHistory.length > MAX_MISSION_HISTORY) {
+    bs.missionHistory.shift();
+  }
+}
 
 /*
  * Avvia il listener delle missioni speciali via chat.
@@ -113,7 +131,7 @@ export async function startLLMAgent(socket, bs, actions) {
     // Conversation history reale: cresce ad ogni iterazione.
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildMissionUserPrompt(msg, bs.persistentMemory) },
+      { role: "user", content: buildMissionUserPrompt(msg, bs.persistentMemory, bs.missionHistory) },
     ];
 
     try {
@@ -135,6 +153,12 @@ export async function startLLMAgent(socket, bs, actions) {
 
         if (action.name === "final_reply") {
           await socket.emitSay(id, action.params.message);
+
+          saveMissionHistory(bs, {
+            request: msg,
+            reply: action.params.message,
+          });
+
           break;
         }
 

@@ -35,7 +35,7 @@ export function createBeliefState() {
       parcelGenerationEvent: null,
       maxParcels: null,
     },
-
+    missionHistory: [],
     persistentMemory: "None.",
 
     partner: null,

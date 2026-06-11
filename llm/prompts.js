@@ -282,7 +282,8 @@ export const MISSION_TOOLS = [
  * Gli step successivi sono gestiti come conversation history reale
  * (ruoli assistant + tool) nel loop dell'agente, non qui.
  */
-export function buildMissionUserPrompt(mission, persistentMemory = "None.") {
+
+export function buildMissionUserPrompt(mission, persistentMemory = "None.", missionHistory = []) {
   return `
 Mission received from chat:
 
@@ -291,6 +292,10 @@ ${mission}
 Persistent memory:
 
 ${persistentMemory || "None."}
+
+Mission history:
+
+${missionHistory.length > 0 ? missionHistory.map(({ request, reply }) => `-${request} => ${reply}`).join("\n") : "None."}
 
 Solve it one atomic action at a time.
 `.trim();

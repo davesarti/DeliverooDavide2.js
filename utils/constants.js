@@ -22,3 +22,7 @@ export const RUNTIME = {
 
   FAILED_INTENTION_RETRY_MS: 3000,
 };
+
+// Constants used in LLM agent
+export const MAX_ITERATIONS = 15;
+export const MAX_MISSION_HISTORY = 5;
