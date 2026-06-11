@@ -8,20 +8,87 @@ export const LLM_CONFIG = {
 
 export const DELIVEROO_CONFIG = {
   host: process.env.HOST,
-  tokenBdi: process.env.TOKEN_BDI,
-  tokenLlm: process.env.TOKEN_LLM,
 };
 
 export const AGENT_CONFIG = {
-  // "BDI"  → starts only the BDI (uses TOKEN_BDI)
-  // "LLM"  → starts only the LLM (uses TOKEN_LLM)
-  // "BOTH" → starts both (uses TOKEN_BDI and TOKEN_LLM)
-  mode: "LLM",
-
   pathfinding: {
     algorithm: "bfs",
   },
 };
+
+/*
+ * Collects all values for a token prefix.
+ * Tries TOKEN_BDI_1, TOKEN_BDI_2, ... then falls back to TOKEN_BDI.
+ */
+function collectTokens(prefix) {
+  const tokens = [];
+  for (let i = 1; ; i++) {
+    const t = process.env[`${prefix}_${i}`];
+    if (!t) break;
+    tokens.push(t);
+  }
+  if (tokens.length === 0 && process.env[prefix]) {
+    tokens.push(process.env[prefix]);
+  }
+  return tokens;
+}
+
+function parseArgv() {
+  const args = {};
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--mode" && argv[i + 1]) args.mode = argv[++i];
+    if (argv[i] === "--count" && argv[i + 1]) args.count = argv[++i];
+  }
+  return args;
+}
+
+/*
+ * Builds the list of agent instances from env vars (or CLI --mode / --count overrides).
+ * AGENT_MODE: BDI | MULTI (default MULTI)
+ * AGENT_COUNT: optional, caps the number of instances
+ */
+function buildInstances() {
+  const argv = parseArgv();
+  const rawMode = (argv.mode || process.env.AGENT_MODE || "MULTI").toUpperCase();
+  if (!["BDI", "MULTI"].includes(rawMode)) {
+    throw new Error("AGENT_MODE must be BDI or MULTI");
+  }
+
+  const bdiTokens = collectTokens("TOKEN_BDI");
+  const llmTokens = collectTokens("TOKEN_LLM");
+
+  const instances = [];
+
+  if (rawMode === "MULTI") {
+    const count = Math.min(bdiTokens.length, llmTokens.length);
+    for (let i = 0; i < count; i++) {
+      instances.push({ mode: "MULTI", tokenBdi: bdiTokens[i], tokenLlm: llmTokens[i] });
+    }
+  } else {
+    for (const token of bdiTokens) {
+      instances.push({ mode: "BDI", tokenBdi: token });
+    }
+  }
+
+  const rawCount = argv.count ?? process.env.AGENT_COUNT;
+  if (rawCount !== undefined) {
+    const requestedCount = parseInt(rawCount, 10);
+    if (isNaN(requestedCount) || requestedCount < 1) {
+      throw new Error("AGENT_COUNT must be a positive integer");
+    }
+    if (requestedCount > instances.length) {
+      throw new Error(
+        `AGENT_COUNT=${requestedCount} but only ${instances.length} complete token set(s) available for mode ${rawMode}`
+      );
+    }
+    instances.splice(requestedCount);
+  }
+
+  return instances;
+}
+
+export const INSTANCES = buildInstances();
 
 /*
  * Checks that environment variables and base options are consistent.
@@ -31,26 +98,15 @@ export function validateConfig() {
     throw new Error("Missing HOST");
   }
 
-  if (!["BDI", "LLM", "BOTH"].includes(AGENT_CONFIG.mode)) {
-    throw new Error("AGENT_CONFIG.mode must be BDI, LLM, or BOTH");
+  if (INSTANCES.length === 0) {
+    throw new Error("No agent instances configured — check TOKEN_BDI / TOKEN_LLM in .env");
   }
 
   if (!["bfs", "astar"].includes(AGENT_CONFIG.pathfinding.algorithm)) {
     throw new Error("AGENT_CONFIG.pathfinding.algorithm must be bfs or astar");
   }
 
-  if (AGENT_CONFIG.mode === "BDI" || AGENT_CONFIG.mode === "BOTH") {
-    if (!DELIVEROO_CONFIG.tokenBdi) {
-      throw new Error("Missing TOKEN_BDI");
-    }
-  }
-
-  if (AGENT_CONFIG.mode === "LLM" || AGENT_CONFIG.mode === "BOTH") {
-    if (!DELIVEROO_CONFIG.tokenLlm) {
-      throw new Error("Missing TOKEN_LLM");
-    }
-    if (!LLM_CONFIG.apiKey) {
-      throw new Error("Missing LITELLM_API_KEY");
-    }
+  if (INSTANCES.some((i) => i.mode === "MULTI") && !LLM_CONFIG.apiKey) {
+    throw new Error("Missing LITELLM_API_KEY (required when AGENT_MODE=MULTI)");
   }
 }

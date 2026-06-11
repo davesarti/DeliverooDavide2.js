@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import { AGENT_CONFIG, DELIVEROO_CONFIG, validateConfig } from "./config.js";
+import { AGENT_CONFIG, DELIVEROO_CONFIG, INSTANCES, validateConfig } from "./config.js";
 import { createSocket } from "./socket.js";
 import { createBeliefState } from "./beliefs/beliefState.js";
 import { setupBeliefUpdates } from "./beliefs/updateBeliefs.js";
@@ -10,44 +10,26 @@ import { startLLMAgent } from "./llm/agent.js";
 
 validateConfig();
 
-console.log(`Starting in mode: ${AGENT_CONFIG.mode}`);
+console.log(`Starting ${INSTANCES.length} agent instance(s) (mode: ${INSTANCES[0].mode})`);
 
-if (AGENT_CONFIG.mode === "BDI") {
-
-  const socket = createSocket(DELIVEROO_CONFIG.host, DELIVEROO_CONFIG.tokenBdi);
-  const bs = createBeliefState();
-  const actions = createActions(socket, bs);
-  setupBeliefUpdates(socket, bs);
-  startBDIAgent(socket, bs, actions);
-
-} else if (AGENT_CONFIG.mode === "LLM") {
-
-  const socket = createSocket(DELIVEROO_CONFIG.host, DELIVEROO_CONFIG.tokenLlm);
-  const bs = createBeliefState();
-  const actions = createActions(socket, bs);
-  setupBeliefUpdates(socket, bs);
-  startLLMAgent(socket, bs, actions);
-
-} else if (AGENT_CONFIG.mode === "BOTH") {
-
-  // BDI agent
-  const bdiSocket = createSocket(DELIVEROO_CONFIG.host, DELIVEROO_CONFIG.tokenBdi);
+for (const instance of INSTANCES) {
+  const bdiSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenBdi);
   const bdibs = createBeliefState();
   const bdiActions = createActions(bdiSocket, bdibs);
   setupBeliefUpdates(bdiSocket, bdibs);
 
-  // LLM agent
-  const llmSocket = createSocket(DELIVEROO_CONFIG.host, DELIVEROO_CONFIG.tokenLlm);
-  const llmbs = createBeliefState();
-  const llmActions = createActions(llmSocket, llmbs);
-  setupBeliefUpdates(llmSocket, llmbs);
+  if (instance.mode === "MULTI") {
+    const llmSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenLlm);
+    const llmbs = createBeliefState();
+    const llmActions = createActions(llmSocket, llmbs);
+    setupBeliefUpdates(llmSocket, llmbs);
 
-  // The two agents point to each other
-  bdibs.partner = llmbs.me;
-  llmbs.partner = bdibs.me;
+    bdibs.partner = llmbs.me;
+    llmbs.partner = bdibs.me;
 
-  // Start both in parallel
-  startBDIAgent(bdiSocket, bdibs, bdiActions);
-  startLLMAgent(llmSocket, llmbs, llmActions);
-
+    startBDIAgent(bdiSocket, bdibs, bdiActions);
+    startLLMAgent(llmSocket, llmbs, llmActions);
+  } else {
+    startBDIAgent(bdiSocket, bdibs, bdiActions);
+  }
 }
