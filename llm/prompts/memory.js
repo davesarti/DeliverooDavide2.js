@@ -33,6 +33,11 @@ Rules:
 - Do not reinterpret reward multipliers as parcel filtering rules.
 - If a new rule contradicts an older rule about the same tile, parcel class, stack size, or delivery condition, keep only the newest rule.
 - If the update cancels a previous rule, remove that rule.
+- Never store unresolved relative descriptions such as "nearest delivery tile", "leftmost delivery tile", "current tile", or "tile where I am".
+- If the update request contains a relative tile description without concrete coordinates, ignore that part.
+- If a new rule gives a different reward, permission, or restriction for the same tile, replace older rules about that tile.
+  - Example: "delivery in tile (0,9) gives 5x reward" replaces "never deliver in tile (0,9)".
+  - Example: "you can now deliver in tile (0,9)" removes "never deliver in tile (0,9)".
 `.trim(),
     },
     {
