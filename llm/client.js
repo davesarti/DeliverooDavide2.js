@@ -104,10 +104,16 @@ export async function callLLMText({ messages, temperature = 0 }) {
 
 function coerceNumericParams(obj) {
   const numericFields = new Set(["x", "y"]);
+
   for (const key in obj) {
-    if (numericFields.has(key) && typeof obj[key] === "string" && /^-?\d+$/.test(obj[key])) {
-      obj[key] = Number(obj[key]);
+    if (
+      numericFields.has(key) &&
+      typeof obj[key] === "string" &&
+      /^-?\d+$/.test(obj[key].trim())
+    ) {
+      obj[key] = Number(obj[key].trim());
     }
   }
+
   return obj;
 }
