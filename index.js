@@ -13,12 +13,12 @@ validateConfig();
 console.log(`Starting ${INSTANCES.length} agent instance(s) (mode: ${INSTANCES[0].mode})`);
 
 for (const instance of INSTANCES) {
-  const bdiSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenBdi);
-  const bdibs = createBeliefState();
-  const bdiActions = createActions(bdiSocket, bdibs);
-  setupBeliefUpdates(bdiSocket, bdibs);
-
   if (instance.mode === "MULTI") {
+    const bdiSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenBdi);
+    const bdibs = createBeliefState();
+    const bdiActions = createActions(bdiSocket, bdibs);
+    setupBeliefUpdates(bdiSocket, bdibs);
+
     const llmSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenLlm);
     const llmbs = createBeliefState();
     const llmActions = createActions(llmSocket, llmbs);
@@ -29,7 +29,19 @@ for (const instance of INSTANCES) {
 
     startBDIAgent(bdiSocket, bdibs, bdiActions);
     startLLMAgent(llmSocket, llmbs, llmActions);
+  } else if (instance.mode === "LLM") {
+    const llmSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenLlm);
+    const llmbs = createBeliefState();
+    const llmActions = createActions(llmSocket, llmbs);
+    setupBeliefUpdates(llmSocket, llmbs);
+
+    startLLMAgent(llmSocket, llmbs, llmActions);
   } else {
+    const bdiSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenBdi);
+    const bdibs = createBeliefState();
+    const bdiActions = createActions(bdiSocket, bdibs);
+    setupBeliefUpdates(bdiSocket, bdibs);
+
     startBDIAgent(bdiSocket, bdibs, bdiActions);
   }
 }

@@ -17,11 +17,11 @@ LOCAL_MODEL=gemma-4-26b
 
 HOST=http://localhost:8080
 
-TOKEN_BDI=your_bdi_token_here
-TOKEN_LLM=your_llm_token_here
+TOKEN_BDI_1=your_bdi_token_here
+TOKEN_LLM_1=your_llm_token_here
 ```
 
-To run multiple instances, use numbered tokens (`TOKEN_BDI_1`, `TOKEN_BDI_2`, `TOKEN_LLM_1`, `TOKEN_LLM_2`, …).
+To run multiple instances, add more numbered pairs (`TOKEN_BDI_2` / `TOKEN_LLM_2`, `TOKEN_BDI_3` / `TOKEN_LLM_3`, …) and raise `AGENT_COUNT` accordingly. Set `AGENT_MODE` to `BDI`, `LLM`, or `MULTI`.
 
 ## Running
 
@@ -40,5 +40,6 @@ node index.js --mode BDI   --count 1   # one BDI-only agent
 
 | Mode | Tokens needed | Description |
 |------|--------------|-------------|
-| `MULTI` (default) | `TOKEN_BDI` + `TOKEN_LLM` | Launches a BDI agent and an LLM agent, cross-linked as partners |
-| `BDI` | `TOKEN_BDI` | Launches a BDI-only agent, no LLM required |
+| `MULTI` (default) | `TOKEN_BDI_1` + `TOKEN_LLM_1` | Launches a BDI agent and an LLM agent, cross-linked as partners |
+| `LLM` | `TOKEN_LLM_1` | Launches only the LLM agent |
+| `BDI` | `TOKEN_BDI_1` | Launches a BDI-only agent, no LLM required |

@@ -1,9 +1,20 @@
-export function buildMissionUserPrompt(mission, persistentMemory = "None.", missionHistory = []) {
-  const historyText =
-    missionHistory.length > 0
-      ? missionHistory.map(({ request, reply }) => `- ${request} => ${reply}`).join("\n")
-      : "None.";
+function formatMissionHistory(missionHistory = []) {
+  if (!missionHistory.length) return "None.";
 
+  return missionHistory
+    .map(
+      ({ request, reply }, index) =>
+        `${index + 1}. Past request: ${request}\n` +
+        `   Past reply: ${reply}`
+    )
+    .join("\n");
+}
+
+export function buildMissionUserPrompt(
+  mission,
+  persistentMemory = "None.",
+  missionHistory = []
+) {
   return `
 Mission received from chat:
 
@@ -13,10 +24,12 @@ Persistent memory:
 
 ${persistentMemory || "None."}
 
-Mission history:
+Completed mission history:
+These missions are already completed.
+Do not reuse coordinates, targets, or actions from this section unless the current mission explicitly refers to a previous mission.
 
-${historyText}
+${formatMissionHistory(missionHistory)}
 
-Solve it one atomic action at a time.
+Solve the current mission one atomic action at a time.
 `.trim();
 }

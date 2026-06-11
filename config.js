@@ -45,14 +45,14 @@ function parseArgv() {
 
 /*
  * Builds the list of agent instances from env vars (or CLI --mode / --count overrides).
- * AGENT_MODE: BDI | MULTI (default MULTI)
+ * AGENT_MODE: BDI | LLM | MULTI (default MULTI)
  * AGENT_COUNT: optional, caps the number of instances
  */
 function buildInstances() {
   const argv = parseArgv();
   const rawMode = (argv.mode || process.env.AGENT_MODE || "MULTI").toUpperCase();
-  if (!["BDI", "MULTI"].includes(rawMode)) {
-    throw new Error("AGENT_MODE must be BDI or MULTI");
+  if (!["BDI", "LLM", "MULTI"].includes(rawMode)) {
+    throw new Error("AGENT_MODE must be BDI, LLM, or MULTI");
   }
 
   const bdiTokens = collectTokens("TOKEN_BDI");
@@ -64,6 +64,10 @@ function buildInstances() {
     const count = Math.min(bdiTokens.length, llmTokens.length);
     for (let i = 0; i < count; i++) {
       instances.push({ mode: "MULTI", tokenBdi: bdiTokens[i], tokenLlm: llmTokens[i] });
+    }
+  } else if (rawMode === "LLM") {
+    for (const token of llmTokens) {
+      instances.push({ mode: "LLM", tokenLlm: token });
     }
   } else {
     for (const token of bdiTokens) {
@@ -106,7 +110,7 @@ export function validateConfig() {
     throw new Error("AGENT_CONFIG.pathfinding.algorithm must be bfs or astar");
   }
 
-  if (INSTANCES.some((i) => i.mode === "MULTI") && !LLM_CONFIG.apiKey) {
-    throw new Error("Missing LITELLM_API_KEY (required when AGENT_MODE=MULTI)");
+  if (INSTANCES.some((i) => i.mode !== "BDI") && !LLM_CONFIG.apiKey) {
+    throw new Error("Missing LITELLM_API_KEY (required when AGENT_MODE uses LLM)");
   }
 }
