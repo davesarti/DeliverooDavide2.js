@@ -12,9 +12,9 @@ import { findCellsToExplore } from "../utils/mapUtils.js";
 /*
  * Exposes the agent's operational actions above the game socket.
  */
-export function createActions(socket, bs) {
+export function createActions(socket, bs, options = {}) {
   function getBlockedTiles() {
-    return bs?.map?.blockedTiles ?? new Set();
+    return options.blockedTiles ?? new Set();
   }
 
   /*

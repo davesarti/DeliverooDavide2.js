@@ -102,7 +102,7 @@ export function findDeliveryTile({ query }, bs) {
  * nearby delivery tiles. Used as input for the LLM.
  */
 
-export function get_environment_state(bs) {
+export function get_environment_state(bs, llmState) {
   const me = bs.me;
 
   const carriedParcels = [...bs.parcels.values()]
@@ -156,8 +156,27 @@ export function get_environment_state(bs) {
 
     deliveryTiles,
 
-    persistentMemory: bs.persistentMemory ?? "None.",
+    persistentMemory: llmState.persistentMemory ?? "None.",
+    persistentRules: serializePersistentRules(llmState.persistentRules),
   });
+}
+
+function serializePersistentRules(persistentRules) {
+  if (!persistentRules) {
+    return null;
+  }
+
+  return {
+    stackSize: persistentRules.stackSize,
+    parcelFilters: {
+      minReward: persistentRules.parcelFilters?.minReward ?? null,
+      maxReward: persistentRules.parcelFilters?.maxReward ?? null,
+    },
+    forbiddenDeliveryTiles: [...(persistentRules.forbiddenDeliveryTiles ?? new Set())],
+    preferredDeliveryTiles: [...(persistentRules.preferredDeliveryTiles ?? new Set())],
+    deliveryMultipliers: [...(persistentRules.deliveryMultipliers ?? new Map())],
+    blockedTiles: [...(persistentRules.blockedTiles ?? new Set())],
+  };
 }
 
 
@@ -196,44 +215,34 @@ export async function updatePersistentMemory(llmState, text) {
  * Useful for imposing dynamic navigation constraints.
  */
 
-export function blockTile({ x, y }, llmState) {
-  if (!isInsideMap(x, y, llmState.map)) {
+export function blockTile({ x, y }, bs, llmState) {
+  if (!isInsideMap(x, y, bs.map)) {
     return `Error: tile (${x}, ${y}) is outside the map.`;
   }
 
   const key = `${x},${y}`;
-  const blockedTiles = llmState.persistentRules?.blockedTiles;
 
-  if (!blockedTiles) {
-    return "Error: blocked tiles store is not available.";
-  }
-
-  if (blockedTiles.has(key)) {
+  if (llmState.persistentRules.blockedTiles.has(key)) {
     return `Tile (${x}, ${y}) is already blocked for pathfinding.`;
   }
 
-  blockedTiles.add(key);
+  llmState.persistentRules.blockedTiles.add(key);
 
   return `Tile (${x}, ${y}) is now blocked for pathfinding.`;
 }
 
-export function unblockTile({ x, y }, llmState) {
-  if (!isInsideMap(x, y, llmState.map)) {
+export function unblockTile({ x, y }, bs, llmState) {
+  if (!isInsideMap(x, y, bs.map)) {
     return `Error: tile (${x}, ${y}) is outside the map.`;
   }
 
   const key = `${x},${y}`;
-  const blockedTiles = llmState.persistentRules?.blockedTiles;
 
-  if (!blockedTiles) {
-    return "Error: blocked tiles store is not available.";
-  }
-
-  if (!blockedTiles.has(key)) {
+  if (!llmState.persistentRules.blockedTiles.has(key)) {
     return `Tile (${x}, ${y}) was not blocked.`;
   }
 
-  blockedTiles.delete(key);
+  llmState.persistentRules.blockedTiles.delete(key);
 
   return `Tile (${x}, ${y}) is now walkable again for pathfinding.`;
 }

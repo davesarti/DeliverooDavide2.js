@@ -23,7 +23,7 @@ function logWithTime(name, ...args) {
  * Executes the atomic action chosen by the model and returns the observation.
  * action = { name: string, params: object }
  */
-async function executeTool(action, bs, actions) {
+async function executeTool(action, bs, llmState, actions) {
   const { name, params } = action;
 
   switch (name) {
@@ -79,16 +79,16 @@ async function executeTool(action, bs, actions) {
     }
 
     case "get_environment_state":
-      return get_environment_state(bs);
+      return get_environment_state(bs, llmState);
     
     case "update_persistent_memory":
-      return await updatePersistentMemory(bs, params.text);
+      return await updatePersistentMemory(llmState, params.text);
     
     case "block_tile":
-      return blockTile(params, bs);
+      return blockTile(params, bs, llmState);
 
     case "unblock_tile":
-      return unblockTile(params, bs);
+      return unblockTile(params, bs, llmState);
 
     default:
       return `Unknown action: ${name}.`;
@@ -167,7 +167,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           break;
         }
 
-        const observation = await executeTool(action, bs, actions);
+        const observation = await executeTool(action, bs, llmState, actions);
         logWithTime(bs.me.name, "Observation:", observation);
 
         // Save the tool result in the history under the "tool" role.

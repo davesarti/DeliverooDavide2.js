@@ -24,7 +24,9 @@ for (const instance of INSTANCES) {
     const llmSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenLlm);
     const llmbs = createBeliefState();
     const llmState = createLLMState();
-    const llmActions = createActions(llmSocket, llmbs, llmState);
+    const llmActions = createActions(llmSocket, llmbs, {
+      blockedTiles: llmState.persistentRules.blockedTiles,
+    });
 
     setupBeliefUpdates(llmSocket, llmbs);
 
@@ -37,7 +39,9 @@ for (const instance of INSTANCES) {
     const llmSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenLlm);
     const llmbs = createBeliefState();
     const llmState = createLLMState();
-    const llmActions = createActions(llmSocket, llmbs, llmState);
+    const llmActions = createActions(llmSocket, llmbs, {
+      blockedTiles: llmState.persistentRules.blockedTiles,
+    });
     setupBeliefUpdates(llmSocket, llmbs);
 
     startLLMAgent(llmSocket, llmbs, llmState, llmActions);
