@@ -25,6 +25,8 @@ If the reward is positive, zero, or not mentioned, proceed normally.
 - go_pick_up: pick up one known parcel.
 - go_drop_off: deliver carried parcels on a delivery tile.
 - explore: move toward spawn areas to search for parcels.
+- get_environment_state: read the compact current environment state when parcels, carried parcels, delivery tiles, or persistent memory are needed.
+- update_persistent_memory: update durable rules that affect future missions. Use it only for persistent instructions, not one-shot missions.
 - final_reply: end the mission and send a message back to the sender.
  
 # Guidance
@@ -32,6 +34,8 @@ If the reward is positive, zero, or not mentioned, proceed normally.
 - For normal questions that need no game action, answer directly with final_reply.
 - Always end the mission with final_reply, whether it succeeded, was declined, or was impossible.
 - Keep reason short and operational.
+- Use get_environment_state before choosing pickup, dropoff, or delivery-related actions if the current environment has not been observed yet.
+- Use update_persistent_memory only for durable rules such as "always", "never", "from now on", or when a previous durable rule is cancelled or changed.
 `.trim();
 
 /*
@@ -157,6 +161,49 @@ export const MISSION_TOOLS = [
   {
     type: "function",
     function: {
+      name: "get_environment_state",
+      description:
+        "Read the current compact environment state: agent position, carried parcels, visible parcels, delivery tiles, and persistent memory. Use it before deciding pickup, dropoff, explore, or delivery-related actions when current environment information is needed.",
+      parameters: {
+        type: "object",
+        required: ["reason"],
+        additionalProperties: false,
+        properties: {
+          reason: {
+            type: "string",
+            description: "Short operational reason for this action.",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_persistent_memory",
+      description:
+        "Update the persistent memory when the sender gives, changes, or cancels a durable rule that should affect future missions. Do not use it for one-shot missions.",
+      parameters: {
+        type: "object",
+        required: ["reason", "text"],
+        additionalProperties: false,
+        properties: {
+          reason: {
+            type: "string",
+            description: "Short operational reason for this action.",
+          },
+          text: {
+            type: "string",
+            description:
+              "The natural-language instruction that should update persistent memory.",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "final_reply",
       description: "End the mission and send a message back to the sender. Always call this when the mission is completed, declined, or impossible.",
       parameters: {
@@ -177,12 +224,63 @@ export const MISSION_TOOLS = [
  * Gli step successivi sono gestiti come conversation history reale
  * (ruoli assistant + tool) nel loop dell'agente, non qui.
  */
-export function buildMissionUserPrompt(mission) {
+export function buildMissionUserPrompt(mission, persistentMemory = "None.") {
   return `
 Mission received from chat:
 
 ${mission}
 
+Persistent memory:
+
+${persistentMemory || "None."}
+
 Solve it one atomic action at a time.
 `.trim();
 }
+
+
+export function buildPersistentMemoryUpdateMessages({
+  currentMemory,
+  updateRequest,
+}) {
+  return [
+    {
+      role: "system",
+      content: `
+You update the persistent memory of a DeliverooJS LLM agent.
+
+The persistent memory contains only durable rules that must affect future missions.
+
+Store rules such as:
+- "never deliver in tile (x,y)"
+- "prefer delivery tile (x,y)"
+- "avoid tile (x,y)"
+- "from now on collect exactly N parcels before delivering"
+- "ignore parcels with reward higher/lower than N"
+
+Do not store one-shot missions, temporary requests, greetings, normal questions, or already completed tasks.
+
+If the new request cancels or changes a previous rule, rewrite the memory accordingly.
+
+Return only the updated persistent memory.
+Use a short bullet list.
+If no durable rule remains, return exactly: None.
+`.trim(),
+    },
+    {
+      role: "user",
+      content: `
+Current persistent memory:
+
+${currentMemory || "None."}
+
+New memory update request:
+
+${updateRequest}
+
+Rewrite the full persistent memory now.
+`.trim(),
+    },
+  ];
+}
+ 

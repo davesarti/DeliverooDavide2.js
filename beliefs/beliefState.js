@@ -35,6 +35,8 @@ export function createBeliefState() {
       maxParcels: null,
     },
 
+    persistentMemory: "None.",
+
     partner: null,
 
     onUpdate: null,

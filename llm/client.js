@@ -84,3 +84,18 @@ function safeJsonParse(text) {
     return { ok: false, error: error.message };
   }
 }
+
+/*
+* Chiama il modello senza function calling e restituisce il testo della risposta.
+*/
+export async function callLLMText({ messages, temperature = 0 }) {
+  const request = {
+    model: LLM_CONFIG.model,
+    messages,
+    temperature,
+  };
+
+  const response = await client.chat.completions.create(request);
+
+  return response.choices?.[0]?.message?.content ?? "";
+}

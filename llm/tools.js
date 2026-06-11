@@ -1,4 +1,7 @@
 import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
+import { distance } from "../utils/mapUtils.js";
+import { callLLMText } from "./client.js";
+import { buildPersistentMemoryUpdateMessages } from "./prompts.js";
 
 // ==========================================
 // calculate
@@ -87,4 +90,91 @@ export function findDeliveryTile({ query }, bs) {
   }
 
   return JSON.stringify({ x: tile.x, y: tile.y });
+}
+
+// ==========================================
+// get_environment_state
+// ==========================================
+
+/*
+ * Restituisce una rappresentazione testuale dello stato attuale dell'ambiente,
+ * comprensiva di posizione, punteggio, pacchi trasportati, pacchi visibili e
+ * tile di consegna vicine. Usato come input per l'LLM.
+ */
+
+export function get_environment_state(bs) {
+  const me = bs.me;
+
+  const carriedParcels = [...bs.parcels.values()]
+    .filter((parcel) => parcel.carriedBy === me.id)
+    .map((parcel) => ({
+      id: parcel.id,
+      reward: parcel.reward ?? 0,
+    }));
+
+  const visibleParcels = [...bs.parcels.values()]
+    .filter((parcel) => !parcel.carriedBy)
+    .map((parcel) => ({
+      id: parcel.id,
+      x: Math.round(parcel.x),
+      y: Math.round(parcel.y),
+      reward: parcel.reward ?? 0,
+      distanceToMe: distance(me, parcel),
+    }))
+    .sort((a, b) => {
+      if (b.reward !== a.reward) return b.reward - a.reward;
+      return a.distanceToMe - b.distanceToMe;
+    })
+    .slice(0, 8);
+
+  const deliveryTiles = bs.map.deliveryTiles
+    .map((tile) => ({
+      x: tile.x,
+      y: tile.y,
+      distanceToMe: distance(me, tile),
+    }))
+    .sort((a, b) => a.distanceToMe - b.distanceToMe)
+    .slice(0, 5);
+
+  return JSON.stringify({
+    me: {
+      x: Math.round(me.x),
+      y: Math.round(me.y),
+      score: me.score,
+    },
+
+    carried: {
+      count: carriedParcels.length,
+      totalReward: carriedParcels.reduce(
+        (sum, parcel) => sum + parcel.reward,
+        0
+      ),
+      parcels: carriedParcels,
+    },
+
+    visibleParcels,
+
+    deliveryTiles,
+
+    persistentMemory: bs.persistentMemory ?? "None.",
+  });
+}
+
+
+// ==========================================
+// update_persistent_memory
+// ==========================================
+
+export async function updatePersistentMemory(bs, text) {
+  const updatedMemory = await callLLMText({
+    messages: buildPersistentMemoryUpdateMessages({
+      currentMemory: bs.persistentMemory,
+      updateRequest: text,
+    }),
+    temperature: 0,
+  });
+
+  bs.persistentMemory = updatedMemory.trim();
+
+  return `Persistent memory updated:\n${bs.persistentMemory || "None"}`;
 }

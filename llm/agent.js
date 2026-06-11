@@ -1,6 +1,6 @@
 import { callLLMTool } from "./client.js";
 import { SYSTEM_PROMPT, buildMissionUserPrompt, MISSION_TOOLS } from "./prompts.js";
-import { calculate, getMyPosition, findDeliveryTile } from "./tools.js";
+import { calculate, getMyPosition, findDeliveryTile, get_environment_state, updatePersistentMemory } from "./tools.js";
 
 // ==========================================
 // Logging
@@ -72,6 +72,12 @@ async function executeTool(action, bs, actions) {
       }
     }
 
+    case "get_environment_state":
+      return get_environment_state(bs);
+    
+    case "update_persistent_memory":
+      return await updatePersistentMemory(bs, params.text);
+
     default:
       return `Unknown action: ${name}.`;
   }
@@ -101,7 +107,7 @@ export async function startLLMAgent(socket, bs, actions) {
     // Conversation history reale: cresce ad ogni iterazione.
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildMissionUserPrompt(msg) },
+      { role: "user", content: buildMissionUserPrompt(msg, bs.persistentMemory) },
     ];
 
     try {
