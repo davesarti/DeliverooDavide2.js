@@ -65,6 +65,8 @@ async function requestTool({ messages, tools, temperature }) {
     return { ok: false, error: `Invalid tool arguments: ${parsed.error}` };
   }
 
+  coerceNumericParams(parsed.value);
+
   return {
     ok: true,
     value: {
@@ -98,4 +100,14 @@ export async function callLLMText({ messages, temperature = 0 }) {
   const response = await client.chat.completions.create(request);
 
   return response.choices?.[0]?.message?.content ?? "";
+}
+
+function coerceNumericParams(obj) {
+  const numericFields = new Set(["x", "y"]);
+  for (const key in obj) {
+    if (numericFields.has(key) && typeof obj[key] === "string" && /^-?\d+$/.test(obj[key])) {
+      obj[key] = Number(obj[key]);
+    }
+  }
+  return obj;
 }
