@@ -128,6 +128,51 @@ export function isOccupied(x, y, objects) {
   return false;
 }
 
+export function isInsideMap(x, y, map) {
+  if (Array.isArray(map)) {
+    return (
+      Number.isInteger(x) &&
+      Number.isInteger(y) &&
+      map.length > 0 &&
+      Array.isArray(map[0]) &&
+      x >= 0 &&
+      y >= 0 &&
+      y < map.length &&
+      x < map[0].length
+    );
+  }
+
+  return (
+    Number.isInteger(x) &&
+    Number.isInteger(y) &&
+    x >= 0 &&
+    y >= 0 &&
+    x < map.width &&
+    y < map.height
+  );
+}
+
+export function isBlockedTile(x, y, blockedTiles = new Set()) {
+  return blockedTiles.has(`${x},${y}`);
+}
+
+export function canUseNeighborTile({
+  x,
+  y,
+  move,
+  map,
+  crates = new Map(),
+  agents = new Map(),
+  blockedTiles = new Set(),
+}) {
+  if (!isInsideMap(x, y, map)) return false;
+  if (isBlockedTile(x, y, blockedTiles)) return false;
+  if (!canEnterTile(map[y][x], move)) return false;
+  if (isOccupied(x, y, crates)) return false;
+  if (isOccupied(x, y, agents)) return false;
+
+  return true;
+}
 // ==========================================
 // Spawn exploration
 // ==========================================

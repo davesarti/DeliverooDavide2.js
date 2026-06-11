@@ -24,6 +24,7 @@ export function createBeliefState() {
       deliveryDistanceMap: [],
       spawnDistanceMap: [],
       grid: [],
+      blockedTiles: new Set(),
     },
 
     config: {

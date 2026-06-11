@@ -1,8 +1,7 @@
 import { Heap } from "heap-js";
 import {
-  canEnterTile,
   DIRECTIONS,
-  isOccupied,
+  canUseNeighborTile,
 } from "../utils/mapUtils.js";
 import {
   BASE_STEP_COST,
@@ -19,6 +18,7 @@ export function astar(start, goal, bs) {
     crates: bs.crates,
     agents: bs.agents,
     parcels: bs.parcels,
+    blockedTiles: bs.map.blockedTiles,
     start,
     goal,
   });
@@ -32,6 +32,7 @@ export function astarOnState({
   crates = new Map(),
   agents = new Map(),
   parcels = new Map(),
+  blockedTiles = new Set(),
   start,
   goal,
 }) {
@@ -74,17 +75,21 @@ export function astarOnState({
       const nextX = current.x + dx;
       const nextY = current.y + dy;
 
-      const insideMap =
-        nextX >= 0 &&
-        nextX < map[0].length &&
-        nextY >= 0 &&
-        nextY < map.length;
+      if (
+        !canUseNeighborTile({
+          x: nextX,
+          y: nextY,
+          move,
+          map,
+          crates,
+          agents,
+          blockedTiles,
+        })
+      ) {
+        continue;
+      }
 
-      if (!insideMap) continue;
       if (visited.has(`${nextX},${nextY}`)) continue;
-      if (!canEnterTile(map[nextY][nextX], move)) continue;
-      if (isOccupied(nextX, nextY, crates)) continue;
-      if (isOccupied(nextX, nextY, agents)) continue;
 
       const parcel = [...parcels.values()].find(
         (p) => Math.round(p.x) === nextX && Math.round(p.y) === nextY && !p.carriedBy

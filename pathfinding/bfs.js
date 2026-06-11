@@ -1,7 +1,6 @@
 import {
-  canEnterTile,
   DIRECTIONS,
-  isOccupied,
+  canUseNeighborTile,
 } from "../utils/mapUtils.js";
 
 /*
@@ -12,6 +11,7 @@ export function bfs(start, goal, bs) {
     map: bs.map.grid,
     crates: bs.crates,
     agents: bs.agents,
+    blockedTiles: bs.map.blockedTiles,
     start,
     goal,
   });
@@ -20,7 +20,7 @@ export function bfs(start, goal, bs) {
 /*
  * Cerca il percorso più corto sulla griglia evitando ostacoli e occupanti.
  */
-export function bfsOnState({ map, crates = new Map(), agents = new Map(), start, goal }) {
+export function bfsOnState({ map, crates = new Map(), agents = new Map(), blockedTiles = new Set(), start, goal }) {
   if (!map.length || !map[0]?.length) {
     throw new Error("map not ready");
   }
@@ -52,17 +52,20 @@ export function bfsOnState({ map, crates = new Map(), agents = new Map(), start,
       const nextX = current.x + dx;
       const nextY = current.y + dy;
 
-      const insideMap =
-        nextX >= 0 &&
-        nextX < map[0].length &&
-        nextY >= 0 &&
-        nextY < map.length;
-
-      if (!insideMap) continue;
+      if (
+        !canUseNeighborTile({
+          x: nextX,
+          y: nextY,
+          move,
+          map,
+          crates,
+          agents,
+          blockedTiles,
+        })
+      ) {
+        continue;
+      }
       if (visited[nextY][nextX]) continue;
-      if (!canEnterTile(map[nextY][nextX], move)) continue;
-      if (isOccupied(nextX, nextY, crates)) continue;
-      if (isOccupied(nextX, nextY, agents)) continue;
 
       visited[nextY][nextX] = true;
 

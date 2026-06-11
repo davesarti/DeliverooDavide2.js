@@ -1,5 +1,5 @@
 import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
-import { distance } from "../utils/mapUtils.js";
+import { distance, isInsideMap } from "../utils/mapUtils.js";
 import { callLLMText } from "./client.js";
 import { buildPersistentMemoryUpdateMessages } from "./prompts.js";
 
@@ -165,6 +165,14 @@ export function get_environment_state(bs) {
 // update_persistent_memory
 // ==========================================
 
+/*
+ * Aggiorna la memoria persistente con nuove regole o informazioni.
+ * La memoria persistente è una stringa che l'LLM può leggere ad ogni iterazione
+ * per mantenere conoscenze durature o regole di comportamento.
+ * Il testo di input dovrebbe essere una richiesta chiara di aggiornamento, ad
+ * esempio "From now on, always prioritize parcels with reward above 5" o "Never go to the top-right corner".
+ * La funzione restituisce la nuova memoria persistente dopo l'aggiornamento.
+ */
 export async function updatePersistentMemory(bs, text) {
   const updatedMemory = await callLLMText({
     messages: buildPersistentMemoryUpdateMessages({
@@ -177,4 +185,45 @@ export async function updatePersistentMemory(bs, text) {
   bs.persistentMemory = updatedMemory.trim();
 
   return `Persistent memory updated:\n${bs.persistentMemory || "None"}`;
+}
+
+// ==========================================
+// block_tile / unblock_tile
+// ==========================================
+
+/*
+ * Strumenti per bloccare o sbloccare una tile specifica per il pathfinding.
+ * Utile per imporre vincoli di navigazione dinamici.
+ */
+
+export function blockTile({ x, y }, bs) {
+  if (!isInsideMap(x, y, bs.map)) {
+    return `Error: tile (${x}, ${y}) is outside the map.`;
+  }
+
+  const key = `${x},${y}`;
+
+  if (bs.map.blockedTiles.has(key)) {
+    return `Tile (${x}, ${y}) is already blocked for pathfinding.`;
+  }
+
+  bs.map.blockedTiles.add(key);
+
+  return `Tile (${x}, ${y}) is now blocked for pathfinding.`;
+}
+
+export function unblockTile({ x, y }, bs) {
+  if (!isInsideMap(x, y, bs.map)) {
+    return `Error: tile (${x}, ${y}) is outside the map.`;
+  }
+
+  const key = `${x},${y}`;
+
+  if (!bs.map.blockedTiles.has(key)) {
+    return `Tile (${x}, ${y}) was not blocked.`;
+  }
+
+  bs.map.blockedTiles.delete(key);
+
+  return `Tile (${x}, ${y}) is now walkable again for pathfinding.`;
 }

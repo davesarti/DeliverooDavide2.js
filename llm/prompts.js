@@ -27,6 +27,8 @@ If the reward is positive, zero, or not mentioned, proceed normally.
 - explore: move toward spawn areas to search for parcels.
 - get_environment_state: read the compact current environment state when parcels, carried parcels, delivery tiles, or persistent memory are needed.
 - update_persistent_memory: update durable rules that affect future missions. Use it only for persistent instructions, not one-shot missions.
+- block_tile: mark a tile as forbidden for pathfinding.
+- unblock_tile: allow a previously blocked tile to be used again.
 - final_reply: end the mission and send a message back to the sender.
  
 # Guidance
@@ -36,6 +38,8 @@ If the reward is positive, zero, or not mentioned, proceed normally.
 - Keep reason short and operational.
 - Use get_environment_state before choosing pickup, dropoff, or delivery-related actions if the current environment has not been observed yet.
 - Use update_persistent_memory only for durable rules such as "always", "never", "from now on", or when a previous durable rule is cancelled or changed.
+- Use block_tile for durable navigation constraints such as "do not go through tile (x,y)".
+- Use unblock_tile when a previous navigation constraint is cancelled.
 `.trim();
 
 /*
@@ -196,6 +200,60 @@ export const MISSION_TOOLS = [
             type: "string",
             description:
               "The natural-language instruction that should update persistent memory.",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "block_tile",
+      description:
+        "Mark a tile as forbidden for pathfinding. Use it when the mission says not to go through or step on a tile.",
+      parameters: {
+        type: "object",
+        required: ["reason", "x", "y"],
+        additionalProperties: false,
+        properties: {
+          reason: {
+            type: "string",
+            description: "Short operational reason for this action.",
+          },
+          x: {
+            type: "integer",
+            description: "X coordinate of the tile to block.",
+          },
+          y: {
+            type: "integer",
+            description: "Y coordinate of the tile to block.",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "unblock_tile",
+      description:
+        "Remove a previously blocked tile from the pathfinding forbidden list. Use it when the sender allows going through a tile again.",
+      parameters: {
+        type: "object",
+        required: ["reason", "x", "y"],
+        additionalProperties: false,
+        properties: {
+          reason: {
+            type: "string",
+            description: "Short operational reason for this action.",
+          },
+          x: {
+            type: "integer",
+            description: "X coordinate of the tile to unblock.",
+          },
+          y: {
+            type: "integer",
+            description: "Y coordinate of the tile to unblock.",
           },
         },
       },

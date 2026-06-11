@@ -1,6 +1,6 @@
 import { callLLMTool } from "./client.js";
 import { SYSTEM_PROMPT, buildMissionUserPrompt, MISSION_TOOLS } from "./prompts.js";
-import { calculate, getMyPosition, findDeliveryTile, get_environment_state, updatePersistentMemory } from "./tools.js";
+import { calculate, getMyPosition, findDeliveryTile, get_environment_state, updatePersistentMemory, blockTile, unblockTile } from "./tools.js";
 
 // ==========================================
 // Logging
@@ -77,6 +77,12 @@ async function executeTool(action, bs, actions) {
     
     case "update_persistent_memory":
       return await updatePersistentMemory(bs, params.text);
+    
+    case "block_tile":
+      return blockTile(params, bs);
+
+    case "unblock_tile":
+      return unblockTile(params, bs);
 
     default:
       return `Unknown action: ${name}.`;
