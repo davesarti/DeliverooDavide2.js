@@ -1,6 +1,6 @@
 import { callLLMTool } from "./client.js";
 import {MAX_ITERATIONS, MAX_MISSION_HISTORY} from "../utils/constants.js";
-import { SYSTEM_PROMPT, buildMissionUserPrompt, MISSION_TOOLS } from "./prompts.js";
+import { SYSTEM_PROMPT, buildMissionUserPrompt, MISSION_TOOLS } from "./prompts/index.js";
 import { calculate, getMyPosition, findDeliveryTile, get_environment_state, updatePersistentMemory, blockTile, unblockTile } from "./tools.js";
 
 // ==========================================

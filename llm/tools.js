@@ -1,7 +1,7 @@
 import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
 import { distance, isInsideMap } from "../utils/mapUtils.js";
 import { callLLMText } from "./client.js";
-import { buildPersistentMemoryUpdateMessages } from "./prompts.js";
+import { buildPersistentMemoryUpdateMessages } from "./prompts/index.js";
 
 // ==========================================
 // calculate
