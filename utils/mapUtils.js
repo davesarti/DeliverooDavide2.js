@@ -129,6 +129,22 @@ export function isOccupied(x, y, objects) {
 }
 
 export function isInsideMap(x, y, map) {
+  if (
+    map &&
+    Array.isArray(map.grid) &&
+    map.grid.length > 0 &&
+    Array.isArray(map.grid[0])
+  ) {
+    return (
+      Number.isInteger(x) &&
+      Number.isInteger(y) &&
+      x >= 0 &&
+      y >= 0 &&
+      y < map.grid.length &&
+      x < map.grid[0].length
+    );
+  }
+
   if (Array.isArray(map)) {
     return (
       Number.isInteger(x) &&
