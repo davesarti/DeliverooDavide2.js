@@ -57,8 +57,13 @@ async function executeTool(action, bs, actions) {
 
     case "go_drop_off": {
       try {
+        const deliveredCount = [...bs.parcels.values()].filter(
+          (parcel) => parcel.carriedBy === bs.me.id
+        ).length;
+
         await actions.goDropOff(params.x, params.y);
-        return `Delivered parcels at (${params.x}, ${params.y}).`;
+
+        return `Delivered ${deliveredCount} parcel(s) at (${params.x}, ${params.y}).`;
       } catch (error) {
         return `Could not deliver at (${params.x}, ${params.y}): ${error?.message ?? error}.`;
       }
@@ -97,19 +102,19 @@ async function executeTool(action, bs, actions) {
 /*
  * Saves the history of completed missions, keeping only the last N.
  */
-function saveMissionHistory(bs, { request, reply }) {
-  if (!Array.isArray(bs.missionHistory)) {
-    bs.missionHistory = [];
+function saveMissionHistory(llmState, { request, reply }) {
+  if (!Array.isArray(llmState.missionHistory)) {
+    llmState.missionHistory = [];
   }
 
-  bs.missionHistory.push({
+  llmState.missionHistory.push({
     request,
     reply,
     completedAt: Date.now(),
   });
 
-  if (bs.missionHistory.length > MAX_MISSION_HISTORY) {
-    bs.missionHistory.shift();
+  if (llmState.missionHistory.length > MAX_MISSION_HISTORY) {
+    llmState.missionHistory.shift();
   }
 }
 
@@ -119,7 +124,7 @@ function saveMissionHistory(bs, { request, reply }) {
  * a real conversation history (assistant + tool roles),
  * until the model produces final_reply.
  */
-export async function startLLMAgent(socket, bs, actions) {
+export async function startLLMAgent(socket, bs, llmState, actions) {
   logWithTime(bs.me.name, "LLM chat listener started");
 
   socket.onMsg(async (id, name, msg) => {
@@ -131,7 +136,7 @@ export async function startLLMAgent(socket, bs, actions) {
     // Real conversation history: grows on each iteration.
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildMissionUserPrompt(msg, bs.persistentMemory, bs.missionHistory) },
+      { role: "user", content: buildMissionUserPrompt(msg, llmState.persistentMemory, llmState.missionHistory) },
     ];
 
     try {
@@ -154,7 +159,7 @@ export async function startLLMAgent(socket, bs, actions) {
         if (action.name === "final_reply") {
           await socket.emitSay(id, action.params.message);
 
-          saveMissionHistory(bs, {
+          saveMissionHistory(llmState, {
             request: msg,
             reply: action.params.message,
           });

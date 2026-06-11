@@ -12,13 +12,13 @@ import {
 /*
  * Computes an A* path using the full agent state.
  */
-export function astar(start, goal, bs) {
+export function astar(start, goal, bs, options = {}) {
   return astarOnState({
     map: bs.map.grid,
     crates: bs.crates,
     agents: bs.agents,
     parcels: bs.parcels,
-    blockedTiles: bs.map.blockedTiles,
+    blockedTiles: options.blockedTiles ?? bs.map.blockedTiles,
     start,
     goal,
   });

@@ -13,6 +13,9 @@ import { findCellsToExplore } from "../utils/mapUtils.js";
  * Exposes the agent's operational actions above the game socket.
  */
 export function createActions(socket, bs) {
+  function getBlockedTiles() {
+    return bs?.map?.blockedTiles ?? new Set();
+  }
 
   /*
    * Moves the agent in a direction and updates the local position.
@@ -91,7 +94,8 @@ export function createActions(socket, bs) {
       bs.me,
       { x, y },
       AGENT_CONFIG.pathfinding.algorithm,
-      bs
+      bs,
+      { blockedTiles: getBlockedTiles() }
     );
 
     if (!result || !Array.isArray(result.path)) {

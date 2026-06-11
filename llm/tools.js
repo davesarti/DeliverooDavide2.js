@@ -173,18 +173,18 @@ export function get_environment_state(bs) {
  * "From now on, always prioritize parcels with reward above 5" or "Never go to the top-right corner".
  * The function returns the updated persistent memory after the update.
  */
-export async function updatePersistentMemory(bs, text) {
+export async function updatePersistentMemory(llmState, text) {
   const updatedMemory = await callLLMText({
     messages: buildPersistentMemoryUpdateMessages({
-      currentMemory: bs.persistentMemory,
+      currentMemory: llmState.persistentMemory,
       updateRequest: text,
     }),
     temperature: 0,
   });
 
-  bs.persistentMemory = updatedMemory.trim();
+  llmState.persistentMemory = updatedMemory.trim();
 
-  return `Persistent memory updated:\n${bs.persistentMemory || "None"}`;
+  return `Persistent memory updated:\n${llmState.persistentMemory || "None"}`;
 }
 
 // ==========================================
@@ -196,34 +196,44 @@ export async function updatePersistentMemory(bs, text) {
  * Useful for imposing dynamic navigation constraints.
  */
 
-export function blockTile({ x, y }, bs) {
-  if (!isInsideMap(x, y, bs.map)) {
+export function blockTile({ x, y }, llmState) {
+  if (!isInsideMap(x, y, llmState.map)) {
     return `Error: tile (${x}, ${y}) is outside the map.`;
   }
 
   const key = `${x},${y}`;
+  const blockedTiles = llmState.persistentRules?.blockedTiles;
 
-  if (bs.map.blockedTiles.has(key)) {
+  if (!blockedTiles) {
+    return "Error: blocked tiles store is not available.";
+  }
+
+  if (blockedTiles.has(key)) {
     return `Tile (${x}, ${y}) is already blocked for pathfinding.`;
   }
 
-  bs.map.blockedTiles.add(key);
+  blockedTiles.add(key);
 
   return `Tile (${x}, ${y}) is now blocked for pathfinding.`;
 }
 
-export function unblockTile({ x, y }, bs) {
-  if (!isInsideMap(x, y, bs.map)) {
+export function unblockTile({ x, y }, llmState) {
+  if (!isInsideMap(x, y, llmState.map)) {
     return `Error: tile (${x}, ${y}) is outside the map.`;
   }
 
   const key = `${x},${y}`;
+  const blockedTiles = llmState.persistentRules?.blockedTiles;
 
-  if (!bs.map.blockedTiles.has(key)) {
+  if (!blockedTiles) {
+    return "Error: blocked tiles store is not available.";
+  }
+
+  if (!blockedTiles.has(key)) {
     return `Tile (${x}, ${y}) was not blocked.`;
   }
 
-  bs.map.blockedTiles.delete(key);
+  blockedTiles.delete(key);
 
   return `Tile (${x}, ${y}) is now walkable again for pathfinding.`;
 }

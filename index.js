@@ -1,12 +1,14 @@
 import "dotenv/config";
 
 import { AGENT_CONFIG, DELIVEROO_CONFIG, INSTANCES, validateConfig } from "./config.js";
-import { createSocket } from "./socket.js";
-import { createBeliefState } from "./beliefs/beliefState.js";
 import { setupBeliefUpdates } from "./beliefs/updateBeliefs.js";
+import { createBeliefState } from "./beliefs/beliefState.js";
 import { createActions } from "./actions/actions.js";
+import { createLLMState } from "./llm/llmState.js";
 import { startBDIAgent } from "./bdi/bdiAgent.js";
 import { startLLMAgent } from "./llm/agent.js";
+import { createSocket } from "./socket.js";
+
 
 validateConfig();
 
@@ -21,21 +23,24 @@ for (const instance of INSTANCES) {
 
     const llmSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenLlm);
     const llmbs = createBeliefState();
-    const llmActions = createActions(llmSocket, llmbs);
+    const llmState = createLLMState();
+    const llmActions = createActions(llmSocket, llmbs, llmState);
+
     setupBeliefUpdates(llmSocket, llmbs);
 
     bdibs.partner = llmbs.me;
     llmbs.partner = bdibs.me;
 
     startBDIAgent(bdiSocket, bdibs, bdiActions);
-    startLLMAgent(llmSocket, llmbs, llmActions);
+    startLLMAgent(llmSocket, llmbs, llmState, llmActions);
   } else if (instance.mode === "LLM") {
     const llmSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenLlm);
     const llmbs = createBeliefState();
-    const llmActions = createActions(llmSocket, llmbs);
+    const llmState = createLLMState();
+    const llmActions = createActions(llmSocket, llmbs, llmState);
     setupBeliefUpdates(llmSocket, llmbs);
 
-    startLLMAgent(llmSocket, llmbs, llmActions);
+    startLLMAgent(llmSocket, llmbs, llmState, llmActions);
   } else {
     const bdiSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenBdi);
     const bdibs = createBeliefState();
