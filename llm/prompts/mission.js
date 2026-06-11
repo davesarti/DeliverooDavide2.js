@@ -2,12 +2,16 @@ function formatMissionHistory(missionHistory = []) {
   if (!missionHistory.length) return "None.";
 
   return missionHistory
+    .slice()
+    .reverse()
     .map(
       ({ request, reply }, index) =>
-        `${index + 1}. Past request: ${request}\n` +
-        `   Past reply: ${reply}`
+        `Mission #${index + 1}\n` +
+        `Request:\n${request}\n\n` +
+        `Outcome:\n${reply}\n\n` +
+        `Status: already completed`
     )
-    .join("\n");
+    .join("\n\n");
 }
 
 export function buildMissionUserPrompt(
@@ -16,20 +20,22 @@ export function buildMissionUserPrompt(
   missionHistory = []
 ) {
   return `
-Mission received from chat:
+Current mission:
 
 ${mission}
 
 Persistent memory:
+These are mandatory rules. They have priority over the current mission and must always be respected.
 
 ${persistentMemory || "None."}
 
 Completed mission history:
-These missions are already completed.
-Do not reuse coordinates, targets, or actions from this section unless the current mission explicitly refers to a previous mission.
+The following missions are already finished.
+They are provided only as past experience.
+Never reuse coordinates, parcels, delivery tiles, or actions from this section unless the current mission explicitly refers to a previous mission.
 
 ${formatMissionHistory(missionHistory)}
 
-Solve the current mission one atomic action at a time.
+Solve only the current mission, one atomic action at a time.
 `.trim();
 }
