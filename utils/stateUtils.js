@@ -6,8 +6,8 @@ import {
 import { PARCEL_DECAY } from "./constants.js";
 
 /*
- * Restituisce una versione minima di un pacco.
- * Utile quando servono solo posizione e reward, senza calcoli aggiuntivi.
+ * Returns a minimal version of a parcel.
+ * Useful when only position and reward are needed, without extra computations.
  */
 export function formatParcelBasic(parcel) {
   return {
@@ -19,8 +19,8 @@ export function formatParcelBasic(parcel) {
 }
 
 /*
- * Ordina le delivery rispetto a una posizione.
- * Serve per sapere quali punti di consegna sono più comodi dalla posizione attuale.
+ * Sorts delivery tiles relative to a position.
+ * Used to find which delivery points are most convenient from the current position.
  */
 export function buildNearbyDeliveryTiles(position, deliveryTiles) {
   return deliveryTiles
@@ -33,7 +33,7 @@ export function buildNearbyDeliveryTiles(position, deliveryTiles) {
 }
 
 /*
- * Cerca la delivery raggiungibile più vicina a una posizione.
+ * Finds the nearest reachable delivery tile from a position.
  */
 export function nearestDeliveryTileAt(position, deliveryDistanceMap) {
   const row = deliveryDistanceMap?.[Math.round(position.y)];
@@ -63,8 +63,8 @@ export function nearestDeliveryTileAt(position, deliveryDistanceMap) {
 }
 
 /*
- * Legge dalla deliveryDistanceMap la distanza tra una posizione
- * e una specifica delivery tile.
+ * Reads from the deliveryDistanceMap the distance between a position
+ * and a specific delivery tile.
  */
 export function deliveryMapDistance(deliveryDistanceMap, from, target) {
   const row = deliveryDistanceMap?.[Math.round(from.y)];
@@ -84,8 +84,8 @@ export function deliveryMapDistance(deliveryDistanceMap, from, target) {
 }
 
 /*
- * Legge dalla spawnDistanceMap la distanza tra una posizione
- * e una specifica spawn tile.
+ * Reads from the spawnDistanceMap the distance between a position
+ * and a specific spawn tile.
  */
 export function spawnMapDistance(spawnDistanceMap, from, target) {
   const row = spawnDistanceMap?.[Math.round(from.y)];
@@ -105,8 +105,8 @@ export function spawnMapDistance(spawnDistanceMap, from, target) {
 }
 
 /*
- * Arricchisce un pacco libero con dati utili alla pianificazione.
- * Non sceglie cosa fare: aggiunge distanza dal player e alcune delivery candidate.
+ * Enriches a free parcel with data useful for planning.
+ * Does not decide what to do: adds distance from the player and some delivery candidates.
  */
 export function enrichParcelForDecision(
   parcel,
@@ -138,8 +138,8 @@ export function enrichParcelForDecision(
 }
 
 /*
- * Costruisce le delivery candidate per un pacco.
- * Per ogni delivery raggiungibile calcola distanza e reward stimata alla consegna.
+ * Builds delivery candidates for a parcel.
+ * For each reachable delivery, computes distance and estimated reward at delivery.
  */
 function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward, parcelDecayingEvent, agentId = "default") {
   const row = deliveryDistanceMap?.[Math.round(position.y)];
@@ -170,8 +170,8 @@ function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward,
 }
 
 /*
- * Converte una durata espressa come stringa del server in millisecondi.
- * Supporta formati come "1s", "500ms", "2s".
+ * Converts a duration expressed as a server string into milliseconds.
+ * Supports formats like "1s", "500ms", "2s".
  */
 function parseDurationMs(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -199,8 +199,8 @@ function parseDurationMs(value) {
 }
 
 /*
- * Restituisce quanta reward perde un pacco ogni secondo.
- * Usa parcels.decaying_event dal server; se manca, usa PARCEL_DECAY come fallback.
+ * Returns how much reward a parcel loses per second.
+ * Uses parcels.decaying_event from the server; if missing, uses PARCEL_DECAY as fallback.
  */
 function getParcelDecayPerSecond(parcelDecayingEvent) {
   const decayEventMs = parseDurationMs(parcelDecayingEvent);
@@ -209,8 +209,8 @@ function getParcelDecayPerSecond(parcelDecayingEvent) {
 }
 
 /*
- * Stima quanta reward viene persa per ogni tile percorsa.
- * agentId identifica l'agente corretto nella Map di velocità condivisa.
+ * Estimates how much reward is lost per tile traveled.
+ * agentId identifies the correct agent in the shared speed Map.
  */
 function getRewardLossPerTile(parcelDecayingEvent, agentId = "default") {
   const tilesPerSecond = getTilesPerSecond(agentId);

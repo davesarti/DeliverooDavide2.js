@@ -1,5 +1,5 @@
 /*
- * Crea lo stato iniziale delle credenze dell'agente.
+ * Creates the initial belief state of the agent.
  */
 export function createBeliefState() {
   return {

@@ -2,7 +2,7 @@ import { bfs } from "./bfs.js";
 import { astar } from "./astar.js";
 
 /*
- * Sceglie l'algoritmo di pathfinding da usare in base alla configurazione.
+ * Selects the pathfinding algorithm to use based on configuration.
  */
 export function findPath(start, goal, algorithm = "bfs", bs) {
   if (algorithm === "bfs") {

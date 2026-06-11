@@ -10,7 +10,7 @@ import {
 } from "../utils/constants.js";
 
 /*
- * Calcola un percorso A* usando lo stato completo dell'agente.
+ * Computes an A* path using the full agent state.
  */
 export function astar(start, goal, bs) {
   return astarOnState({
@@ -25,7 +25,7 @@ export function astar(start, goal, bs) {
 }
 
 /*
- * Cerca un percorso con A* tenendo conto di ostacoli e costo stimato.
+ * Finds a path with A* taking into account obstacles and estimated cost.
  */
 export function astarOnState({
   map,

@@ -20,7 +20,7 @@ function logWithTime(name, ...args) {
 // ==========================================
 
 /*
- * Esegue l'azione atomica scelta dal modello e restituisce l'osservazione.
+ * Executes the atomic action chosen by the model and returns the observation.
  * action = { name: string, params: object }
  */
 async function executeTool(action, bs, actions) {
@@ -95,7 +95,7 @@ async function executeTool(action, bs, actions) {
 // ==========================================
 
 /*
- * Salva la storia delle missioni completate, mantenendo solo le ultime N.
+ * Saves the history of completed missions, keeping only the last N.
  */
 function saveMissionHistory(bs, { request, reply }) {
   if (!Array.isArray(bs.missionHistory)) {
@@ -114,10 +114,10 @@ function saveMissionHistory(bs, { request, reply }) {
 }
 
 /*
- * Avvia il listener delle missioni speciali via chat.
- * Per ogni messaggio ricevuto esegue il loop ReAct mantenendo
- * una conversation history reale (ruoli assistant + tool),
- * finché il modello produce final_reply.
+ * Starts the special-mission listener via chat.
+ * For each received message it runs the ReAct loop maintaining
+ * a real conversation history (assistant + tool roles),
+ * until the model produces final_reply.
  */
 export async function startLLMAgent(socket, bs, actions) {
   logWithTime(bs.me.name, "LLM chat listener started");
@@ -128,7 +128,7 @@ export async function startLLMAgent(socket, bs, actions) {
 
     logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
 
-    // Conversation history reale: cresce ad ogni iterazione.
+    // Real conversation history: grows on each iteration.
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: buildMissionUserPrompt(msg, bs.persistentMemory, bs.missionHistory) },
@@ -144,7 +144,7 @@ export async function startLLMAgent(socket, bs, actions) {
 
         logWithTime(bs.me.name, `Action: ${action.name}(${JSON.stringify(action.params)})`);
 
-        // Salva nella history la chiamata dell'assistant nel formato nativo.
+        // Save the assistant's call in the history in the native format.
         messages.push({
           role: "assistant",
           content: null,
@@ -165,7 +165,7 @@ export async function startLLMAgent(socket, bs, actions) {
         const observation = await executeTool(action, bs, actions);
         logWithTime(bs.me.name, "Observation:", observation);
 
-        // Salva nella history il risultato del tool nel ruolo "tool".
+        // Save the tool result in the history under the "tool" role.
         messages.push({
           role: "tool",
           tool_call_id: toolCall.id,

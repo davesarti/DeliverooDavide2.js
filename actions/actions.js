@@ -5,17 +5,17 @@ import { yieldControl } from "../utils/asyncUtils.js";
 import { findCellsToExplore } from "../utils/mapUtils.js";
 
 /*
- * Crea il layer di azioni per un agente specifico.
- * Riceve socket e beliefState dell'agente invece di importarli come singleton.
- * Ritorna un oggetto con tutte le funzioni di azione disponibili.
+ * Creates the action layer for a specific agent.
+ * Receives socket and beliefState of the agent instead of importing them as singletons.
+ * Returns an object with all available action functions.
  */
 /*
- * Espone le azioni operative dell'agente sopra al socket di gioco.
+ * Exposes the agent's operational actions above the game socket.
  */
 export function createActions(socket, bs) {
 
   /*
-   * Muove l'agente in una direzione e aggiorna la posizione locale.
+   * Moves the agent in a direction and updates the local position.
    */
   async function move(direction) {
     const moved = await socket.emitMove(direction);
@@ -31,21 +31,21 @@ export function createActions(socket, bs) {
   }
 
   /*
-   * Chiede al server di raccogliere il pacco sulla cella corrente.
+   * Asks the server to pick up the parcel on the current cell.
    */
   async function pickup() {
     return await socket.emitPickup();
   }
 
   /*
-   * Rilascia il pacco trasportato sulla cella corrente.
+   * Releases the carried parcel on the current cell.
    */
   async function putdown() {
     return await socket.emitPutdown();
   }
 
   /*
-   * Esegue un percorso passo per passo, con stop e timeout.
+   * Executes a path step by step, with stop and timeout.
    */
   async function executePath(
     path,
@@ -77,7 +77,7 @@ export function createActions(socket, bs) {
   }
 
   /*
-   * Raggiunge una posizione della mappa usando il pathfinding attivo.
+   * Reaches a map position using the active pathfinding.
    */
   async function goTo(
     x,
@@ -102,7 +102,7 @@ export function createActions(socket, bs) {
   }
 
   /*
-   * Va sul pacco e prova a raccoglierlo.
+   * Goes to the parcel and tries to pick it up.
    */
   async function goPickUp(
     x,
@@ -116,7 +116,7 @@ export function createActions(socket, bs) {
   }
 
   /*
-   * Va su una delivery tile e deposita i pacchi trasportati.
+   * Goes to a delivery tile and deposits the carried parcels.
    */
   async function goDropOff(
     x,
@@ -129,7 +129,7 @@ export function createActions(socket, bs) {
   }
 
   /*
-   * Prova a esplorare una spawn tile non troppo recente.
+   * Tries to explore a not-too-recently-visited spawn tile.
    */
   async function explore({ shouldStop = () => false } = {}) {
     const candidates = findCellsToExplore(
@@ -157,7 +157,7 @@ export function createActions(socket, bs) {
   }
 
   /*
-   * Traduce un predicato pianificato nell'azione concreta da eseguire.
+   * Translates a planned predicate into the concrete action to execute.
    */
   async function executePredicate(
     predicate,

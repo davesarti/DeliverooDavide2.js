@@ -21,7 +21,7 @@ import { waitUntil } from "../utils/asyncUtils.js";
 // ==========================================
 
 /*
- * Verifica che il BDI abbia abbastanza stato per partire.
+ * Checks that the BDI has enough state to start.
  */
 function isReady(bs) {
   return (
@@ -46,7 +46,7 @@ class IntentionRevision {
   #executePredicate;
 
   /*
-   * Inizializza la revisione delle intenzioni con lo stato e l'esecutore.
+   * Initializes intention revision with state and executor.
    */
   constructor(bs, executePredicate) {
     this.#bs = bs;
@@ -54,35 +54,35 @@ class IntentionRevision {
   }
 
   /*
-   * Restituisce la coda corrente delle intenzioni.
+   * Returns the current intention queue.
    */
   get intention_queue() {
     return this.#intentionQueue;
   }
 
   /*
-   * Stampa i log dell'agente con il suo nome.
+   * Prints agent logs with its name.
    */
   log(...args) {
     console.log(`[${this.#bs.me.name ?? "BDI"}]`, ...args);
   }
 
   /*
-   * Crea una chiave semplice per confrontare due predicati.
+   * Creates a simple key to compare two predicates.
    */
   #predicateKey(predicate) {
     return predicate.join(" ");
   }
 
   /*
-   * Controlla se il predicato è ancora in pausa dopo un fallimento.
+   * Checks whether the predicate is still on cooldown after a failure.
    */
   isPredicateInFailedPool(predicate) {
     return this.#failedIntentionPool.has(this.#predicateKey(predicate));
   }
 
   /*
-   * Memorizza un'intenzione fallita per riprovarla più avanti.
+   * Stores a failed intention to retry it later.
    */
   #recordFailedIntention(predicate) {
     const key = this.#predicateKey(predicate);
@@ -93,7 +93,7 @@ class IntentionRevision {
   }
 
   /*
-   * Rimette in coda le intenzioni fallite quando scade il cooldown.
+   * Re-queues failed intentions when the cooldown expires.
    */
   #requeueFailedIntentions() {
     const now = Date.now();
@@ -121,7 +121,7 @@ class IntentionRevision {
   }
 
   /*
-   * Assegna un punteggio a ogni predicato in base al contesto corrente.
+   * Assigns a score to each predicate based on the current context.
    */
   intentionScore(predicate) {
     const me = this.#bs.me;
@@ -175,7 +175,7 @@ class IntentionRevision {
   }
 
   /*
-   * Riordina la coda lasciando davanti le intenzioni più promettenti.
+   * Reorders the queue keeping the most promising intentions at the front.
    */
   sortQueueByScore() {
     const running = this.#currentIntention;
@@ -205,14 +205,14 @@ class IntentionRevision {
   }
 
   /*
-   * Costruisce una nuova intenzione pronta per la coda.
+   * Builds a new intention ready for the queue.
    */
   createIntention(predicate) {
     return new Intention(this, predicate, this.#executePredicate);
   }
 
   /*
-   * Toglie una intenzione dalla coda corrente.
+   * Removes an intention from the current queue.
    */
   removeIntention(intention) {
     const index = this.intention_queue.indexOf(intention);
@@ -220,7 +220,7 @@ class IntentionRevision {
   }
 
   /*
-   * Tiene vivo il ciclo che seleziona ed esegue le intenzioni.
+   * Keeps alive the cycle that selects and executes intentions.
    */
   async loop() {
     while (true) {
@@ -303,7 +303,7 @@ class IntentionRevision {
 
 class IntentionRevisionRevise extends IntentionRevision {
   /*
-   * Inserisce un nuovo predicato se non è già presente o bloccato.
+   * Inserts a new predicate if it is not already present or blocked.
    */
   async push(predicate) {
     if (this.isPredicateInFailedPool(predicate)) return;
@@ -320,7 +320,7 @@ class IntentionRevisionRevise extends IntentionRevision {
 // ==========================================
 
 /*
- * Avvia l'agente BDI e collega gli aggiornamenti allo stato interno.
+ * Starts the BDI agent and connects updates to the internal state.
  */
 export async function startBDIAgent(socket, bs, actions) {
   console.log(`[${bs.me.name ?? "BDI"}] Waiting for initial beliefs...`);

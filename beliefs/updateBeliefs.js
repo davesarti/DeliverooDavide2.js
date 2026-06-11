@@ -6,7 +6,7 @@ import {
 } from "./mapState.js";
 
 /*
- * Collega gli eventi del socket allo stato interno dell'agente.
+ * Connects socket events to the agent's internal state.
  */
 export function setupBeliefUpdates(socket, bs) {
 
@@ -16,7 +16,7 @@ export function setupBeliefUpdates(socket, bs) {
 
   socket.onConfig((config) => {
     /*
-     * Salva i parametri di gioco che servono alle altre parti dell'agente.
+     * Saves the game parameters needed by other parts of the agent.
      */
     const gameConfig = config.GAME ?? config;
 
@@ -42,7 +42,7 @@ export function setupBeliefUpdates(socket, bs) {
 
   socket.onYou(({ id, name, x, y, score }) => {
     /*
-     * Aggiorna la posizione e il punteggio del nostro agente.
+     * Updates the position and score of our agent.
      */
     const current = `${id}|${x}|${y}|${score}`;
     if (current === lastYou) return;
@@ -69,7 +69,7 @@ export function setupBeliefUpdates(socket, bs) {
 
   socket.onMap((width, height, tiles) => {
     /*
-     * Ricostruisce la mappa interna quando arriva la descrizione completa del livello.
+     * Rebuilds the internal map when the full level description arrives.
      */
     bs.map.width = width;
     bs.map.height = height;
@@ -101,7 +101,7 @@ export function setupBeliefUpdates(socket, bs) {
 
   socket.onSensing((sensing) => {
     /*
-     * Allinea oggetti visibili e agenti osservati con l'ultimo sensing ricevuto.
+     * Aligns visible objects and observed agents with the latest sensing received.
      */
     for (const parcel of sensing.parcels ?? []) {
       bs.parcels.set(parcel.id, parcel);

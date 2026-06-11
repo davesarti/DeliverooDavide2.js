@@ -6,8 +6,8 @@ export const EXPLORATION_INCENTIVE = 0.01;
 export const DROP_DISINCENTIVE = 0;
 
 /*
- * Traduce la velocità dell'agente nel costo stimato del decay.
- * Richiede bs per identificare l'agente corretto nella Map di velocità condivisa.
+ * Translates the agent's speed into the estimated decay cost.
+ * Requires bs to identify the correct agent in the shared speed Map.
  */
 export function distanceFactor(bs = null) {
   const agentId = bs?.me?.id ?? "default";
@@ -17,7 +17,7 @@ export function distanceFactor(bs = null) {
 }
 
 /*
- * Stima quanto costa prendere un pacco e portarlo fino alla delivery più vicina.
+ * Estimates the cost of picking up a parcel and carrying it to the nearest delivery.
  */
 export function pickupRouteDistance(parcel, me, bs) {
   const nearest = nearestDeliveryTileAt(
@@ -37,7 +37,7 @@ export function pickupRouteDistance(parcel, me, bs) {
 }
 
 /*
- * Genera i pickup che valgono ancora la pena nello stato corrente.
+ * Generates the pickups that are still worth doing in the current state.
  */
 function generatePickupOptions(parcels, me, bs) {
   const deliveryDistanceMap = bs.map.deliveryDistanceMap;
@@ -61,7 +61,7 @@ function generatePickupOptions(parcels, me, bs) {
 }
 
 /*
- * Genera le consegne disponibili per i pacchi già trasportati.
+ * Generates the available deliveries for already carried parcels.
  */
 function generateDeliveryOptions(parcels, me, bs) {
   const deliveryDistanceMap = bs.map.deliveryDistanceMap;
@@ -89,7 +89,7 @@ function generateDeliveryOptions(parcels, me, bs) {
 }
 
 /*
- * Aggiorna la coda delle intenzioni con opzioni sensate per il momento.
+ * Updates the intention queue with sensible options for the current moment.
  */
 export function optionsGeneration(agent, bs) {
   const { me, parcels } = bs;

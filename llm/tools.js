@@ -8,12 +8,12 @@ import { buildPersistentMemoryUpdateMessages } from "./prompts.js";
 // ==========================================
 
 /*
- * Valuta un'espressione matematica e restituisce il risultato come stringa.
- * Usato dal mission loop quando le coordinate sono espresse come formule.
+ * Evaluates a mathematical expression and returns the result as a string.
+ * Used by the mission loop when coordinates are expressed as formulas.
  */
 export function calculate({ expression }) {
   try {
-    // Whitelist: solo caratteri matematici ammessi
+    // Whitelist: only mathematical characters allowed
     if (!/^[\d\s\+\-\*\/\(\)\.\,]+$/.test(expression)) {
       return `Error: expression contains invalid characters: ${expression}`;
     }
@@ -35,7 +35,7 @@ export function calculate({ expression }) {
 // ==========================================
 
 /*
- * Legge la posizione corrente dell'agente dal belief state.
+ * Reads the current agent position from the belief state.
  */
 export function getMyPosition(bs) {
   const { x, y, id, name, score } = bs.me;
@@ -58,9 +58,9 @@ export function getMyPosition(bs) {
 // ==========================================
 
 /*
- * Trova una delivery tile in base a una descrizione testuale.
- * Query supportate: "leftmost", "rightmost", "topmost", "bottommost", "nearest".
- * Restituisce le coordinate della tile trovata come stringa JSON.
+ * Finds a delivery tile based on a textual description.
+ * Supported queries: "leftmost", "rightmost", "topmost", "bottommost", "nearest".
+ * Returns the coordinates of the found tile as a JSON string.
  */
 export function findDeliveryTile({ query }, bs) {
   const tiles = bs.map.deliveryTiles;
@@ -97,9 +97,9 @@ export function findDeliveryTile({ query }, bs) {
 // ==========================================
 
 /*
- * Restituisce una rappresentazione testuale dello stato attuale dell'ambiente,
- * comprensiva di posizione, punteggio, pacchi trasportati, pacchi visibili e
- * tile di consegna vicine. Usato come input per l'LLM.
+ * Returns a textual representation of the current environment state,
+ * including position, score, carried parcels, visible parcels and
+ * nearby delivery tiles. Used as input for the LLM.
  */
 
 export function get_environment_state(bs) {
@@ -166,12 +166,12 @@ export function get_environment_state(bs) {
 // ==========================================
 
 /*
- * Aggiorna la memoria persistente con nuove regole o informazioni.
- * La memoria persistente è una stringa che l'LLM può leggere ad ogni iterazione
- * per mantenere conoscenze durature o regole di comportamento.
- * Il testo di input dovrebbe essere una richiesta chiara di aggiornamento, ad
- * esempio "From now on, always prioritize parcels with reward above 5" o "Never go to the top-right corner".
- * La funzione restituisce la nuova memoria persistente dopo l'aggiornamento.
+ * Updates the persistent memory with new rules or information.
+ * The persistent memory is a string the LLM can read at each iteration
+ * to maintain durable knowledge or behavior rules.
+ * The input text should be a clear update request, for example
+ * "From now on, always prioritize parcels with reward above 5" or "Never go to the top-right corner".
+ * The function returns the updated persistent memory after the update.
  */
 export async function updatePersistentMemory(bs, text) {
   const updatedMemory = await callLLMText({
@@ -192,8 +192,8 @@ export async function updatePersistentMemory(bs, text) {
 // ==========================================
 
 /*
- * Strumenti per bloccare o sbloccare una tile specifica per il pathfinding.
- * Utile per imporre vincoli di navigazione dinamici.
+ * Tools for blocking or unblocking a specific tile for pathfinding.
+ * Useful for imposing dynamic navigation constraints.
  */
 
 export function blockTile({ x, y }, bs) {

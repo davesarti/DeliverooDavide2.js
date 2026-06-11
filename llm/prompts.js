@@ -43,9 +43,9 @@ If the reward is positive, zero, or not mentioned, proceed normally.
 `.trim();
 
 /*
- * Tool definitions per il function calling nativo di Llama 3.3 70B.
- * Ogni tool corrisponde a un'azione atomica del mission loop.
- * Il modello sceglie il tool e popola solo i parametri richiesti.
+ * Tool definitions for native function calling of Llama 3.3 70B.
+ * Each tool corresponds to an atomic action of the mission loop.
+ * The model chooses the tool and fills only the required parameters.
  */
 export const MISSION_TOOLS = [
   {
@@ -278,9 +278,9 @@ export const MISSION_TOOLS = [
 ];
 
 /*
- * Costruisce il primo user prompt con la missione ricevuta.
- * Gli step successivi sono gestiti come conversation history reale
- * (ruoli assistant + tool) nel loop dell'agente, non qui.
+ * Builds the first user prompt with the received mission.
+ * Subsequent steps are handled as real conversation history
+ * (assistant + tool roles) in the agent loop, not here.
  */
 
 export function buildMissionUserPrompt(mission, persistentMemory = "None.", missionHistory = []) {

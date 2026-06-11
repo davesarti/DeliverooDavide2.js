@@ -4,7 +4,7 @@ import {
 } from "../utils/mapUtils.js";
 
 /*
- * Calcola un percorso BFS usando lo stato completo dell'agente.
+ * Computes a BFS path using the full agent state.
  */
 export function bfs(start, goal, bs) {
   return bfsOnState({
@@ -18,7 +18,7 @@ export function bfs(start, goal, bs) {
 }
 
 /*
- * Cerca il percorso più corto sulla griglia evitando ostacoli e occupanti.
+ * Finds the shortest path on the grid avoiding obstacles and occupants.
  */
 export function bfsOnState({ map, crates = new Map(), agents = new Map(), blockedTiles = new Set(), start, goal }) {
   if (!map.length || !map[0]?.length) {

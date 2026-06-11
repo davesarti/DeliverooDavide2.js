@@ -30,23 +30,23 @@ if (AGENT_CONFIG.mode === "BDI") {
 
 } else if (AGENT_CONFIG.mode === "BOTH") {
 
-  // Agente BDI
+  // BDI agent
   const bdiSocket = createSocket(DELIVEROO_CONFIG.host, DELIVEROO_CONFIG.tokenBdi);
   const bdibs = createBeliefState();
   const bdiActions = createActions(bdiSocket, bdibs);
   setupBeliefUpdates(bdiSocket, bdibs);
 
-  // Agente LLM
+  // LLM agent
   const llmSocket = createSocket(DELIVEROO_CONFIG.host, DELIVEROO_CONFIG.tokenLlm);
   const llmbs = createBeliefState();
   const llmActions = createActions(llmSocket, llmbs);
   setupBeliefUpdates(llmSocket, llmbs);
 
-  // I due agenti si puntano a vicenda
+  // The two agents point to each other
   bdibs.partner = llmbs.me;
   llmbs.partner = bdibs.me;
 
-  // Avvia entrambi in parallelo
+  // Start both in parallel
   startBDIAgent(bdiSocket, bdibs, bdiActions);
   startLLMAgent(llmSocket, llmbs, llmActions);
 

@@ -7,12 +7,12 @@ const client = new OpenAI({
 });
 
 /*
- * Chiama il modello usando function calling nativo.
- * Restituisce { action: { name, params }, toolCall } dove:
- *   - action.name   è il nome del tool scelto
- *   - action.params è l'oggetto dei parametri già parsato
- *   - toolCall      è l'oggetto raw (con id) da reinserire nella history
- * Riprova una volta automaticamente in caso di errore.
+ * Calls the model using native function calling.
+ * Returns { action: { name, params }, toolCall } where:
+ *   - action.name   is the name of the chosen tool
+ *   - action.params is the already-parsed parameter object
+ *   - toolCall      is the raw object (with id) to re-insert in the history
+ * Retries once automatically on error.
  */
 export async function callLLMTool({
   messages,
@@ -38,8 +38,8 @@ export async function callLLMTool({
 }
 
 /*
- * Esegue una singola richiesta al modello con function calling
- * e restituisce { ok, value } o { ok, error }.
+ * Executes a single request to the model with function calling
+ * and returns { ok, value } or { ok, error }.
  */
 async function requestTool({ messages, tools, temperature }) {
   const request = {
@@ -75,7 +75,7 @@ async function requestTool({ messages, tools, temperature }) {
 }
 
 /*
- * Prova a leggere una stringa come JSON senza sollevare eccezioni.
+ * Tries to parse a string as JSON without raising exceptions.
  */
 function safeJsonParse(text) {
   try {
@@ -86,7 +86,7 @@ function safeJsonParse(text) {
 }
 
 /*
-* Chiama il modello senza function calling e restituisce il testo della risposta.
+* Calls the model without function calling and returns the response text.
 */
 export async function callLLMText({ messages, temperature = 0 }) {
   const request = {

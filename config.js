@@ -13,9 +13,9 @@ export const DELIVEROO_CONFIG = {
 };
 
 export const AGENT_CONFIG = {
-  // "BDI"  → avvia solo il BDI (usa TOKEN_BDI)
-  // "LLM"  → avvia solo l'LLM (usa TOKEN_LLM)
-  // "BOTH" → avvia entrambi (usa TOKEN_BDI e TOKEN_LLM)
+  // "BDI"  → starts only the BDI (uses TOKEN_BDI)
+  // "LLM"  → starts only the LLM (uses TOKEN_LLM)
+  // "BOTH" → starts both (uses TOKEN_BDI and TOKEN_LLM)
   mode: "LLM",
 
   pathfinding: {
@@ -24,7 +24,7 @@ export const AGENT_CONFIG = {
 };
 
 /*
- * Controlla che le variabili di ambiente e le opzioni base siano coerenti.
+ * Checks that environment variables and base options are consistent.
  */
 export function validateConfig() {
   if (!DELIVEROO_CONFIG.host) {

@@ -13,7 +13,7 @@ export const STOP_REASON_PREEMPTION = "preemption";
 // ==========================================
 
 /*
- * Trasforma uno stop in un errore coerente con il tipo di interruzione.
+ * Transforms a stop into an error consistent with the type of interruption.
  */
 export function createStoppedIntentionError(predicate, stopReason) {
   if (stopReason === STOP_REASON_PREEMPTION) {
@@ -23,28 +23,28 @@ export function createStoppedIntentionError(predicate, stopReason) {
 }
 
 /*
- * Riconosce un errore che blocca l'intero piano.
+ * Recognizes an error that blocks the entire plan.
  */
 export function isStoppedPlanError(error) {
   return Array.isArray(error) && error[0] === STOPPED_PLAN;
 }
 
 /*
- * Riconosce un'intenzione interrotta da una preemption.
+ * Recognizes an intention interrupted by a preemption.
  */
 export function isPreemptedIntentionError(error) {
   return Array.isArray(error) && error[0] === PREEMPTED_INTENTION;
 }
 
 /*
- * Riconosce un'intenzione fermata volontariamente.
+ * Recognizes an intention stopped voluntarily.
  */
 export function isStoppedIntentionError(error) {
   return Array.isArray(error) && error[0] === STOPPED_INTENTION;
 }
 
 /*
- * Evita di inserire due volte lo stesso predicato in coda.
+ * Prevents inserting the same predicate twice in the queue.
  */
 export function samePredicateInQueue(queue, predicate) {
   return queue.find((i) => i.predicate.join(" ") === predicate.join(" "));
@@ -63,7 +63,7 @@ export class Intention {
   #executePredicate;
 
   /*
-   * Crea una nuova intenzione pronta da eseguire.
+   * Creates a new intention ready to execute.
    */
   constructor(parent, predicate, executePredicate) {
     this.#parent = parent;
@@ -72,21 +72,21 @@ export class Intention {
   }
 
   /*
-   * Restituisce il predicato assegnato a questa intenzione.
+   * Returns the predicate assigned to this intention.
    */
   get predicate() {
     return this.#predicate;
   }
 
   /*
-   * Indica se l'intenzione è stata fermata.
+   * Indicates whether the intention has been stopped.
    */
   get stopped() {
     return this.#stopped;
   }
 
   /*
-   * Marca l'intenzione come fermata e salva il motivo.
+   * Marks the intention as stopped and saves the reason.
    */
   stop(reason = null) {
     this.#stopped = true;
@@ -94,7 +94,7 @@ export class Intention {
   }
 
   /*
-   * Scrive i log passando dal logger del padre, se c'è.
+   * Writes logs through the parent's logger, if available.
    */
   log(...args) {
     if (this.#parent?.log) {
@@ -105,7 +105,7 @@ export class Intention {
   }
 
   /*
-   * Esegue il predicato e gestisce stop, successi e fallimenti.
+   * Executes the predicate and handles stops, successes, and failures.
    */
   async achieve() {
     if (this.#started) return this;

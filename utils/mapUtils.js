@@ -8,8 +8,8 @@ import {
 // ==========================================
 
 /*
- * Mappa per-agente: agentId → { tilesPerSecond, lastX, lastY, lastTimeMs, samples, lastReportMs }
- * Necessario in modalità BOTH dove BDI e LLM possono avere velocità diverse.
+ * Per-agent map: agentId → { tilesPerSecond, lastX, lastY, lastTimeMs, samples, lastReportMs }
+ * Needed in BOTH mode where BDI and LLM can have different speeds.
  */
 const _agentMovementStats = new Map();
 
@@ -28,8 +28,8 @@ function _getOrCreateStats(agentId) {
 }
 
 /*
- * Aggiorna la stima della velocità reale per uno specifico agente.
- * agentId deve essere bs.me.id; se non disponibile usa 'default'.
+ * Updates the real speed estimate for a specific agent.
+ * agentId should be bs.me.id; if unavailable, uses 'default'.
  */
 export function updateTilesPerSecond(x, y, agentId = "default") {
   const stats = _getOrCreateStats(agentId);
@@ -68,8 +68,8 @@ export function updateTilesPerSecond(x, y, agentId = "default") {
 }
 
 /*
- * Restituisce la velocità stimata in tile/s per uno specifico agente.
- * agentId deve essere bs.me.id; se non disponibile usa 'default'.
+ * Returns the estimated speed in tiles/s for a specific agent.
+ * agentId should be bs.me.id; if unavailable, uses 'default'.
  */
 export function getTilesPerSecond(agentId = "default") {
   return _getOrCreateStats(agentId).tilesPerSecond;
@@ -87,8 +87,8 @@ export const DIRECTIONS = [
 ];
 
 /*
- * Controlla se una cella può essere attraversata con una certa mossa.
- * Gestisce muri e tile direzionali.
+ * Checks whether a cell can be entered with a given move.
+ * Handles walls and directional tiles.
  */
 export function canEnterTile(tileValue, move) {
   if (Number(tileValue) === 0) {
@@ -104,7 +104,7 @@ export function canEnterTile(tileValue, move) {
 }
 
 /*
- * Distanza Manhattan tra due posizioni della griglia.
+ * Manhattan distance between two grid positions.
  */
 export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
   const dx = Math.abs(Math.round(x1) - Math.round(x2));
@@ -113,7 +113,7 @@ export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
 }
 
 /*
- * Controlla se una posizione è occupata da almeno un oggetto nella Map passata.
+ * Checks whether a position is occupied by at least one object in the given Map.
  */
 export function isOccupied(x, y, objects) {
   for (const obj of objects.values()) {
@@ -184,9 +184,9 @@ function gaussianWeight(distanceFromAgent, sigma) {
 }
 
 /*
- * Aggiorna il livello di "staleness" delle spawn tile.
- * Una spawn tile lontana dal sensing diventa più interessante.
- * Una spawn tile vicina, quindi appena controllata, diventa meno interessante.
+ * Updates the staleness level of spawn tiles.
+ * A spawn tile far from sensing becomes more interesting.
+ * A spawn tile nearby, just checked, becomes less interesting.
  */
 export function updateSpawnStaleness(me, spawnTiles, observationDistance) {
   if (observationDistance === undefined || observationDistance == null) return;
@@ -214,10 +214,10 @@ export function updateSpawnStaleness(me, spawnTiles, observationDistance) {
 }
 
 /*
- * Ordina le spawn tile da esplorare.
- * Combina due criteri:
- * - staleness alta: tile non controllata da più tempo
- * - distanza bassa: tile più comoda da raggiungere
+ * Sorts spawn tiles to explore.
+ * Combines two criteria:
+ * - high staleness: tile not checked for the longest time
+ * - low distance: most convenient tile to reach
  */
 export function findCellsToExplore(spawnTiles, me) {
   const candidates = spawnTiles.filter(
@@ -249,7 +249,7 @@ export function findCellsToExplore(spawnTiles, me) {
 }
 
 /*
- * Controlla se una posizione corrisponde a una delivery tile.
+ * Checks whether a position corresponds to a delivery tile.
  */
 export function isDeliveryTile(x, y, deliveryTiles) {
   return deliveryTiles.some(
