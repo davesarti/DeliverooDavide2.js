@@ -1,5 +1,5 @@
 import { distance, isInsideMap, isDeliveryTile } from "../utils/mapUtils.js";
-import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
+import { nearestDeliveryTileAt, deliveryMapDistance, getRewardLossPerTile } from "../utils/stateUtils.js";
 
 // ==========================================
 // calculate
@@ -143,23 +143,59 @@ export function get_environment_state(bs, llmState) {
   const multipliers = rules.deliveryMultipliers ?? new Map();
   const preferred = rules.preferredDeliveryTiles ?? new Set();
 
-  // Delivery tiles are enriched with the rules attached to each tile and,
-  // when a multiplier is set, with the effective reward after the multiplier.
-  // Forbidden tiles are dropped so the model is never offered an invalid choice.
+  // Compute reward loss per tile once — shared across all delivery tile estimates.
+  // Uses the real agent speed (measured) and the server parcel decay event.
+  const rewardLossPerTile = getRewardLossPerTile(
+    bs.config?.parcelDecayingEvent,
+    me.id
+  );
+  const totalCarriedReward = carriedParcels.reduce((sum, p) => sum + p.reward, 0);
+  const numCarried = carriedParcels.length;
+
+  // Delivery tiles are enriched with:
+  //   - BFS distance (accurate path length, not Manhattan)
+  //   - rewardMultiplier and preferred flags when rules apply
+  //   - estimatedNetValue: expected reward after decay and multiplier
+  //     (only meaningful when carrying parcels)
+  // Forbidden tiles are dropped entirely.
+  // Tiles are sorted by estimatedNetValue desc when carrying,
+  // or by distance asc when not carrying.
   const deliveryTiles = bs.map.deliveryTiles
     .map((tile) => {
       const key = `${tile.x},${tile.y}`;
-      const multiplier = multipliers.has(key) ? multipliers.get(key) : null;
+      const multiplier = multipliers.has(key) ? multipliers.get(key) : 1;
+
+      // BFS distance from current position — falls back to Manhattan if map not ready
+      const bfsDistance =
+        deliveryMapDistance(bs.map.deliveryDistanceMap, me, tile) ??
+        distance(me, tile);
+
+      // Total reward remaining at delivery = (reward * multiplier) - decay during travel
+      // Decay = steps × rewardLossPerTile × numCarried (one unit of decay per parcel per tile)
+      const estimatedNetValue =
+        numCarried > 0
+          ? Math.max(0, Math.round(totalCarriedReward * multiplier - bfsDistance * rewardLossPerTile * numCarried))
+          : null;
+
       return {
         x: tile.x,
         y: tile.y,
-        distanceToMe: distance(me, tile),
-        ...(multiplier != null ? { rewardMultiplier: multiplier } : {}),
+        distanceToMe: bfsDistance,
+        ...(multiplier !== 1 ? { rewardMultiplier: multiplier } : {}),
         ...(preferred.has(key) ? { preferred: true } : {}),
+        ...(estimatedNetValue !== null ? { estimatedNetValue } : {}),
       };
     })
     .filter((tile) => !forbidden.has(`${tile.x},${tile.y}`))
-    .sort((a, b) => a.distanceToMe - b.distanceToMe)
+    .sort((a, b) => {
+      if (numCarried > 0) {
+        // Primary: highest estimated net value
+        const diff = (b.estimatedNetValue ?? 0) - (a.estimatedNetValue ?? 0);
+        if (diff !== 0) return diff;
+      }
+      // Fallback: nearest tile
+      return a.distanceToMe - b.distanceToMe;
+    })
     .slice(0, 5);
 
   return JSON.stringify({
@@ -530,6 +566,3 @@ export function unblockTile({ x, y }, bs, llmState) {
 
   return `Tile (${x}, ${y}) is now walkable again for pathfinding.`;
 }
-
-
-
