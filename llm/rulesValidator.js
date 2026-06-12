@@ -124,11 +124,6 @@ function validateGoDropOff(params, bs, rules) {
   const stackError = validateStackSize(carriedCount, rules);
   if (stackError) return stackError;
 
-  for (const parcel of carriedParcels) {
-    const rewardError = validateParcelReward(parcel, rules, "delivery");
-    if (rewardError) return rewardError;
-  }
-
   return null;
 }
 
