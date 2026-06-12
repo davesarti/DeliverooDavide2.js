@@ -100,7 +100,7 @@ export function findDeliveryTile({ query }, bs) {
  * nearby delivery tiles. Used as input for the LLM.
  */
 
-export function get_environment_state(bs, llmState) {
+export function get_environment_state(bs, llmState, missionStats = null) {
   const me = bs.me;
   const rules = llmState.persistentRules ?? {};
 
@@ -217,6 +217,8 @@ export function get_environment_state(bs, llmState) {
     visibleParcels,
 
     deliveryTiles,
+
+    ...(missionStats !== null ? { missionDeliveries: missionStats.deliveries } : {}),
 
     persistentMemory: llmState.persistentMemory ?? "None.",
   });
