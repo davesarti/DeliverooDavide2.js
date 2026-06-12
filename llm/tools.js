@@ -186,6 +186,43 @@ export function get_environment_state(bs, llmState) {
   });
 }
 
+/*
+  * Builds a snapshot of the current environment state for the validator prompt.
+*/
+function buildValidatorSnapshot(bs, llmState) {
+  const carriedParcels = [...bs.parcels.values()]
+    .filter((p) => p.carriedBy === bs.me.id)
+    .map((p) => ({
+      id: p.id,
+      reward: p.reward ?? 0,
+    }));
+
+  const visibleParcels = [...bs.parcels.values()]
+    .filter((p) => !p.carriedBy)
+    .map((p) => ({
+      id: p.id,
+      x: Math.round(p.x),
+      y: Math.round(p.y),
+      reward: p.reward ?? 0,
+    }))
+    .slice(0, 8);
+
+  return {
+    me: {
+      x: Math.round(bs.me.x),
+      y: Math.round(bs.me.y),
+      score: bs.me.score,
+    },
+    carried: {
+      count: carriedParcels.length,
+      parcels: carriedParcels,
+    },
+    visibleParcels,
+    deliveryTiles: bs.map.deliveryTiles.map((t) => ({ x: t.x, y: t.y })).slice(0, 8),
+    persistentRules: llmState.persistentMemory,
+  };
+}
+
 
 // ==========================================
 // formatPersistentRules
@@ -493,3 +530,6 @@ export function unblockTile({ x, y }, bs, llmState) {
 
   return `Tile (${x}, ${y}) is now walkable again for pathfinding.`;
 }
+
+
+

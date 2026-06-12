@@ -29,6 +29,7 @@ import {
   clearPersistentRules,
   blockTile,
   unblockTile,
+  buildValidatorSnapshot,
 } from "./tools.js";
 
 // ==========================================
@@ -174,7 +175,8 @@ async function validateMission(msg, llmState) {
         role: "user",
         content: buildValidatorUserPrompt(
           msg,
-          llmState.persistentMemory
+          llmState.persistentMemory,
+          buildValidatorSnapshot(bs, llmState)
         ),
       },
     ],

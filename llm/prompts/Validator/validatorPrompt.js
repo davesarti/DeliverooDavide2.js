@@ -18,7 +18,8 @@ Accept the request when it is understandable and one of these applies:
 Reject the request when:
 - it contains unresolved coordinate placeholders such as "(x,y)", "(x1,y1)", "x=?", or "y=?";
 - it explicitly offers a negative reward or score penalty for doing it now;
-- it clearly requires violating active persistent rules;
+- it explicitly requires an action that directly violates active persistent rules in the provided game snapshot.
+- Do not reject requests that can be satisfied by adapting the plan, such as collecting more parcels before delivery.
 - it is malformed or impossible to interpret.
 
 # Notes
