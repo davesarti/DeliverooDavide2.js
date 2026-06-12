@@ -193,7 +193,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
   logWithTime(bs.me.name, "LLM chat listener started");
 
   const logger = createSessionLogger({
-    maxIterations,
+    maxIterations: MAX_ITERATIONS,
     maxMissionHistory: MAX_MISSION_HISTORY,
     model: LLM_CONFIG?.model,
   });
@@ -212,8 +212,9 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
     logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
 
+    let missionId = null;
     try {
-      const missionId = logger.startMission(msg);
+      missionId = logger.startMission(msg);
 
       const validation = await validateMission(msg, llmState);
 
@@ -344,7 +345,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
       }
     } catch (error) {
       logWithTime(bs.me.name, "Mission error:", error?.message ?? error);
-      logger.endMission(missionId, "failed", error?.message ?? String(error));
+      if (missionId) logger.endMission(missionId, "failed", error?.message ?? String(error));
 
       try {
         await socket.emitSay(id, "Sorry, I could not complete the mission.");
