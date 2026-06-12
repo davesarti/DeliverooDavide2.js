@@ -6,10 +6,9 @@ function formatMissionHistory(missionHistory = []) {
     .reverse()
     .map(
       ({ request, reply }, index) =>
-        `Mission #${index + 1}\n` +
-        `Request:\n${request}\n\n` +
-        `Outcome:\n${reply}\n\n` +
-        `Status: already completed`
+        `Mission #${index + 1} (already completed)\n` +
+        `Request: ${request}\n` +
+        `Outcome: ${reply}`
     )
     .join("\n\n");
 }
@@ -24,15 +23,11 @@ Current mission:
 
 ${mission}
 
-Persistent memory:
-These are mandatory rules. They have priority over the current mission and must always be respected.
+Active persistent rules (enforced by the runtime, priority over the mission):
 
 ${persistentMemory || "None."}
 
-Completed mission history:
-The following missions are already finished.
-They are provided only as past experience.
-Never reuse coordinates, parcels, delivery tiles, or actions from this section unless the current mission explicitly refers to a previous mission.
+Completed mission history (past experience only; do not reuse its coordinates, parcels, or actions unless the current mission refers to a previous one):
 
 ${formatMissionHistory(missionHistory)}
 

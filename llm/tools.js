@@ -1,7 +1,5 @@
 import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
 import { distance, isInsideMap } from "../utils/mapUtils.js";
-import { callLLMText } from "./client.js";
-import { buildPersistentMemoryUpdateMessages } from "./prompts/index.js";
 
 // ==========================================
 // calculate
@@ -157,53 +155,261 @@ export function get_environment_state(bs, llmState) {
     deliveryTiles,
 
     persistentMemory: llmState.persistentMemory ?? "None.",
-    persistentRules: serializePersistentRules(llmState.persistentRules),
   });
-}
-
-function serializePersistentRules(persistentRules) {
-  if (!persistentRules) {
-    return null;
-  }
-
-  return {
-    stackSize: persistentRules.stackSize,
-    parcelFilters: {
-      minReward: persistentRules.parcelFilters?.minReward ?? null,
-      maxReward: persistentRules.parcelFilters?.maxReward ?? null,
-    },
-    forbiddenDeliveryTiles: [...(persistentRules.forbiddenDeliveryTiles ?? new Set())],
-    preferredDeliveryTiles: [...(persistentRules.preferredDeliveryTiles ?? new Set())],
-    deliveryMultipliers: [...(persistentRules.deliveryMultipliers ?? new Map())],
-    blockedTiles: [...(persistentRules.blockedTiles ?? new Set())],
-  };
 }
 
 
 // ==========================================
-// update_persistent_memory
+// formatPersistentRules
 // ==========================================
 
 /*
- * Updates the persistent memory with new rules or information.
- * The persistent memory is a string the LLM can read at each iteration
- * to maintain durable knowledge or behavior rules.
- * The input text should be a clear update request, for example
- * "From now on, always prioritize parcels with reward above 5" or "Never go to the top-right corner".
- * The function returns the updated persistent memory after the update.
+ * Renders persistentRules (the single source of truth) into the
+ * human/LLM-readable string stored in llmState.persistentMemory.
  */
-export async function updatePersistentMemory(llmState, text) {
-  const updatedMemory = await callLLMText({
-    messages: buildPersistentMemoryUpdateMessages({
-      currentMemory: llmState.persistentMemory,
-      updateRequest: text,
-    }),
-    temperature: 0,
-  });
+export function formatPersistentRules(rules) {
+  if (!rules) return "None.";
 
-  llmState.persistentMemory = updatedMemory.trim();
+  const lines = [];
 
-  return `Persistent memory updated:\n${llmState.persistentMemory || "None"}`;
+  if (rules.stackSize) {
+    const modeLabels = {
+      exactly: "exactly",
+      at_least: "at least",
+      at_most: "at most",
+    };
+    const label = modeLabels[rules.stackSize.mode] ?? rules.stackSize.mode;
+    lines.push(
+      `- Deliver only when carrying ${label} ${rules.stackSize.count} parcel(s).`
+    );
+  }
+
+  const minReward = rules.parcelFilters?.minReward;
+  const maxReward = rules.parcelFilters?.maxReward;
+
+  if (minReward != null) {
+    lines.push(`- Ignore parcels with reward lower than ${minReward}.`);
+  }
+  if (maxReward != null) {
+    lines.push(`- Ignore parcels with reward higher than ${maxReward}.`);
+  }
+
+  for (const key of rules.forbiddenDeliveryTiles ?? []) {
+    lines.push(`- Never deliver at tile (${key}).`);
+  }
+
+  for (const key of rules.preferredDeliveryTiles ?? []) {
+    lines.push(`- Prefer delivering at tile (${key}).`);
+  }
+
+  for (const [key, multiplier] of rules.deliveryMultipliers ?? []) {
+    lines.push(`- Delivery at tile (${key}) gives ${multiplier}x reward.`);
+  }
+
+  for (const key of rules.blockedTiles ?? []) {
+    lines.push(`- Navigation: never pass through tile (${key}).`);
+  }
+
+  return lines.length > 0 ? lines.join("\n") : "None.";
+}
+
+function refreshPersistentMemory(llmState) {
+  llmState.persistentMemory = formatPersistentRules(llmState.persistentRules);
+}
+
+// ==========================================
+// Persistent rule tools (atomic)
+// ==========================================
+
+/*
+ * Each tool applies exactly one structured change to
+ * llmState.persistentRules (the single source of truth),
+ * then regenerates the readable persistentMemory string.
+ * No LLM call involved: the mission LLM already translated
+ * natural language into structured fields via the tool schemas.
+ */
+
+function tileKey(x, y) {
+  return `${x},${y}`;
+}
+
+function validateTile(x, y, bs) {
+  if (!Number.isInteger(x) || !Number.isInteger(y)) {
+    return `Error: concrete integer coordinates required, received (${x}, ${y}).`;
+  }
+
+  if (!isInsideMap(x, y, bs.map)) {
+    return `Error: tile (${x}, ${y}) is outside the map.`;
+  }
+
+  return null;
+}
+
+/*
+ * A delivery tile can hold at most one rule among
+ * forbidden / preferred / multiplier: the newest set wins.
+ */
+function clearDeliveryTileRules(rules, key) {
+  rules.forbiddenDeliveryTiles.delete(key);
+  rules.preferredDeliveryTiles.delete(key);
+  rules.deliveryMultipliers.delete(key);
+}
+
+function applyRuleChange(llmState, outcome) {
+  refreshPersistentMemory(llmState);
+  return `${outcome}\nPersistent memory is now:\n${llmState.persistentMemory}`;
+}
+
+// ---------- stack size ----------
+
+export function setStackSize({ mode, count }, bs, llmState) {
+  const allowedModes = new Set(["exactly", "at_least", "at_most"]);
+
+  if (!allowedModes.has(mode)) {
+    return `Error: mode must be one of exactly, at_least, at_most; received "${mode}".`;
+  }
+
+  if (!Number.isInteger(count) || count <= 0) {
+    return `Error: count must be a positive integer, received ${count}.`;
+  }
+
+  llmState.persistentRules.stackSize = { mode, count };
+
+  return applyRuleChange(
+    llmState,
+    `Stack-size rule set: deliver only when carrying ${mode.replace("_", " ")} ${count} parcel(s).`
+  );
+}
+
+export function removeStackSize(params, bs, llmState) {
+  if (!llmState.persistentRules.stackSize) {
+    return "No stack-size rule was stored.";
+  }
+
+  llmState.persistentRules.stackSize = null;
+
+  return applyRuleChange(llmState, "Stack-size rule removed.");
+}
+
+// ---------- parcel reward filters ----------
+
+export function setParcelFilter({ minReward, maxReward }, bs, llmState) {
+  const hasMin = typeof minReward === "number" && isFinite(minReward);
+  const hasMax = typeof maxReward === "number" && isFinite(maxReward);
+
+  if (!hasMin && !hasMax) {
+    return "Error: provide at least one of minReward or maxReward as a number.";
+  }
+
+  const filters = llmState.persistentRules.parcelFilters;
+
+  if (hasMin) filters.minReward = minReward;
+  if (hasMax) filters.maxReward = maxReward;
+
+  return applyRuleChange(
+    llmState,
+    `Parcel filter updated: minReward=${filters.minReward ?? "none"}, maxReward=${filters.maxReward ?? "none"}.`
+  );
+}
+
+export function removeParcelFilter(params, bs, llmState) {
+  const filters = llmState.persistentRules.parcelFilters;
+
+  if (filters.minReward == null && filters.maxReward == null) {
+    return "No parcel reward filter was stored.";
+  }
+
+  filters.minReward = null;
+  filters.maxReward = null;
+
+  return applyRuleChange(llmState, "Parcel reward filters removed.");
+}
+
+// ---------- delivery tile rules ----------
+
+export function forbidDeliveryTile({ x, y }, bs, llmState) {
+  const error = validateTile(x, y, bs);
+  if (error) return error;
+
+  const rules = llmState.persistentRules;
+  const key = tileKey(x, y);
+
+  clearDeliveryTileRules(rules, key);
+  rules.forbiddenDeliveryTiles.add(key);
+
+  return applyRuleChange(llmState, `Tile (${x}, ${y}) is now a forbidden delivery tile.`);
+}
+
+export function preferDeliveryTile({ x, y }, bs, llmState) {
+  const error = validateTile(x, y, bs);
+  if (error) return error;
+
+  const rules = llmState.persistentRules;
+  const key = tileKey(x, y);
+
+  clearDeliveryTileRules(rules, key);
+  rules.preferredDeliveryTiles.add(key);
+
+  return applyRuleChange(llmState, `Tile (${x}, ${y}) is now a preferred delivery tile.`);
+}
+
+export function setDeliveryMultiplier({ x, y, multiplier }, bs, llmState) {
+  const error = validateTile(x, y, bs);
+  if (error) return error;
+
+  if (typeof multiplier !== "number" || !isFinite(multiplier) || multiplier < 0) {
+    return `Error: multiplier must be a non-negative number, received ${multiplier}.`;
+  }
+
+  const rules = llmState.persistentRules;
+  const key = tileKey(x, y);
+
+  clearDeliveryTileRules(rules, key);
+  rules.deliveryMultipliers.set(key, multiplier);
+
+  return applyRuleChange(
+    llmState,
+    `Delivery at tile (${x}, ${y}) now gives ${multiplier}x reward.`
+  );
+}
+
+export function removeDeliveryTileRule({ x, y }, bs, llmState) {
+  const error = validateTile(x, y, bs);
+  if (error) return error;
+
+  const rules = llmState.persistentRules;
+  const key = tileKey(x, y);
+
+  const existed =
+    rules.forbiddenDeliveryTiles.has(key) ||
+    rules.preferredDeliveryTiles.has(key) ||
+    rules.deliveryMultipliers.has(key);
+
+  if (!existed) {
+    return `No delivery rule was stored for tile (${x}, ${y}).`;
+  }
+
+  clearDeliveryTileRules(rules, key);
+
+  return applyRuleChange(llmState, `Removed delivery rule for tile (${x}, ${y}).`);
+}
+
+// ---------- clear all strategy rules ----------
+
+export function clearPersistentRules(params, bs, llmState) {
+  const rules = llmState.persistentRules;
+
+  rules.stackSize = null;
+  rules.parcelFilters.minReward = null;
+  rules.parcelFilters.maxReward = null;
+  rules.forbiddenDeliveryTiles.clear();
+  rules.preferredDeliveryTiles.clear();
+  rules.deliveryMultipliers.clear();
+
+  return applyRuleChange(
+    llmState,
+    "All persistent strategy rules cleared. Navigation blocks are unchanged: use unblock_tile to remove them."
+  );
 }
 
 // ==========================================
@@ -227,6 +433,7 @@ export function blockTile({ x, y }, bs, llmState) {
   }
 
   llmState.persistentRules.blockedTiles.add(key);
+  refreshPersistentMemory(llmState);
 
   return `Tile (${x}, ${y}) is now blocked for pathfinding.`;
 }
@@ -243,6 +450,7 @@ export function unblockTile({ x, y }, bs, llmState) {
   }
 
   llmState.persistentRules.blockedTiles.delete(key);
+  refreshPersistentMemory(llmState);
 
   return `Tile (${x}, ${y}) is now walkable again for pathfinding.`;
 }

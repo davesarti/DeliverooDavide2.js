@@ -2,19 +2,23 @@ import { callLLMTool } from "./client.js";
 import {MAX_ITERATIONS, MAX_MISSION_HISTORY} from "../utils/constants.js";
 import { validateActionAgainstPersistentRules } from "./rulesValidator.js";
 import { SYSTEM_PROMPT, buildMissionUserPrompt, MISSION_TOOLS } from "./prompts/index.js";
-import { calculate, getMyPosition, findDeliveryTile, get_environment_state, updatePersistentMemory, blockTile, unblockTile } from "./tools.js";
-
-// ==========================================
-// Logging
-// ==========================================
-
-function timestamp() {
-  return new Date().toISOString();
-}
-
-function logWithTime(name, ...args) {
-  console.log(`[${timestamp()}] [${name ?? "LLM"}]`, ...args);
-}
+import {
+  calculate,
+  getMyPosition,
+  findDeliveryTile,
+  get_environment_state,
+  setStackSize,
+  removeStackSize,
+  setParcelFilter,
+  removeParcelFilter,
+  forbidDeliveryTile,
+  preferDeliveryTile,
+  setDeliveryMultiplier,
+  removeDeliveryTileRule,
+  clearPersistentRules,
+  blockTile,
+  unblockTile,
+} from "./tools.js";
 
 // ==========================================
 // Tool execution
@@ -81,10 +85,34 @@ async function executeTool(action, bs, llmState, actions) {
 
     case "get_environment_state":
       return get_environment_state(bs, llmState);
-    
-    case "update_persistent_memory":
-      return await updatePersistentMemory(llmState, params.text);
-    
+
+    case "set_stack_size":
+      return setStackSize(params, bs, llmState);
+
+    case "remove_stack_size":
+      return removeStackSize(params, bs, llmState);
+
+    case "set_parcel_filter":
+      return setParcelFilter(params, bs, llmState);
+
+    case "remove_parcel_filter":
+      return removeParcelFilter(params, bs, llmState);
+
+    case "forbid_delivery_tile":
+      return forbidDeliveryTile(params, bs, llmState);
+
+    case "prefer_delivery_tile":
+      return preferDeliveryTile(params, bs, llmState);
+
+    case "set_delivery_multiplier":
+      return setDeliveryMultiplier(params, bs, llmState);
+
+    case "remove_delivery_tile_rule":
+      return removeDeliveryTileRule(params, bs, llmState);
+
+    case "clear_persistent_rules":
+      return clearPersistentRules(params, bs, llmState);
+
     case "block_tile":
       return blockTile(params, bs, llmState);
 
@@ -110,8 +138,7 @@ function saveMissionHistory(llmState, { request, reply }) {
 
   llmState.missionHistory.push({
     request,
-    reply,
-    completedAt: Date.now(),
+    reply
   });
 
   if (llmState.missionHistory.length > MAX_MISSION_HISTORY) {
@@ -126,13 +153,13 @@ function saveMissionHistory(llmState, { request, reply }) {
  * until the model produces final_reply.
  */
 export async function startLLMAgent(socket, bs, llmState, actions) {
-  logWithTime(bs.me.name, "LLM chat listener started");
+  console.log(`[${bs.me.name ?? "LLM"}]`, "LLM chat listener started");
 
   socket.onMsg(async (id, name, msg) => {
     if (!msg || msg.trim() === "") return;
     if (id === bs.me.id) return;
 
-    logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
+    console.log(`[${bs.me.name ?? "LLM"}]`, `Mission from ${name} (${id}): ${msg}`);
 
     // Real conversation history: grows on each iteration.
     const messages = [
@@ -148,7 +175,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           temperature: 0,
         });
 
-        logWithTime(bs.me.name, `Action: ${action.name}(${JSON.stringify(action.params)})`);
+        console.log(`[${bs.me.name ?? "LLM"}]`, `Action: ${action.name}(${JSON.stringify(action.params)})`);
 
         // Save the assistant's call in the history in the native format.
         messages.push({
@@ -187,7 +214,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         }
         
         const observation = await executeTool(action, bs, llmState, actions);
-        logWithTime(bs.me.name, "Observation:", observation);
+        console.log(`[${bs.me.name ?? "LLM"}]`, "Observation:", observation);
 
         // Save the tool result in the history under the "tool" role.
         messages.push({
@@ -197,7 +224,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         });
       }
     } catch (error) {
-      logWithTime(bs.me.name, "Mission error:", error?.message ?? error);
+      console.log(`[${bs.me.name ?? "LLM"}]`, "Mission error:", error?.message ?? error);
       try {
         await socket.emitSay(id, "Sorry, I could not complete the mission.");
       } catch {}

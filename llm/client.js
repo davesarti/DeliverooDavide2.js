@@ -103,15 +103,18 @@ export async function callLLMText({ messages, temperature = 0 }) {
 }
 
 function coerceNumericParams(obj) {
-  const numericFields = new Set(["x", "y"]);
+  const integerFields = new Set(["x", "y", "count"]);
+  const floatFields = new Set(["minReward", "maxReward", "multiplier"]);
 
   for (const key in obj) {
-    if (
-      numericFields.has(key) &&
-      typeof obj[key] === "string" &&
-      /^-?\d+$/.test(obj[key].trim())
-    ) {
-      obj[key] = Number(obj[key].trim());
+    if (typeof obj[key] !== "string") continue;
+
+    const trimmed = obj[key].trim();
+
+    if (integerFields.has(key) && /^-?\d+$/.test(trimmed)) {
+      obj[key] = Number(trimmed);
+    } else if (floatFields.has(key) && /^-?\d+(\.\d+)?$/.test(trimmed)) {
+      obj[key] = Number(trimmed);
     }
   }
 
