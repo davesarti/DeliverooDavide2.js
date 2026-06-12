@@ -223,7 +223,9 @@ export function createSessionLogger({ maxIterations, maxMissionHistory, model } 
     // "rejected": already counted in logValidatorDecision → no additional counter
 
     logEvent(
-      status === "completed" ? "mission_completed" : "mission_failed",
+      status === "completed" ? "mission_completed"
+      : status === "rejected" ? "mission_rejected"
+      : "mission_failed",
       { reply, steps: m.steps },
       missionId
     );
