@@ -212,7 +212,7 @@ function getParcelDecayPerSecond(parcelDecayingEvent) {
  * Estimates how much reward is lost per tile traveled.
  * agentId identifies the correct agent in the shared speed Map.
  */
-function getRewardLossPerTile(parcelDecayingEvent, agentId = "default") {
+export function getRewardLossPerTile(parcelDecayingEvent, agentId = "default") {
   const tilesPerSecond = getTilesPerSecond(agentId);
   if (!tilesPerSecond || tilesPerSecond <= 0) return 0;
   return getParcelDecayPerSecond(parcelDecayingEvent) / tilesPerSecond;
