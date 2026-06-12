@@ -102,6 +102,16 @@ export function findDeliveryTile({ query }, bs) {
 
 export function get_environment_state(bs, llmState) {
   const me = bs.me;
+  const rules = llmState.persistentRules ?? {};
+
+  const minReward = rules.parcelFilters?.minReward ?? null;
+  const maxReward = rules.parcelFilters?.maxReward ?? null;
+
+  const passesFilter = (reward) => {
+    if (minReward != null && reward < minReward) return false;
+    if (maxReward != null && reward > maxReward) return false;
+    return true;
+  };
 
   const carriedParcels = [...bs.parcels.values()]
     .filter((parcel) => parcel.carriedBy === me.id)
@@ -110,8 +120,12 @@ export function get_environment_state(bs, llmState) {
       reward: parcel.reward ?? 0,
     }));
 
+  // Only parcels that satisfy the active reward filter are returned.
+  // Parcels rejected by the filter are omitted entirely so the model
+  // never has to evaluate suitability itself.
   const visibleParcels = [...bs.parcels.values()]
     .filter((parcel) => !parcel.carriedBy)
+    .filter((parcel) => passesFilter(parcel.reward ?? 0))
     .map((parcel) => ({
       id: parcel.id,
       x: Math.round(parcel.x),
@@ -125,12 +139,26 @@ export function get_environment_state(bs, llmState) {
     })
     .slice(0, 8);
 
+  const forbidden = rules.forbiddenDeliveryTiles ?? new Set();
+  const multipliers = rules.deliveryMultipliers ?? new Map();
+  const preferred = rules.preferredDeliveryTiles ?? new Set();
+
+  // Delivery tiles are enriched with the rules attached to each tile and,
+  // when a multiplier is set, with the effective reward after the multiplier.
+  // Forbidden tiles are dropped so the model is never offered an invalid choice.
   const deliveryTiles = bs.map.deliveryTiles
-    .map((tile) => ({
-      x: tile.x,
-      y: tile.y,
-      distanceToMe: distance(me, tile),
-    }))
+    .map((tile) => {
+      const key = `${tile.x},${tile.y}`;
+      const multiplier = multipliers.has(key) ? multipliers.get(key) : null;
+      return {
+        x: tile.x,
+        y: tile.y,
+        distanceToMe: distance(me, tile),
+        ...(multiplier != null ? { rewardMultiplier: multiplier } : {}),
+        ...(preferred.has(key) ? { preferred: true } : {}),
+      };
+    })
+    .filter((tile) => !forbidden.has(`${tile.x},${tile.y}`))
     .sort((a, b) => a.distanceToMe - b.distanceToMe)
     .slice(0, 5);
 
