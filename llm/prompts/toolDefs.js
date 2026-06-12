@@ -55,7 +55,7 @@ export const MISSION_TOOLS = [
 
   def(
     "get_environment_state",
-    "Read the current environment snapshot: me {x,y,score}; carried {count,totalReward,parcels}; visibleParcels (id,x,y,reward,distanceToMe, sorted by reward then distance); deliveryTiles (nearest first); persistentMemory (active rules). Use before choosing parcels or delivery tiles.",
+    "Read the current environment snapshot: me {x,y,score}; carried {count,totalReward,parcels}; visibleParcels (id,x,y,reward,distanceToMe, sorted by reward then distance); deliveryTiles (nearest first, with rewardMultiplier and preferred flags when set); persistentMemory (active rules). visibleParcels already excludes parcels rejected by the active reward filter, and deliveryTiles already excludes forbidden tiles: every parcel and tile listed is a valid choice. Use before choosing parcels or delivery tiles.",
     { thought }
   ),
 
@@ -76,7 +76,7 @@ export const MISSION_TOOLS = [
 
   def(
     "go_pick_up",
-    "Move to a visible parcel and pick it up. Use the parcel id and coordinates from the latest get_environment_state observation. Before calling this tool, verify that the parcel reward satisfies the active parcel filter in persistentMemory (minReward / maxReward). Do not attempt pickup on a parcel that fails the filter: the runtime will reject it.",
+    "Move to a visible parcel and pick it up. Use the parcel id and coordinates from the latest get_environment_state observation. Every parcel in visibleParcels already satisfies the active filter, so any of them can be picked up.",
     {
       thought,
       x: intParam("x coordinate of the visible parcel."),
