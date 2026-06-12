@@ -232,9 +232,13 @@ export const SYSTEM_EXECUTOR_TOOLS = [
 
   def(
     "final_reply",
-    "Send the final response and end the current mission.",
+    "Send the final response and end the mission.",
     {
-      thought,
+      thought: param(
+        "Before ending, trace back through this conversation: " +
+        "what was the original mission goal? What has been accomplished so far? " +
+        "Is the goal fully and completely achieved? Only proceed if yes."
+      ),
       message: param("Concise message stating what was done or why the mission ended."),
     },
     ["thought", "message"]
