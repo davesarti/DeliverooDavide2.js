@@ -76,7 +76,7 @@ export const MISSION_TOOLS = [
 
   def(
     "go_pick_up",
-    "Move to a visible parcel and pick it up. Use the parcel id and coordinates from the latest get_environment_state observation.",
+    "Move to a visible parcel and pick it up. Use the parcel id and coordinates from the latest get_environment_state observation. Before calling this tool, verify that the parcel reward satisfies the active parcel filter in persistentMemory (minReward / maxReward). Do not attempt pickup on a parcel that fails the filter: the runtime will reject it.",
     {
       reason,
       x: intParam("x coordinate of the visible parcel."),
@@ -99,7 +99,7 @@ export const MISSION_TOOLS = [
 
   def(
     "explore",
-    "Move toward spawn areas to search for parcels. Use when the mission requires parcels and the latest observation contains no suitable visible parcel. Observe the environment again afterwards.",
+    "Move toward spawn areas to search for parcels. Use when the mission requires parcels and the latest observation contains no suitable visible parcel. Always call get_environment_state after exploring to reassess. For collection missions requiring many parcels, multiple explore cycles may be needed: one failed explore is not grounds for failure.",
     { reason }
   ),
 
@@ -109,7 +109,7 @@ export const MISSION_TOOLS = [
 
   def(
     "set_stack_size",
-    "Store the durable rule: deliver only when carrying exactly / at least / at most N parcels. Replaces any previous stack-size rule.",
+    "Store the durable rule: deliver only when carrying exactly / at least / at most N parcels. Replaces any previous stack-size rule automatically: do not call remove_stack_size before this.",
     {
       reason,
       mode: {
@@ -130,7 +130,7 @@ export const MISSION_TOOLS = [
 
   def(
     "set_parcel_filter",
-    "Store durable parcel reward filters: ignore parcels with reward below minReward and/or above maxReward. Provide only the bounds stated in the request; each provided bound replaces the previous one.",
+    "Store durable parcel reward filters: ignore parcels with reward below minReward and/or above maxReward. Provide only the bounds stated in the request; each provided bound replaces the previous one. Omit parameters not needed: do not pass null or the string 'null' for unused bounds.",
     {
       reason,
       minReward: numParam("Ignore parcels with reward strictly below this value."),
