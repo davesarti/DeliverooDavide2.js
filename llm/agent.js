@@ -1,7 +1,16 @@
 import { callLLMTool } from "./client.js";
-import {MAX_ITERATIONS, MAX_MISSION_HISTORY} from "../utils/constants.js";
+import { MAX_ITERATIONS, MAX_MISSION_HISTORY } from "../utils/constants.js";
 import { validateActionAgainstPersistentRules } from "./rulesValidator.js";
-import { SYSTEM_PROMPT, buildMissionUserPrompt, MISSION_TOOLS } from "./prompts/index.js";
+import {
+  SYSTEM_VALIDATOR_PROMPT,
+  SYSTEM_VALIDATOR_TOOLS,
+  SYSTEM_EXECUTOR_PROMPT,
+  SYSTEM_EXECUTOR_TOOLS,
+  buildValidatorUserPrompt,
+  buildMissionUserPrompt,
+  mapExecutorAction,
+} from "./prompts/index.js";
+
 import {
   calculate,
   getMyPosition,
@@ -36,15 +45,10 @@ function logWithTime(name, ...args) {
 // Tool execution
 // ==========================================
 
-/*
- * Executes the atomic action chosen by the model and returns the observation.
- * action = { name: string, params: object }
- */
 async function executeTool(action, bs, llmState, actions) {
   const { name, params } = action;
 
   switch (name) {
-
     case "calculate":
       return calculate(params);
 
@@ -59,14 +63,14 @@ async function executeTool(action, bs, llmState, actions) {
         await actions.goTo(params.x, params.y);
         return `Arrived at (${params.x}, ${params.y}).`;
       } catch (error) {
-        return `Could not reach (${params.x}, ${params.y}): ${error?.message ?? error}. The tile may be unreachable or outside the map.`;
+        return `Could not reach (${params.x}, ${params.y}): ${error?.message ?? error}.`;
       }
     }
 
     case "go_pick_up": {
       try {
         await actions.goPickUp(params.x, params.y, params.parcelId);
-        return `Picked up parcel ${params.parcelId ?? ""} at (${params.x}, ${params.y}).`;
+        return `Picked up parcel ${params.parcelId} at (${params.x}, ${params.y}).`;
       } catch (error) {
         return `Could not pick up at (${params.x}, ${params.y}): ${error?.message ?? error}.`;
       }
@@ -137,12 +141,9 @@ async function executeTool(action, bs, llmState, actions) {
 }
 
 // ==========================================
-// Entry point
+// Mission history
 // ==========================================
 
-/*
- * Saves the history of completed missions, keeping only the last N.
- */
 function saveMissionHistory(llmState, { request, reply }) {
   if (!Array.isArray(llmState.missionHistory)) {
     llmState.missionHistory = [];
@@ -154,17 +155,38 @@ function saveMissionHistory(llmState, { request, reply }) {
     completedAt: Date.now(),
   });
 
-  if (llmState.missionHistory.length > MAX_MISSION_HISTORY) {
+  while (llmState.missionHistory.length > MAX_MISSION_HISTORY) {
     llmState.missionHistory.shift();
   }
 }
 
-/*
- * Starts the special-mission listener via chat.
- * For each received message it runs the ReAct loop maintaining
- * a real conversation history (assistant + tool roles),
- * until the model produces final_reply.
- */
+// ==========================================
+// Mission validator
+// ==========================================
+
+async function validateMission(msg, llmState) {
+  const { action } = await callLLMTool({
+    messages: [
+      { role: "system", content: SYSTEM_VALIDATOR_PROMPT },
+      {
+        role: "user",
+        content: buildValidatorUserPrompt(
+          msg,
+          llmState.persistentMemory
+        ),
+      },
+    ],
+    tools: SYSTEM_VALIDATOR_TOOLS,
+    temperature: 0,
+  });
+
+  return action.params;
+}
+
+// ==========================================
+// Entry point
+// ==========================================
+
 export async function startLLMAgent(socket, bs, llmState, actions) {
   logWithTime(bs.me.name, "LLM chat listener started");
 
@@ -174,25 +196,61 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
     logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
 
-    // Real conversation history: grows on each iteration.
-    const messages = [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildMissionUserPrompt(msg, llmState.persistentMemory, llmState.missionHistory) },
-    ];
-
     try {
+      const validation = await validateMission(msg, llmState);
+
+      if (validation.thought) {
+        logWithTime(bs.me.name, `Validator thought: ${validation.thought}`);
+      }
+
+      logWithTime(
+        bs.me.name,
+        `Validator decision: accepted=${validation.accepted}, reason=${validation.reason}`
+      );
+
+      if (!validation.accepted) {
+        await socket.emitSay(id, validation.reason);
+
+        saveMissionHistory(llmState, {
+          request: msg,
+          reply: validation.reason,
+        });
+
+        return;
+      }
+
+      const messages = [
+        { role: "system", content: SYSTEM_EXECUTOR_PROMPT },
+        {
+          role: "user",
+          content: buildMissionUserPrompt(
+            msg,
+            llmState.persistentMemory,
+            llmState.missionHistory
+          ),
+        },
+      ];
+
+      let completed = false;
+      let finalReply = null;
+
       for (let i = 0; i < MAX_ITERATIONS; i++) {
-        const { action, toolCall } = await callLLMTool({
+        const { action: rawAction, toolCall } = await callLLMTool({
           messages,
-          tools: MISSION_TOOLS,
+          tools: SYSTEM_EXECUTOR_TOOLS,
           temperature: 0,
         });
 
-        const { thought, ...actionParams } = action.params;
-        if (thought) logWithTime(bs.me.name, `Thought: ${thought}`);
-        logWithTime(bs.me.name, `Action: ${action.name}(${JSON.stringify(actionParams)})`);
+        const action = mapExecutorAction(rawAction);
 
-        // Save the assistant's call in the history in the native format.
+        const { thought, ...actionParams } = rawAction.params;
+        if (thought) logWithTime(bs.me.name, `Thought: ${thought}`);
+
+        logWithTime(
+          bs.me.name,
+          `Action: ${rawAction.name}(${JSON.stringify(actionParams)})`
+        );
+
         messages.push({
           role: "assistant",
           content: null,
@@ -200,13 +258,15 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         });
 
         if (action.name === "final_reply") {
-          await socket.emitSay(id, action.params.message);
+          finalReply = action.params.message;
+          await socket.emitSay(id, finalReply);
 
           saveMissionHistory(llmState, {
             request: msg,
-            reply: action.params.message,
+            reply: finalReply,
           });
 
+          completed = true;
           break;
         }
 
@@ -227,19 +287,30 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
           continue;
         }
-        
+
         const observation = await executeTool(action, bs, llmState, actions);
         logWithTime(bs.me.name, "Observation:", observation);
 
-        // Save the tool result in the history under the "tool" role.
         messages.push({
           role: "tool",
           tool_call_id: toolCall.id,
           content: observation,
         });
       }
+
+      if (!completed) {
+        finalReply = "Mission failed: maximum number of execution steps reached.";
+
+        await socket.emitSay(id, finalReply);
+
+        saveMissionHistory(llmState, {
+          request: msg,
+          reply: finalReply,
+        });
+      }
     } catch (error) {
       logWithTime(bs.me.name, "Mission error:", error?.message ?? error);
+
       try {
         await socket.emitSay(id, "Sorry, I could not complete the mission.");
       } catch {}
