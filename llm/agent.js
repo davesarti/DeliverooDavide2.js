@@ -138,7 +138,8 @@ function saveMissionHistory(llmState, { request, reply }) {
 
   llmState.missionHistory.push({
     request,
-    reply
+    reply,
+    completedAt: Date.now(), 
   });
 
   if (llmState.missionHistory.length > MAX_MISSION_HISTORY) {
