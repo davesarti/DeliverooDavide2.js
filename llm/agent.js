@@ -10,6 +10,8 @@ import {
   buildMissionUserPrompt,
   mapExecutorAction,
 } from "./prompts/index.js";
+import { createSessionLogger } from "./historyLogger.js";
+import { LLM_CONFIG } from "../config.js";
 
 import {
   calculate,
@@ -190,6 +192,20 @@ async function validateMission(msg, llmState) {
 export async function startLLMAgent(socket, bs, llmState, actions) {
   logWithTime(bs.me.name, "LLM chat listener started");
 
+  const logger = createSessionLogger({
+    maxIterations,
+    maxMissionHistory: MAX_MISSION_HISTORY,
+    model: LLM_CONFIG?.model,
+  });
+
+  logWithTime(bs.me.name, `Session logging → ${logger.sessionDir}`);
+
+  // Flush on exit so the last summary is always written
+  const onExit = () => logger.endSession();
+  process.once("exit",    onExit);
+  process.once("SIGINT",  () => { onExit(); process.exit(0); });
+  process.once("SIGTERM", () => { onExit(); process.exit(0); });
+
   socket.onMsg(async (id, name, msg) => {
     if (!msg || msg.trim() === "") return;
     if (id === bs.me.id) return;
@@ -197,6 +213,8 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
     logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
 
     try {
+      const missionId = logger.startMission(msg);
+
       const validation = await validateMission(msg, llmState);
 
       if (validation.thought) {
@@ -208,6 +226,8 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         `Validator decision: accepted=${validation.accepted}, reason=${validation.reason}`
       );
 
+      logger.logValidatorDecision(missionId, validation);
+
       if (!validation.accepted) {
         await socket.emitSay(id, validation.reason);
 
@@ -216,6 +236,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           reply: validation.reason,
         });
 
+        logger.endMission(missionId, "rejected", validation.reason);
         return;
       }
 
@@ -251,6 +272,13 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           `Action: ${rawAction.name}(${JSON.stringify(actionParams)})`
         );
 
+        logger.logExecutorAction(missionId, {
+          rawName:    rawAction.name,
+          mappedName: action.name,
+          params:     actionParams,
+          thought:    thought ?? null,
+        });
+
         messages.push({
           role: "assistant",
           content: null,
@@ -259,6 +287,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
         if (action.name === "final_reply") {
           finalReply = action.params.message;
+          logger.logFinalReply(missionId, finalReply);
           await socket.emitSay(id, finalReply);
 
           saveMissionHistory(llmState, {
@@ -266,6 +295,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
             reply: finalReply,
           });
 
+          logger.endMission(missionId, "completed", finalReply);
           completed = true;
           break;
         }
@@ -278,6 +308,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
         if (validationError) {
           const observation = `Action rejected by persistent rules: ${validationError}`;
+          logger.logActionRejected(missionId, action.name, validationError);
 
           messages.push({
             role: "tool",
@@ -290,6 +321,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
         const observation = await executeTool(action, bs, llmState, actions);
         logWithTime(bs.me.name, "Observation:", observation);
+        logger.logObservation(missionId, action.name, observation);
 
         messages.push({
           role: "tool",
@@ -307,9 +339,12 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           request: msg,
           reply: finalReply,
         });
+
+        logger.endMission(missionId, "failed", finalReply);
       }
     } catch (error) {
       logWithTime(bs.me.name, "Mission error:", error?.message ?? error);
+      logger.endMission(missionId, "failed", error?.message ?? String(error));
 
       try {
         await socket.emitSay(id, "Sorry, I could not complete the mission.");
