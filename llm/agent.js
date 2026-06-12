@@ -188,6 +188,24 @@ async function validateMission(msg, llmState) {
 }
 
 // ==========================================
+// Thought stripping
+// ==========================================
+
+function stripThought(action) {
+  if (!action?.params) return { action, thought: null };
+
+  const { thought = null, ...params } = action.params;
+
+  return {
+    thought,
+    action: {
+      ...action,
+      params,
+    },
+  };
+}
+
+// ==========================================
 // Entry point
 // ==========================================
 
@@ -202,11 +220,16 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
   logWithTime(bs.me.name, `Session logging → ${logger.sessionDir}`);
 
-  // Flush on exit so the last summary is always written
   const onExit = () => logger.endSession();
-  process.once("exit",    onExit);
-  process.once("SIGINT",  () => { onExit(); process.exit(0); });
-  process.once("SIGTERM", () => { onExit(); process.exit(0); });
+  process.once("exit", onExit);
+  process.once("SIGINT", () => {
+    onExit();
+    process.exit(0);
+  });
+  process.once("SIGTERM", () => {
+    onExit();
+    process.exit(0);
+  });
 
   socket.onMsg(async (id, name, msg) => {
     if (!msg || msg.trim() === "") return;
@@ -215,14 +238,11 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
     logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
 
     let missionId = null;
+
     try {
       missionId = logger.startMission(msg);
 
       const validation = await validateMission(msg, llmState);
-
-      if (validation.thought) {
-        logWithTime(bs.me.name, `Validator thought: ${validation.thought}`);
-      }
 
       logWithTime(
         bs.me.name,
@@ -265,10 +285,14 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           temperature: 0,
         });
 
-        const action = mapExecutorAction(rawAction);
+        const { thought = null, ...actionParams } = rawAction.params ?? {};
 
-        const { thought, ...actionParams } = rawAction.params;
-        if (thought) logWithTime(bs.me.name, `Thought: ${thought}`);
+        const cleanRawAction = {
+          ...rawAction,
+          params: actionParams,
+        };
+
+        const action = mapExecutorAction(cleanRawAction);
 
         logWithTime(
           bs.me.name,
@@ -276,10 +300,10 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         );
 
         logger.logExecutorAction(missionId, {
-          rawName:    rawAction.name,
+          rawName: rawAction.name,
           mappedName: action.name,
-          params:     actionParams,
-          thought:    thought ?? null,
+          params: actionParams,
+          thought,
         });
 
         messages.push({
@@ -290,6 +314,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
         if (action.name === "final_reply") {
           finalReply = action.params.message;
+
           logger.logFinalReply(missionId, finalReply);
           await socket.emitSay(id, finalReply);
 
@@ -311,6 +336,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
         if (validationError) {
           const observation = `Action rejected by persistent rules: ${validationError}`;
+
           logger.logActionRejected(missionId, action.name, validationError);
 
           messages.push({
@@ -323,6 +349,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         }
 
         const observation = await executeTool(action, bs, llmState, actions);
+
         logWithTime(bs.me.name, "Observation:", observation);
         logger.logObservation(missionId, action.name, observation);
 
@@ -346,8 +373,13 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         logger.endMission(missionId, "failed", finalReply);
       }
     } catch (error) {
-      logWithTime(bs.me.name, "Mission error:", error?.message ?? error);
-      if (missionId) logger.endMission(missionId, "failed", error?.message ?? String(error));
+      const errorMessage = error?.message ?? String(error);
+
+      logWithTime(bs.me.name, "Mission error:", errorMessage);
+
+      if (missionId) {
+        logger.endMission(missionId, "failed", errorMessage);
+      }
 
       try {
         await socket.emitSay(id, "Sorry, I could not complete the mission.");
