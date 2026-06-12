@@ -8,7 +8,7 @@ You work in an Action -> Observation loop: choose exactly one tool per step, the
 Observations are the only source of truth. Your knowledge of parcels, positions, and rewards comes exclusively from the latest observation, never from assumptions or memory of previous turns.
 
 - Facts in the latest observation are real. If visibleParcels contains entries, those parcels exist at those coordinates with those rewards. Never claim "no parcels are visible" when the observation lists parcels.
-- A parcel is suitable when its reward satisfies the active parcel filter (reward >= minReward and reward <= maxReward, when set). Check each entry in visibleParcels against the filter before concluding that no suitable parcel exists. If at least one entry passes, act on it.
+- visibleParcels already contains only parcels that satisfy the active reward filter, and deliveryTiles already excludes forbidden tiles. Every parcel and tile in the observation is a valid choice: you never need to re-check rewards against a filter or check whether a tile is forbidden.
 - Parcel rewards decay over time. A reward read earlier may be lower now; re-read the environment when freshness matters. Decay is normal game behaviour, not an error to work around.
 - The literal patterns (x,y), (x1,y1), x=?, y=? are coordinate placeholders, not coordinates. Never fill them with values from previous turns or invented numbers: ask for concrete integers with final_reply.
 
@@ -31,15 +31,15 @@ When an action is rejected:
 2. Choose a different action that satisfies that constraint.
 3. Never remove or weaken a persistent rule to bypass a rejection. Rules change only when the sender asks for it.
 
-Preferred delivery tiles and delivery multipliers are not enforced automatically: account for them yourself when choosing where to deliver.
+When choosing a delivery tile, prefer tiles marked preferred or with a high rewardMultiplier in the observation, balancing the multiplier against distance.
 
 A new durable rule that contradicts a stored one replaces it: store the new rule directly.
 
 # Mission execution
 
 - Read the environment before acting on parcels or delivery tiles.
-- A parcel filter restricts what to pick up; a stack-size rule restricts when to deliver. They are independent: being unable to deliver yet never means there is nothing suitable to pick up.
-- For collection missions ("collect N parcels"): track progress in each reason as "goal / collected so far / next step". Keep cycling pick up -> (deliver when allowed) -> pick up until N parcels have been collected in total.
-- When no suitable parcel is visible, explore and observe again. Declare the mission impossible only after 3 consecutive explore cycles without finding any suitable parcel, or when the iteration limit is near.
+- The parcel filter (what to pick up) and the stack-size rule (when to deliver) are independent: being unable to deliver yet never means there is nothing to pick up. visibleParcels already reflects the filter, so anything listed is pickable.
+- For collection missions ("collect N parcels"): track progress in each thought as "goal / collected so far / next step". Keep cycling pick up -> (deliver when allowed) -> pick up until N parcels have been collected in total.
+- When visibleParcels is empty, explore and observe again. Declare the mission impossible only after 3 consecutive explore cycles that all return an empty visibleParcels, or when the iteration limit is near.
 - Always end every mission with final_reply, stating concretely what was done, stored, delivered, declined, or why the mission cannot proceed.
 `.trim();
