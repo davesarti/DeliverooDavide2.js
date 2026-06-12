@@ -1,5 +1,5 @@
+import { distance, isInsideMap, isDeliveryTile } from "../utils/mapUtils.js";
 import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
-import { distance, isInsideMap } from "../utils/mapUtils.js";
 
 // ==========================================
 // calculate
@@ -245,6 +245,17 @@ function validateTile(x, y, bs) {
   return null;
 }
 
+function validateDeliveryTile(x, y, bs) {
+  const tileError = validateTile(x, y, bs);
+  if (tileError) return tileError;
+
+  if (!isDeliveryTile(x, y, bs.map.deliveryTiles)) {
+    return `Error: tile (${x}, ${y}) is not a delivery tile.`;
+  }
+
+  return null;
+}
+
 /*
  * A delivery tile can hold at most one rule among
  * forbidden / preferred / multiplier: the newest set wins.
@@ -328,7 +339,7 @@ export function removeParcelFilter(params, bs, llmState) {
 // ---------- delivery tile rules ----------
 
 export function forbidDeliveryTile({ x, y }, bs, llmState) {
-  const error = validateTile(x, y, bs);
+  const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
   const rules = llmState.persistentRules;
@@ -341,7 +352,7 @@ export function forbidDeliveryTile({ x, y }, bs, llmState) {
 }
 
 export function preferDeliveryTile({ x, y }, bs, llmState) {
-  const error = validateTile(x, y, bs);
+  const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
   const rules = llmState.persistentRules;
@@ -354,7 +365,7 @@ export function preferDeliveryTile({ x, y }, bs, llmState) {
 }
 
 export function setDeliveryMultiplier({ x, y, multiplier }, bs, llmState) {
-  const error = validateTile(x, y, bs);
+  const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
   if (typeof multiplier !== "number" || !isFinite(multiplier) || multiplier < 0) {
@@ -374,7 +385,7 @@ export function setDeliveryMultiplier({ x, y, multiplier }, bs, llmState) {
 }
 
 export function removeDeliveryTileRule({ x, y }, bs, llmState) {
-  const error = validateTile(x, y, bs);
+  const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
   const rules = llmState.persistentRules;
