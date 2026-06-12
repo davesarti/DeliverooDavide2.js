@@ -45,37 +45,54 @@ function logWithTime(name, ...args) {
 }
 
 // ==========================================
+// Tool execution helpers
+// ==========================================
+
+function makeToolResult(observation, extra = {}) {
+  return {
+    observation,
+    ...extra,
+  };
+}
+
+// ==========================================
 // Tool execution
 // ==========================================
 
-async function executeTool(action, bs, llmState, actions) {
+async function executeTool(action, bs, llmState, actions, missionStats) {
   const { name, params } = action;
 
   switch (name) {
     case "calculate":
-      return calculate(params);
+      return makeToolResult(calculate(params));
 
     case "get_my_position":
-      return getMyPosition(bs);
+      return makeToolResult(getMyPosition(bs));
 
     case "find_delivery_tile":
-      return findDeliveryTile(params, bs);
+      return makeToolResult(findDeliveryTile(params, bs));
 
     case "go_to": {
       try {
         await actions.goTo(params.x, params.y);
-        return `Arrived at (${params.x}, ${params.y}).`;
+        return makeToolResult(`Arrived at (${params.x}, ${params.y}).`);
       } catch (error) {
-        return `Could not reach (${params.x}, ${params.y}): ${error?.message ?? error}.`;
+        return makeToolResult(
+          `Could not reach (${params.x}, ${params.y}): ${error?.message ?? error}.`
+        );
       }
     }
 
     case "go_pick_up": {
       try {
         await actions.goPickUp(params.x, params.y, params.parcelId);
-        return `Picked up parcel ${params.parcelId} at (${params.x}, ${params.y}).`;
+        return makeToolResult(
+          `Picked up parcel ${params.parcelId} at (${params.x}, ${params.y}).`
+        );
       } catch (error) {
-        return `Could not pick up at (${params.x}, ${params.y}): ${error?.message ?? error}.`;
+        return makeToolResult(
+          `Could not pick up at (${params.x}, ${params.y}): ${error?.message ?? error}.`
+        );
       }
     }
 
@@ -87,59 +104,71 @@ async function executeTool(action, bs, llmState, actions) {
 
         await actions.goDropOff(params.x, params.y);
 
-        return `Delivered ${deliveredCount} parcel(s) at (${params.x}, ${params.y}).`;
+        return makeToolResult(
+          `Delivered ${deliveredCount} parcel(s) at (${params.x}, ${params.y}).`,
+          {
+            deliverySucceeded: true,
+            deliveredCount,
+          }
+        );
       } catch (error) {
-        return `Could not deliver at (${params.x}, ${params.y}): ${error?.message ?? error}.`;
+        return makeToolResult(
+          `Could not deliver at (${params.x}, ${params.y}): ${error?.message ?? error}.`,
+          {
+            deliverySucceeded: false,
+            deliveredCount: 0,
+          }
+        );
       }
     }
 
     case "explore": {
       try {
         await actions.explore();
-        return "Exploration complete.";
+        return makeToolResult("Exploration complete.");
       } catch (error) {
-        return `Could not explore: ${error?.message ?? error}.`;
+        return makeToolResult(`Could not explore: ${error?.message ?? error}.`);
       }
     }
 
     case "get_environment_state":
-      return get_environment_state(bs, llmState);
+      return makeToolResult(get_environment_state(bs, llmState, missionStats));
 
     case "set_stack_size":
-      return setStackSize(params, bs, llmState);
+      return makeToolResult(setStackSize(params, bs, llmState));
 
     case "remove_stack_size":
-      return removeStackSize(params, bs, llmState);
+      return makeToolResult(removeStackSize(params, bs, llmState));
 
     case "set_parcel_filter":
-      return setParcelFilter(params, bs, llmState);
+      return makeToolResult(setParcelFilter(params, bs, llmState));
 
     case "remove_parcel_filter":
-      return removeParcelFilter(params, bs, llmState);
+      return makeToolResult(removeParcelFilter(params, bs, llmState));
 
     case "forbid_delivery_tile":
-      return forbidDeliveryTile(params, bs, llmState);
+      return makeToolResult(forbidDeliveryTile(params, bs, llmState));
 
     case "prefer_delivery_tile":
-      return preferDeliveryTile(params, bs, llmState);
+      return makeToolResult(preferDeliveryTile(params, bs, llmState));
 
     case "set_delivery_multiplier":
-      return setDeliveryMultiplier(params, bs, llmState);
+      return makeToolResult(setDeliveryMultiplier(params, bs, llmState));
 
     case "remove_delivery_tile_rule":
-      return removeDeliveryTileRule(params, bs, llmState);
+      return makeToolResult(removeDeliveryTileRule(params, bs, llmState));
 
     case "clear_persistent_rules":
-      return clearPersistentRules(params, bs, llmState);
+      return makeToolResult(clearPersistentRules(params, bs, llmState));
 
     case "block_tile":
-      return blockTile(params, bs, llmState);
+      return makeToolResult(blockTile(params, bs, llmState));
 
     case "unblock_tile":
-      return unblockTile(params, bs, llmState);
+      return makeToolResult(unblockTile(params, bs, llmState));
 
     default:
-      return `Unknown action: ${name}.`;
+      return makeToolResult(`Unknown action: ${name}.`);
   }
 }
 
@@ -277,6 +306,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
       let completed = false;
       let finalReply = null;
+      let missionStats = null;
 
       for (let i = 0; i < MAX_ITERATIONS; i++) {
         const { action: rawAction, toolCall } = await callLLMTool({
@@ -348,7 +378,22 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           continue;
         }
 
-        const observation = await executeTool(action, bs, llmState, actions);
+        const toolResult = await executeTool(
+          action,
+          bs,
+          llmState,
+          actions,
+          missionStats
+        );
+        const observation = toolResult.observation;
+
+        if (toolResult.deliverySucceeded) {
+          if (missionStats === null) {
+            missionStats = { deliveries: toolResult.deliveredCount };
+          } else {
+            missionStats.deliveries += toolResult.deliveredCount;
+          }
+        }
 
         logWithTime(bs.me.name, "Observation:", observation);
         logger.logObservation(missionId, action.name, observation);
