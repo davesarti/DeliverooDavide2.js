@@ -87,21 +87,6 @@ function safeJsonParse(text) {
   }
 }
 
-/*
-* Calls the model without function calling and returns the response text.
-*/
-export async function callLLMText({ messages, temperature = 0 }) {
-  const request = {
-    model: LLM_CONFIG.model,
-    messages,
-    temperature,
-  };
-
-  const response = await client.chat.completions.create(request);
-
-  return response.choices?.[0]?.message?.content ?? "";
-}
-
 function coerceNumericParams(obj) {
   const integerFields = new Set(["x", "y", "count"]);
   const floatFields = new Set(["minReward", "maxReward", "multiplier"]);

@@ -7,13 +7,10 @@ export const PARCEL_REWARD_DISCOUNT = 0.2;
 export const PARCEL_DECAY = 1; // used only as fallback if the server does not provide parcels.decaying_event
 
 // Constants used in stateUtils
-export const MAX_DELIVERY_OPTIONS_PER_PARCEL = 3;
 export const MOVING_WINDOW_MS = 10000;
 export const STALENESS_WEIGHT = 0.7;
 
 export const RUNTIME = {
-  LLM_LOOP_DELAY_MS: 500,
-  LLM_ERROR_DELAY_MS: 1000,
   READINESS_CHECK_DELAY_MS: 100,
 
   GO_TO_TIMEOUT_MS: 5000,
@@ -25,4 +22,4 @@ export const RUNTIME = {
 
 // Constants used in LLM agent
 export const MAX_ITERATIONS = 50;
-export const MAX_MISSION_HISTORY = 30;
+export const MAX_MISSION_HISTORY = 10;

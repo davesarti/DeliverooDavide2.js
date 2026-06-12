@@ -11,7 +11,6 @@
     "cors": "^2.8.6",
     "debug": "^4.4.3",
     "dotenv": "^17.4.2",
-    "duck-duck-scrape": "^2.2.7",
     "engine.io": "^6.6.8",
     "engine.io-client": "^6.6.5",
     "engine.io-parser": "^5.2.3",
