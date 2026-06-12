@@ -167,7 +167,7 @@ function saveMissionHistory(llmState, { request, reply }) {
 // Mission validator
 // ==========================================
 
-async function validateMission(msg, llmState) {
+async function validateMission(msg, bs, llmState) {
   const { action } = await callLLMTool({
     messages: [
       { role: "system", content: SYSTEM_VALIDATOR_PROMPT },
@@ -242,7 +242,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
     try {
       missionId = logger.startMission(msg);
 
-      const validation = await validateMission(msg, llmState);
+      const validation = await validateMission(msg, bs, llmState);
 
       logWithTime(
         bs.me.name,

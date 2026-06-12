@@ -189,7 +189,7 @@ export function get_environment_state(bs, llmState) {
 /*
   * Builds a snapshot of the current environment state for the validator prompt.
 */
-function buildValidatorSnapshot(bs, llmState) {
+export function buildValidatorSnapshot(bs, llmState) {
   const carriedParcels = [...bs.parcels.values()]
     .filter((p) => p.carriedBy === bs.me.id)
     .map((p) => ({
