@@ -21,6 +21,18 @@ import {
 } from "./tools.js";
 
 // ==========================================
+// Logging
+// ==========================================
+
+function timestamp() {
+  return new Date().toISOString();
+}
+
+function logWithTime(name, ...args) {
+  console.log(`[${timestamp()}] [${name ?? "LLM"}]`, ...args);
+}
+
+// ==========================================
 // Tool execution
 // ==========================================
 
@@ -139,7 +151,7 @@ function saveMissionHistory(llmState, { request, reply }) {
   llmState.missionHistory.push({
     request,
     reply,
-    completedAt: Date.now(), 
+    completedAt: Date.now(),
   });
 
   if (llmState.missionHistory.length > MAX_MISSION_HISTORY) {
@@ -154,13 +166,13 @@ function saveMissionHistory(llmState, { request, reply }) {
  * until the model produces final_reply.
  */
 export async function startLLMAgent(socket, bs, llmState, actions) {
-  console.log(`[${bs.me.name ?? "LLM"}]`, "LLM chat listener started");
+  logWithTime(bs.me.name, "LLM chat listener started");
 
   socket.onMsg(async (id, name, msg) => {
     if (!msg || msg.trim() === "") return;
     if (id === bs.me.id) return;
 
-    console.log(`[${bs.me.name ?? "LLM"}]`, `Mission from ${name} (${id}): ${msg}`);
+    logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
 
     // Real conversation history: grows on each iteration.
     const messages = [
@@ -176,7 +188,9 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           temperature: 0,
         });
 
-        console.log(`[${bs.me.name ?? "LLM"}]`, `Action: ${action.name}(${JSON.stringify(action.params)})`);
+        const { thought, ...actionParams } = action.params;
+        if (thought) logWithTime(bs.me.name, `Thought: ${thought}`);
+        logWithTime(bs.me.name, `Action: ${action.name}(${JSON.stringify(actionParams)})`);
 
         // Save the assistant's call in the history in the native format.
         messages.push({
@@ -215,7 +229,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         }
         
         const observation = await executeTool(action, bs, llmState, actions);
-        console.log(`[${bs.me.name ?? "LLM"}]`, "Observation:", observation);
+        logWithTime(bs.me.name, "Observation:", observation);
 
         // Save the tool result in the history under the "tool" role.
         messages.push({
@@ -225,7 +239,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         });
       }
     } catch (error) {
-      console.log(`[${bs.me.name ?? "LLM"}]`, "Mission error:", error?.message ?? error);
+      logWithTime(bs.me.name, "Mission error:", error?.message ?? error);
       try {
         await socket.emitSay(id, "Sorry, I could not complete the mission.");
       } catch {}
