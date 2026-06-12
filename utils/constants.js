@@ -21,5 +21,5 @@ export const RUNTIME = {
 };
 
 // Constants used in LLM agent
-export const MAX_ITERATIONS = 50;
-export const MAX_MISSION_HISTORY = 10;
+export const MAX_ITERATIONS = 75;
+export const MAX_MISSION_HISTORY = 0;
