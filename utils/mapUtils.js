@@ -172,6 +172,52 @@ export function isBlockedTile(x, y, blockedTiles = new Set()) {
   return blockedTiles.has(`${x},${y}`);
 }
 
+/*
+ * Set of tile keys ("x,y") currently observable by the agent.
+ * Mirrors the server's sensing (a BFS over walkable tiles bounded by
+ * observation_distance), so beliefs can distinguish "absent from the
+ * snapshot because gone" (negative evidence, inside this set) from "absent
+ * because out of range" (no evidence: keep the belief).
+ * Returns null when everything is observable (no finite observation
+ * distance), which reproduces plain snapshot semantics.
+ */
+export function computeObservableTiles(me, grid, observationDistance) {
+  if (observationDistance == null || !Number.isFinite(observationDistance)) {
+    return null;
+  }
+  if (!Array.isArray(grid) || grid.length === 0) return null;
+
+  const startX = Math.round(me.x);
+  const startY = Math.round(me.y);
+  if (!isInsideMap(startX, startY, grid)) return null;
+
+  const observable = new Set([`${startX},${startY}`]);
+  let frontier = [{ x: startX, y: startY }];
+
+  for (let depth = 0; depth < observationDistance && frontier.length > 0; depth++) {
+    const next = [];
+
+    for (const cell of frontier) {
+      for (const { dx, dy } of DIRECTIONS) {
+        const nx = cell.x + dx;
+        const ny = cell.y + dy;
+        const key = `${nx},${ny}`;
+
+        if (observable.has(key)) continue;
+        if (!isInsideMap(nx, ny, grid)) continue;
+        if (Number(grid[ny][nx]) === 0) continue;
+
+        observable.add(key);
+        next.push({ x: nx, y: ny });
+      }
+    }
+
+    frontier = next;
+  }
+
+  return observable;
+}
+
 export function canUseNeighborTile({
   x,
   y,

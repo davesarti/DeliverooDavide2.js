@@ -172,8 +172,9 @@ function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward,
 /*
  * Converts a duration expressed as a server string into milliseconds.
  * Supports formats like "1s", "500ms", "2s".
+ * Exported for the event-based decay model (utils/decayModel.js).
  */
-function parseDurationMs(value) {
+export function parseDurationMs(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }

@@ -12,7 +12,17 @@ export const DELIVEROO_CONFIG = {
 
 export const AGENT_CONFIG = {
   pathfinding: {
-    algorithm: "bfs",
+    // astar: needed for soft obstacles — far agents cost extra instead of
+    // blocking the tile, so a crowded corridor degrades the path instead of
+    // making it unfindable.
+    algorithm: "astar",
+  },
+  behavior: {
+    // Camp dense parcel pockets instead of roaming when idle. On by default;
+    // disable with CAMP=false. The adaptive patience already makes camping
+    // self-limiting on sparse maps (a lone spawn tile gets 0 patience and
+    // falls straight back to exploring), so it is safe as the default.
+    camp: !/^(false|0|no|off)$/i.test(process.env.CAMP ?? ""),
   },
 };
 
