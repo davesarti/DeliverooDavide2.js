@@ -213,6 +213,7 @@ class IntentionRevision {
       (p) => p.carriedBy === me.id
     );
     const totalReward = myParcels.reduce((sum, p) => sum + p.reward, 0);
+    const factor = distanceFactor(this.#bs);
     let estimatedLoss = 0;
 
     const action = predicate[0];
@@ -227,7 +228,7 @@ class IntentionRevision {
       if (routeDist == null) return -1;
 
       for (const parcel of myParcels) {
-        estimatedLoss += Math.min(parcel.reward, routeDist * distanceFactor(this.#bs));
+        estimatedLoss += Math.min(parcel.reward, routeDist * factor);
       }
       return totalReward - estimatedLoss - DROP_DISINCENTIVE;
     }
@@ -250,13 +251,13 @@ class IntentionRevision {
       const expectedReward = competitionAdjustedReward(newParcel, me, this.#bs);
 
       if (myParcels.length === 0) {
-        return expectedReward - routeDist * distanceFactor(this.#bs);
+        return expectedReward - routeDist * factor;
       }
 
       for (const parcel of myParcels) {
-        estimatedLoss += Math.min(parcel.reward, routeDist * distanceFactor(this.#bs));
+        estimatedLoss += Math.min(parcel.reward, routeDist * factor);
       }
-      return totalReward + expectedReward - routeDist * distanceFactor(this.#bs) - estimatedLoss;
+      return totalReward + expectedReward - routeDist * factor - estimatedLoss;
     }
 
     if (action === "explore") return EXPLORATION_INCENTIVE;
@@ -283,13 +284,12 @@ class IntentionRevision {
       // still within the decay loss budget. Otherwise deliver.
       if (carriedCount >= effectiveCapacity(this.#bs)) return -1;
 
-      const decayPerStep = distanceFactor(this.#bs);
-      if (decayPerStep > 0) {
+      if (factor > 0) {
         const used = this.#bs.carry?.campSteps ?? 0;
         // Steps we may still camp before bleeding > fraction of carried value.
         const horizon =
           (CAMP_LOSS_BUDGET_FRACTION * totalReward) /
-          (decayPerStep * carriedCount);
+          (factor * carriedCount);
         if (used >= horizon) return -1;
       }
 
@@ -314,9 +314,7 @@ class IntentionRevision {
   sortQueueByScore() {
     const running = this.#currentIntention;
 
-    const carrying = [...this.#bs.parcels.values()].some(
-      (p) => p.carriedBy === this.#bs.me.id
-    );
+    const carrying = (this.#bs.carry?.count ?? 0) > 0;
 
     const scored = this.intention_queue.map((intention, index) => ({
       intention,
@@ -400,9 +398,7 @@ class IntentionRevision {
         }
 
         if (action === "go_drop_off") {
-          const carrying = Array.from(this.#bs.parcels.values()).some(
-            (p) => p.carriedBy === this.#bs.me.id
-          );
+          const carrying = (this.#bs.carry?.count ?? 0) > 0;
           if (!carrying) {
             this.log("Skipping invalid intention", intention.predicate);
             this.removeIntention(intention);
@@ -482,6 +478,22 @@ class IntentionRevisionRevise extends IntentionRevision {
     this.intention_queue.push(intention);
     this.sortQueueByScore();
   }
+
+  /*
+   * Inserts a batch of predicates and re-sorts the queue exactly once.
+   * Used by optionsGeneration so a full belief update costs one sort instead
+   * of one per generated option. Always re-sorts (even when nothing new is
+   * added) so time-varying scores — a camp pocket going cold, decay drift —
+   * are still re-evaluated each reconsideration tick.
+   */
+  pushBatch(predicates) {
+    for (const predicate of predicates) {
+      if (this.isPredicateInFailedPool(predicate)) continue;
+      if (samePredicateInQueue(this.intention_queue, predicate)) continue;
+      this.intention_queue.push(this.createIntention(predicate));
+    }
+    this.sortQueueByScore();
+  }
 }
 
 // ==========================================
@@ -528,14 +540,11 @@ export async function startBDIAgent(socket, bs, actions) {
 
     lastSignature = signature;
     lastGenerationMs = nowMs;
+    // optionsGeneration ends in a single pushBatch, which always re-sorts —
+    // including when the option set is unchanged — so time-varying scores (a
+    // camp pocket going cold, decay drift) are re-evaluated each tick without
+    // a second explicit sort. Hysteresis still guards against churn.
     optionsGeneration(agent, bs);
-
-    // Re-evaluate even when the option set did not change: some scores vary
-    // with time (a camp pocket going cold, decay drift), and those transitions
-    // would otherwise never be acted on, since push() only re-sorts when it
-    // adds a new predicate. Hysteresis in sortQueueByScore still guards against
-    // churn, so this stays within the WP3 reconsideration cadence.
-    agent.sortQueueByScore();
   };
 
   agent.loop();

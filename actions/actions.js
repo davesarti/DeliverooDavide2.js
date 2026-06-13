@@ -1,6 +1,6 @@
 import { findPath } from "../pathfinding/pathfinding.js";
 import { AGENT_CONFIG, } from "../config.js";
-import { RUNTIME, HOARD_CAP, CAMP_PATROL_RADIUS } from "../utils/constants.js";
+import { RUNTIME, CAMP_PATROL_RADIUS } from "../utils/constants.js";
 import { yieldControl, wait } from "../utils/asyncUtils.js";
 import {
   findCellsToExplore,
@@ -9,6 +9,7 @@ import {
   DIRECTIONS,
 } from "../utils/mapUtils.js";
 import { spawnMapDistance } from "../utils/stateUtils.js";
+import { effectiveCapacity } from "../bdi/options.js";
 import {
   recordStepDecaySample,
   movementDurationMs,
@@ -73,26 +74,11 @@ export function createActions(socket, bs, options = {}) {
   }
 
   /*
-   * Number of parcels currently carried by this agent.
+   * Number of parcels currently carried by this agent. Reads the cached count
+   * maintained by the belief update (the carried set only changes on sensing).
    */
   function carriedCount() {
-    let count = 0;
-    for (const parcel of bs.parcels.values()) {
-      if (parcel.carriedBy === bs.me.id) count++;
-    }
-    return count;
-  }
-
-  /*
-   * Max parcels worth carrying: the server-declared capacity, additionally
-   * capped by HOARD_CAP so the agent always banks eventually even when the
-   * server declares no capacity and parcels do not decay.
-   */
-  function effectiveCapacity() {
-    const declared = Number(bs.config.playerCapacity);
-    const capacity =
-      Number.isFinite(declared) && declared > 0 ? declared : Infinity;
-    return Math.min(capacity, HOARD_CAP);
+    return bs.carry?.count ?? 0;
   }
 
   /*
@@ -105,7 +91,7 @@ export function createActions(socket, bs, options = {}) {
     const x = Math.round(bs.me.x);
     const y = Math.round(bs.me.y);
 
-    if (carriedCount() < effectiveCapacity()) {
+    if (carriedCount() < effectiveCapacity(bs)) {
       for (const parcel of bs.parcels.values()) {
         if (
           !parcel.carriedBy &&

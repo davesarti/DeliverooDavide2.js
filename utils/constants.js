@@ -10,9 +10,6 @@ export const PARCEL_REWARD_DISCOUNT = 0.2;
 export const SOFT_OBSTACLE_HARD_RADIUS = 2;
 export const AGENT_SOFT_PENALTY = 5;
 
-// Constants used in mapUtils
-export const PARCEL_DECAY = 1; // used only as fallback if the server does not provide parcels.decaying_event
-
 // Event-based decay model defaults (used only when the server config is
 // missing; both processes are normally read from bs.config).
 export const DEFAULT_MOVEMENT_DURATION_MS = 500;
@@ -71,8 +68,7 @@ export const CAMP_ADJACENCY_RADIUS = 3;
 export const CAMP_PATIENCE_MIN_MS = 0;
 export const CAMP_PATIENCE_MAX_MS = 8000;
 
-// Constants used in stateUtils
-export const MOVING_WINDOW_MS = 10000;
+// Spawn-tile exploration: weight of staleness vs distance in findCellsToExplore.
 export const STALENESS_WEIGHT = 0.7;
 
 export const RUNTIME = {
@@ -101,8 +97,6 @@ export const RUNTIME = {
   YIELD_RETRY_LIMIT: 4,
   YIELD_BACKOFF_MIN_MS: 100,
   YIELD_BACKOFF_MAX_MS: 500,
-
-  MAX_CONSECUTIVE_WAITS: 50,
 
   // Failure pool: exponential backoff per predicate key
   // (3s -> 6s -> 12s -> ... capped), failure counter reset after a quiet

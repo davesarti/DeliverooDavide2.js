@@ -54,11 +54,13 @@ export function createBeliefState() {
     // until the first free parcel is observed.
     lastParcelHint: null,
 
-    // Camp-while-carrying loss budget. campSteps counts tiles patrolled while
-    // holding parcels in the current carry episode; it bounds how much reward
-    // the agent may bleed to decay before it must deliver. Reset to 0 whenever
-    // the agent is no longer carrying anything.
-    carry: { campSteps: 0 },
+    // Carry state, refreshed once per sensing in updateBeliefs.
+    // count: parcels currently carried (single source of truth — every other
+    //   module reads this instead of re-scanning bs.parcels).
+    // campSteps: tiles patrolled while holding parcels in the current carry
+    //   episode; bounds how much reward the agent may bleed to decay before it
+    //   must deliver. Reset to 0 whenever the agent is no longer carrying.
+    carry: { count: 0, campSteps: 0 },
 
     onUpdate: null,
   };

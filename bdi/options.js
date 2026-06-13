@@ -162,34 +162,28 @@ export function competitionAdjustedReward(parcel, me, bs) {
 }
 
 /*
- * Generates the pickups that are still worth doing in the current state.
+ * Generates the pickup candidates for the current state. This only decides
+ * what is *reachable and worth scoring* — the actual value (competition
+ * discount, carried-parcel detour cost, decay) lives in intentionScore, which
+ * is the single authority on a pickup's worth. Generating bare candidates here
+ * avoids a second, divergent value formula that could admit a pickup scoring
+ * rejects (or vice versa).
  */
 function generatePickupOptions(parcels, me, bs) {
   const deliveryDistanceMap = bs.map.deliveryDistanceMap;
   if (!Array.isArray(deliveryDistanceMap) || deliveryDistanceMap.length === 0) return null;
 
-  // A full agent has nothing to gain from pickups: delivery becomes the
-  // only generated option.
-  let carried = 0;
-  for (const parcel of parcels.values()) {
-    if (parcel.carriedBy === me.id) carried++;
-  }
-  if (carried >= effectiveCapacity(bs)) return [];
+  // A full agent has nothing to gain from pickups: skip generating them.
+  // (This matches the capacity trigger in intentionScore exactly, so it never
+  // diverges from scoring — it is only a cheap short-circuit.)
+  if ((bs.carry?.count ?? 0) >= effectiveCapacity(bs)) return [];
 
   const pickupOptions = [];
 
   for (const parcel of parcels.values()) {
     if (parcel.carriedBy) continue;
-
-    const routeDist = pickupRouteDistance(parcel, me, bs);
-    if (routeDist == null) continue;
-
-    const expectedScore =
-      competitionAdjustedReward(parcel, me, bs) -
-      routeDist * distanceFactor(bs);
-    if (expectedScore > 0) {
-      pickupOptions.push(["go_pick_up", parcel.x, parcel.y, parcel.id]);
-    }
+    if (pickupRouteDistance(parcel, me, bs) == null) continue;
+    pickupOptions.push(["go_pick_up", parcel.x, parcel.y, parcel.id]);
   }
 
   return pickupOptions;
@@ -202,8 +196,7 @@ function generateDeliveryOptions(parcels, me, bs) {
   const deliveryDistanceMap = bs.map.deliveryDistanceMap;
   if (!Array.isArray(deliveryDistanceMap) || deliveryDistanceMap.length === 0) return [];
 
-  const carries = Array.from(parcels.values()).some((p) => p.carriedBy === me.id);
-  if (!carries) return [];
+  if ((bs.carry?.count ?? 0) === 0) return [];
 
   const row = deliveryDistanceMap[Math.round(me.y)];
   const entries = row?.[Math.round(me.x)];
@@ -240,23 +233,25 @@ export function optionsGeneration(agent, bs) {
     return;
   }
 
-  const isFailedIntention = (predicate) =>
-    typeof agent?.isPredicateInFailedPool === "function" &&
-    agent.isPredicateInFailedPool(predicate);
+  const options = [];
 
   for (const option of generatePickupOptions(parcels, me, bs) ?? []) {
-    if (!isFailedIntention(option)) agent.push(option);
+    options.push(option);
   }
 
   for (const option of generateDeliveryOptions(parcels, me, bs)) {
-    if (!isFailedIntention(option)) agent.push(option);
+    options.push(option);
   }
 
   // When camping is enabled, keep a camp option in the queue so it can compete
   // by score — including against delivery while carrying (its scoring gate and
   // loss budget live in intentionScore). Invalid camps (full / budget spent)
   // self-filter out of the queue, so this is harmless when not applicable.
-  if (AGENT_CONFIG.behavior.camp && !isFailedIntention(["camp"])) {
-    agent.push(["camp"]);
+  if (AGENT_CONFIG.behavior.camp) {
+    options.push(["camp"]);
   }
+
+  // One batched insert: pushBatch filters out failed-pool and already-queued
+  // predicates and re-sorts exactly once (instead of once per pushed option).
+  agent.pushBatch(options);
 }

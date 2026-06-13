@@ -1,37 +1,3 @@
-import {
-  distance,
-  getTilesPerSecond,
-} from "./mapUtils.js";
-
-import { PARCEL_DECAY } from "./constants.js";
-
-/*
- * Returns a minimal version of a parcel.
- * Useful when only position and reward are needed, without extra computations.
- */
-export function formatParcelBasic(parcel) {
-  return {
-    id: parcel.id,
-    x: Math.round(parcel.x),
-    y: Math.round(parcel.y),
-    reward: parcel.reward,
-  };
-}
-
-/*
- * Sorts delivery tiles relative to a position.
- * Used to find which delivery points are most convenient from the current position.
- */
-export function buildNearbyDeliveryTiles(position, deliveryTiles) {
-  return deliveryTiles
-    .map((tile) => ({
-      x: tile.x,
-      y: tile.y,
-      distanceFromPosition: distance(position, tile),
-    }))
-    .sort((a, b) => a.distanceFromPosition - b.distanceFromPosition);
-}
-
 /*
  * Finds the nearest reachable delivery tile from a position.
  */
@@ -105,71 +71,6 @@ export function spawnMapDistance(spawnDistanceMap, from, target) {
 }
 
 /*
- * Enriches a free parcel with data useful for planning.
- * Does not decide what to do: adds distance from the player and some delivery candidates.
- */
-export function enrichParcelForDecision(
-  parcel,
-  me,
-  deliveryDistanceMap,
-  {
-    maxDeliveryOptions = 3,
-    parcelDecayingEvent = null,
-    agentId = "default",
-  } = {}
-) {
-  const deliveryOptions = buildParcelDeliveryOptions(
-    { x: parcel.x, y: parcel.y },
-    deliveryDistanceMap,
-    parcel.reward,
-    parcelDecayingEvent,
-    agentId
-  ).slice(0, maxDeliveryOptions);
-
-  return {
-    id: parcel.id,
-    x: Math.round(parcel.x),
-    y: Math.round(parcel.y),
-    reward: parcel.reward,
-    distanceToMe: distance(me, parcel),
-    rewardLossPerTile: getRewardLossPerTile(parcelDecayingEvent, agentId),
-    deliveryOptions,
-  };
-}
-
-/*
- * Builds delivery candidates for a parcel.
- * For each reachable delivery, computes distance and estimated reward at delivery.
- */
-function buildParcelDeliveryOptions(position, deliveryDistanceMap, parcelReward, parcelDecayingEvent, agentId = "default") {
-  const row = deliveryDistanceMap?.[Math.round(position.y)];
-  const entries = row?.[Math.round(position.x)];
-
-  if (!Array.isArray(entries)) return [];
-
-  const rewardLossPerTile = getRewardLossPerTile(parcelDecayingEvent, agentId);
-
-  return entries
-    .filter((entry) => Number.isFinite(entry.distance))
-    .map((entry) => ({
-      x: entry.deliveryX,
-      y: entry.deliveryY,
-      distanceFromParcel: entry.distance,
-      estimatedRewardAtDelivery: Math.max(
-        0,
-        parcelReward - entry.distance * rewardLossPerTile
-      ),
-    }))
-    .sort((a, b) => {
-      if (b.estimatedRewardAtDelivery !== a.estimatedRewardAtDelivery) {
-        return b.estimatedRewardAtDelivery - a.estimatedRewardAtDelivery;
-      }
-
-      return a.distanceFromParcel - b.distanceFromParcel;
-    });
-}
-
-/*
  * Converts a duration expressed as a server string into milliseconds.
  * Supports formats like "1s", "500ms", "2s".
  * Exported for the event-based decay model (utils/decayModel.js).
@@ -197,24 +98,4 @@ export function parseDurationMs(value) {
 
   const number = Number(trimmed);
   return Number.isFinite(number) ? number : null;
-}
-
-/*
- * Returns how much reward a parcel loses per second.
- * Uses parcels.decaying_event from the server; if missing, uses PARCEL_DECAY as fallback.
- */
-function getParcelDecayPerSecond(parcelDecayingEvent) {
-  const decayEventMs = parseDurationMs(parcelDecayingEvent);
-  if (!decayEventMs || decayEventMs <= 0) return PARCEL_DECAY;
-  return 1000 / decayEventMs;
-}
-
-/*
- * Estimates how much reward is lost per tile traveled.
- * agentId identifies the correct agent in the shared speed Map.
- */
-export function getRewardLossPerTile(parcelDecayingEvent, agentId = "default") {
-  const tilesPerSecond = getTilesPerSecond(agentId);
-  if (!tilesPerSecond || tilesPerSecond <= 0) return 0;
-  return getParcelDecayPerSecond(parcelDecayingEvent) / tilesPerSecond;
 }

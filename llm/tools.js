@@ -1,5 +1,6 @@
 import { distance, isInsideMap, isDeliveryTile } from "../utils/mapUtils.js";
-import { nearestDeliveryTileAt, deliveryMapDistance, getRewardLossPerTile } from "../utils/stateUtils.js";
+import { nearestDeliveryTileAt, deliveryMapDistance } from "../utils/stateUtils.js";
+import { getDecayPerStep } from "../utils/decayModel.js";
 
 // ==========================================
 // calculate
@@ -143,12 +144,12 @@ export function get_environment_state(bs, llmState, missionStats = null) {
   const multipliers = rules.deliveryMultipliers ?? new Map();
   const preferred = rules.preferredDeliveryTiles ?? new Set();
 
-  // Compute reward loss per tile once — shared across all delivery tile estimates.
-  // Uses the real agent speed (measured) and the server parcel decay event.
-  const rewardLossPerTile = getRewardLossPerTile(
-    bs.config?.parcelDecayingEvent,
-    me.id
-  );
+  // Reward lost per tile per carried parcel, shared across all delivery-tile
+  // estimates. Same event-based decay model the BDI agent uses (decay ticks
+  // per move-ack, lag-invariant); 0 when parcels do not decay. This replaces
+  // the old wall-clock speed estimate, so both agents now price decay
+  // identically.
+  const rewardLossPerTile = getDecayPerStep(bs);
   const totalCarriedReward = carriedParcels.reduce((sum, p) => sum + p.reward, 0);
   const numCarried = carriedParcels.length;
 

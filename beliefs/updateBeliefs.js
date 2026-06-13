@@ -1,6 +1,5 @@
 import {
   updateSpawnStaleness,
-  updateTilesPerSecond,
   computeObservableTiles,
 } from "../utils/mapUtils.js";
 import {
@@ -78,8 +77,6 @@ export function setupBeliefUpdates(socket, bs) {
       bs.map.spawnTiles,
       bs.config.observationDistance
     );
-
-    updateTilesPerSecond(x, y, bs.me.id ?? "default");
   });
 
   // ==========================================
@@ -240,13 +237,20 @@ export function setupBeliefUpdates(socket, bs) {
       }
     }
 
-    // The camp-while-carrying loss budget is per carry episode: once nothing
-    // is carried, the budget resets so the next load starts fresh.
+    // Single source of truth for "how many parcels do I carry". The carried
+    // set only changes on sensing, so caching it here keeps it consistent with
+    // bs.parcels at all times and saves every consumer (scoring, option
+    // generation, execution) from re-iterating the parcel map.
     let carriedNow = 0;
     for (const parcel of bs.parcels.values()) {
       if (parcel.carriedBy === bs.me.id) carriedNow++;
     }
-    if (carriedNow === 0 && bs.carry) bs.carry.campSteps = 0;
+    if (bs.carry) {
+      bs.carry.count = carriedNow;
+      // The camp-while-carrying loss budget is per carry episode: once nothing
+      // is carried, the budget resets so the next load starts fresh.
+      if (carriedNow === 0) bs.carry.campSteps = 0;
+    }
 
     bs.onUpdate?.();
   });
