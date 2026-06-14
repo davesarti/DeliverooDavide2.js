@@ -119,32 +119,32 @@ function buildTileSet(tiles) {
  * the map layout, which the server sends once and never changes mid-session.
  * Recomputing them on every planning call is wasteful.
  *
- * Cache is a WeakMap keyed on bs.map.tiles (the array reference):
- *   - Each agent instance has its own bs.map.tiles array → separate entry,
- *     so MULTI mode (BDI + LLM) never cross-contaminates.
- *   - If onMap fires again (reconnect), updateBeliefs assigns a new array to
- *     bs.map.tiles → old reference drops out of the WeakMap automatically
- *     (garbage collected) and the next call rebuilds from scratch.
+ * All agents play on the same map, so a single module-level cache is enough.
+ * The cache key is the bs.map.tiles array reference: if onMap fires again
+ * (reconnect), updateBeliefs assigns a new array to bs.map.tiles, the
+ * reference check fails, and the cache rebuilds automatically.
  *
  * What is NOT cached (changes between calls):
  *   occupiedSet — agents move, crates get pushed.
  *   bs.me position, parcels, crate positions — always read fresh from bs.
  */
-const _mapCache = new WeakMap();
+let _cachedTilesRef = null;
+let _cachedData     = null;
 
 function ensureMapCache(bs) {
   const tiles = getTiles(bs);
 
-  if (_mapCache.has(tiles)) return tiles; // cache hit for this agent's map
+  if (tiles === _cachedTilesRef) return tiles; // cache hit
 
-  // Cache miss: first planning call for this agent, or map was replaced.
+  // Cache miss: first call, or server sent a new map.
+  _cachedTilesRef = tiles;
   const knownTiles = buildTileSet(tiles);
-  _mapCache.set(tiles, {
+  _cachedData = {
     knownTiles,
     adjacency:  adjacencyFacts(tiles, knownTiles),
     deliveries: deliverySet(bs),
     pushables:  pushableSet(bs),
-  });
+  };
 
   return tiles;
 }
@@ -291,9 +291,9 @@ function buildGoalConjuncts(goal) {
  * Anything not declared is false (CWA), which is exactly what we want.
  */
 export function buildProblem(bs, goal) {
-  // Ensure static map data is cached for this agent's map instance.
+  // Ensure static map data is cached (rebuilt only when the map changes).
   const tiles = ensureMapCache(bs);
-  const { adjacency, deliveries, pushables } = _mapCache.get(tiles);
+  const { adjacency, deliveries, pushables } = _cachedData;
 
   // Dynamic: always recomputed — agents move, crates get pushed.
   const occupied = occupiedSet(bs);
