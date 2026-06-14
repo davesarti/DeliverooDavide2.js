@@ -1,7 +1,6 @@
 // Constants used in A*
 export const BASE_STEP_COST = 1;
 export const MIN_EDGE_COST = 0.1;
-export const PARCEL_REWARD_DISCOUNT = 0.2;
 
 // Soft obstacles in A*: agents within this Manhattan radius of the path
 // start are hard obstacles (they are actually in the way now); farther
@@ -89,6 +88,14 @@ export const RUNTIME = {
   // converge (every one rules out a blocked corridor) instead of thrashing
   // between two — the budget can be generous without spinning.
   MAX_REPLANS: 6,
+
+  // Avoid-tile tenure. A tile that just physically refused us is hard-avoided
+  // for only a short, movement-scaled window (this many move-durations), then
+  // becomes eligible again. Kept short on purpose: a blocking agent clears a
+  // tile in a move or two and is still in sensing then, so the route is
+  // reconsidered while we can still see whether the choke really opened —
+  // a long tenure would only "retry" the route after the agent left sensing.
+  AVOID_TENURE_MOVE_FACTOR: 1.5,
 
   // Yield-in-place backoff. When a move is refused by a *moving* agent (not
   // a wall/crate), wait a randomized interval and retry the same step a few

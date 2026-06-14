@@ -7,7 +7,6 @@ import {
 import {
   BASE_STEP_COST,
   MIN_EDGE_COST,
-  PARCEL_REWARD_DISCOUNT,
   SOFT_OBSTACLE_HARD_RADIUS,
   AGENT_SOFT_PENALTY,
 } from "../utils/constants.js";
@@ -33,7 +32,6 @@ export function astar(start, goal, bs, options = {}) {
     map: bs.map.grid,
     crates: bs.crates,
     agents: bs.agents,
-    parcels: bs.parcels,
     blockedTiles,
     start,
     goal,
@@ -53,7 +51,6 @@ export function astarOnState({
   map,
   crates = new Map(),
   agents = new Map(),
-  parcels = new Map(),
   blockedTiles = new Set(),
   start,
   goal,
@@ -126,13 +123,7 @@ export function astarOnState({
 
       if (visited.has(`${nextX},${nextY}`)) continue;
 
-      const parcel = [...parcels.values()].find(
-        (p) => Math.round(p.x) === nextX && Math.round(p.y) === nextY && !p.carriedBy
-      );
-
-      let edgeCost = parcel
-        ? Math.max(MIN_EDGE_COST, BASE_STEP_COST - parcel.reward * PARCEL_REWARD_DISCOUNT)
-        : BASE_STEP_COST;
+      let edgeCost = BASE_STEP_COST;
 
       if (softAgentTiles.has(`${nextX},${nextY}`)) {
         edgeCost += AGENT_SOFT_PENALTY;

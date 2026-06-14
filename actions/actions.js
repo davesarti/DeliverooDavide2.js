@@ -124,17 +124,22 @@ export function createActions(socket, bs, options = {}) {
       shouldStop = () => false,
       onStep = null,
       timeoutMs = RUNTIME.GO_TO_TIMEOUT_MS,
+      replan = null,
     } = {}
   ) {
     const startedAt = Date.now();
 
     // Decay ticks observed at the previous move-ack. The number of ticks
-    // that land between two consecutive acks of the same path is a direct,
-    // clock-free sample of how much reward each carried parcel loses per
-    // tile of travel (see utils/decayModel.js).
+    // that land between two consecutive acks is a direct, clock-free sample of
+    // how much reward each carried parcel loses per tile of travel (see
+    // utils/decayModel.js). The window stays valid across an in-walk path swap:
+    // the move-acks are still consecutive in time.
     let ticksAtPreviousAck = null;
 
-    for (const direction of path) {
+    let i = 0;
+    while (i < path.length) {
+      const direction = path[i];
+
       if (shouldStop()) throw ["stopped"];
 
       if (timeoutMs != null && Date.now() - startedAt > timeoutMs) {
@@ -183,6 +188,28 @@ export function createActions(socket, bs, options = {}) {
 
       if (shouldStop()) throw ["stopped"];
 
+      i++;
+
+      // Reconsider while walking: re-path from the current position against the
+      // latest beliefs and switch only to a strictly shorter route (>= 1 tile).
+      // This retries a just-cleared shortcut the moment it opens — while the
+      // choke is still in sensing — and reroutes early when an agent steps onto
+      // the path ahead, instead of waiting to physically bump it. The length
+      // hysteresis stops equal-length routes flapping as agents jitter. An
+      // opportunistic switch is not a failure: it records no avoid tile and
+      // does not spend goTo's replan budget.
+      if (replan && i < path.length) {
+        const candidate = replan();
+        if (
+          candidate &&
+          Array.isArray(candidate.path) &&
+          candidate.path.length < path.length - i
+        ) {
+          path = candidate.path;
+          i = 0;
+        }
+      }
+
       await yieldControl();
     }
 
@@ -207,34 +234,39 @@ export function createActions(socket, bs, options = {}) {
       timeoutMs = null,
     } = {}
   ) {
-    // Tiles where a move was just physically refused, accumulated across the
-    // replans of this single goTo. Each replan hard-avoids all of them, so
-    // once both corridors of a two-route block are proven blocked the planner
-    // is forced onto the longer open route instead of ping-ponging between
-    // the two blocked ones. Reset implicitly: the set is scoped to this call.
-    const avoidTiles = new Set();
+    // Tiles where a move was physically refused, each remembered for only a
+    // short, movement-scaled tenure (AVOID_TENURE_MOVE_FACTOR). A* hard-avoids
+    // the still-fresh ones, so the planner stops re-entering a corridor it just
+    // bounced off; but the memory expires within a move or two, so a cleared
+    // choke becomes eligible again while the blocker is still in sensing and
+    // the reconsider-while-walking step can pick the shorter route back up.
+    const avoidUntil = new Map(); // "x,y" -> expiry timestamp (ms)
+
+    const activeAvoid = () => {
+      const now = Date.now();
+      const set = new Set();
+      for (const [key, expiry] of avoidUntil) {
+        if (expiry > now) set.add(key);
+        else avoidUntil.delete(key);
+      }
+      return set;
+    };
+
+    const planFrom = (pos, avoid = activeAvoid()) =>
+      findPath(pos, { x, y }, AGENT_CONFIG.pathfinding.algorithm, bs, {
+        blockedTiles: getBlockedTiles(),
+        avoidTiles: avoid,
+      });
 
     for (let replans = 0; ; replans++) {
-      let result = findPath(
-        bs.me,
-        { x, y },
-        AGENT_CONFIG.pathfinding.algorithm,
-        bs,
-        { blockedTiles: getBlockedTiles(), avoidTiles }
-      );
+      let result = planFrom(bs.me);
 
       // Reachability fallback: if avoiding the proven-blocked tiles leaves no
       // path at all (the choke is the only way through), drop the avoid set
       // for this attempt and retry the choke — better to wait it out than to
       // falsely fail an otherwise-reachable target.
-      if ((!result || !Array.isArray(result.path)) && avoidTiles.size > 0) {
-        result = findPath(
-          bs.me,
-          { x, y },
-          AGENT_CONFIG.pathfinding.algorithm,
-          bs,
-          { blockedTiles: getBlockedTiles() }
-        );
+      if ((!result || !Array.isArray(result.path)) && avoidUntil.size > 0) {
+        result = planFrom(bs.me, new Set());
       }
 
       if (!result || !Array.isArray(result.path)) {
@@ -254,14 +286,19 @@ export function createActions(socket, bs, options = {}) {
         return await executePath(result.path, {
           shouldStop,
           timeoutMs: effectiveTimeoutMs,
+          replan: () => planFrom(bs.me),
         });
       } catch (error) {
         if (!error?.movementBlocked || replans >= RUNTIME.MAX_REPLANS) {
           throw error;
         }
-        // Remember the choke so the next replan routes around it.
+        // Remember the choke briefly so the next replan routes around it.
         if (error.blockedTile) {
-          avoidTiles.add(`${error.blockedTile.x},${error.blockedTile.y}`);
+          avoidUntil.set(
+            `${error.blockedTile.x},${error.blockedTile.y}`,
+            Date.now() +
+              RUNTIME.AVOID_TENURE_MOVE_FACTOR * movementDurationMs(bs)
+          );
         }
       }
     }
@@ -327,13 +364,56 @@ export function createActions(socket, bs, options = {}) {
    * seen (if the sighting is still fresh), otherwise the nearest spawn tile —
    * "wait where I last saw a parcel, else where parcels are born".
    */
+  /*
+   * Camp neighbourhood radius: the agent can only meaningfully watch as far as
+   * it senses, so the camp anchor search and the patrol footprint both scale to
+   * the observation distance instead of a fixed constant. Falls back to
+   * CAMP_PATROL_RADIUS when the server hasn't declared an observation distance.
+   */
+  function campRadius() {
+    const obsDist = bs.config?.observationDistance;
+    return Number.isFinite(obsDist) && obsDist > 0
+      ? Math.ceil(obsDist)
+      : CAMP_PATROL_RADIUS;
+  }
+
   function pickCampAnchor() {
     const me = bs.me;
     // Camp only runs once the scorer has judged the pocket hot, so a recent
-    // hint exists and is the anchor; the spawn-tile search is a defensive
-    // fallback only.
+    // hint exists; the spawn-tile search is a defensive fallback only.
     const hint = bs.lastParcelHint;
-    if (hint) return { x: hint.x, y: hint.y };
+    if (hint) {
+      // Center the camp on the local spawn cluster rather than the exact tile a
+      // parcel was last seen on — on a big green zone that tile is often an edge,
+      // leaving the agent camping a corner. Take the centroid of the spawn tiles
+      // within the view radius of the hint and snap it to the nearest spawn tile,
+      // so the agent sits where it can watch the most of the pocket.
+      const radius = campRadius();
+      const near = (bs.map.spawnTiles ?? []).filter(
+        (t) => Math.abs(t.x - hint.x) + Math.abs(t.y - hint.y) <= radius
+      );
+      if (near.length === 0) return { x: hint.x, y: hint.y };
+
+      let sumX = 0;
+      let sumY = 0;
+      for (const t of near) {
+        sumX += t.x;
+        sumY += t.y;
+      }
+      const cx = sumX / near.length;
+      const cy = sumY / near.length;
+
+      let best = null;
+      let bestDist = Infinity;
+      for (const t of near) {
+        const d = Math.abs(t.x - cx) + Math.abs(t.y - cy);
+        if (d < bestDist) {
+          bestDist = d;
+          best = t;
+        }
+      }
+      return best ? { x: best.x, y: best.y } : { x: hint.x, y: hint.y };
+    }
 
     let best = null;
     let bestDist = Infinity;
@@ -353,13 +433,14 @@ export function createActions(socket, bs, options = {}) {
   /*
    * Spawn tiles forming the pocket around the anchor; the patrol loops over
    * these so the agent keeps the whole cluster in view instead of freezing on
-   * one cell. Falls back to the anchor itself if no spawn tiles are nearby.
+   * one cell. The footprint scales to the view radius so every patrol position
+   * keeps its neighbours visible. Falls back to the anchor itself if no spawn
+   * tiles are nearby.
    */
   function campPatrolTiles(anchor) {
+    const radius = campRadius();
     const near = (bs.map.spawnTiles ?? []).filter(
-      (t) =>
-        Math.abs(t.x - anchor.x) + Math.abs(t.y - anchor.y) <=
-        CAMP_PATROL_RADIUS
+      (t) => Math.abs(t.x - anchor.x) + Math.abs(t.y - anchor.y) <= radius
     );
     return near.length > 0 ? near : [anchor];
   }
