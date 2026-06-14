@@ -86,14 +86,54 @@ function pushableSet(bs) {
 
 /*
  * Quick lookup of which tiles exist (walkable), as a Set of "t_x_y".
- * Used to only emit adjacency facts between two real tiles.
+ * Receives the already-computed tiles array so getTiles(bs) is not
+ * called a second time.
  */
-function tileSet(bs) {
+function buildTileSet(tiles) {
   const set = new Set();
-  for (const t of getTiles(bs)) {
+  for (const t of tiles) {
     set.add(tileName(t.x, t.y));
   }
   return set;
+}
+
+// ==========================================
+// Static map cache
+// ==========================================
+
+/*
+ * Tiles, adjacency facts, delivery zones and pushable tiles depend only on
+ * the map layout, which the server sends once and never changes mid-session.
+ * Recomputing them on every planning call is wasteful.
+ *
+ * Cache is a WeakMap keyed on bs.map.tiles (the array reference):
+ *   - Each agent instance has its own bs.map.tiles array → separate entry,
+ *     so MULTI mode (BDI + LLM) never cross-contaminates.
+ *   - If onMap fires again (reconnect), updateBeliefs assigns a new array to
+ *     bs.map.tiles → old reference drops out of the WeakMap automatically
+ *     (garbage collected) and the next call rebuilds from scratch.
+ *
+ * What is NOT cached (changes between calls):
+ *   occupiedSet — agents move, crates get pushed.
+ *   bs.me position, parcels, crate positions — always read fresh from bs.
+ */
+const _mapCache = new WeakMap();
+
+function ensureMapCache(bs) {
+  const tiles = getTiles(bs);
+
+  if (_mapCache.has(tiles)) return tiles; // cache hit for this agent's map
+
+  // Cache miss: first planning call for this agent, or map was replaced.
+  const knownTiles = buildTileSet(tiles);
+  _mapCache.set(tiles, {
+    knownTiles,
+    adjacency:  adjacencyFacts(tiles, knownTiles),
+    deliveries: deliverySet(bs),
+    pushables:  pushableSet(bs),
+  });
+
+  return tiles;
 }
 
 // ==========================================
@@ -150,23 +190,26 @@ function occupiedSet(bs) {
  * Only emitted when BOTH tiles exist (are walkable). Walls are simply tiles
  * that don't exist, so no adjacency is generated towards them — the agent
  * can't move there.
+ *
+ * Receives the pre-built knownTiles Set so it is not reconstructed 4× per
+ * tile inside the loop. Called once per agent per session by ensureMapCache.
  */
-function adjacencyFacts(bs, tiles) {
+function adjacencyFacts(tiles, knownTiles) {
   const facts = [];
   for (const t of tiles) {
     const here = tileName(t.x, t.y);
 
     const right = tileName(t.x + 1, t.y);
-    if (tileSet(bs).has(right)) facts.push(`(right ${here} ${right})`);
+    if (knownTiles.has(right)) facts.push(`(right ${here} ${right})`);
 
     const left = tileName(t.x - 1, t.y);
-    if (tileSet(bs).has(left)) facts.push(`(left ${here} ${left})`);
+    if (knownTiles.has(left)) facts.push(`(left ${here} ${left})`);
 
     const up = tileName(t.x, t.y + 1);
-    if (tileSet(bs).has(up)) facts.push(`(up ${here} ${up})`);
+    if (knownTiles.has(up)) facts.push(`(up ${here} ${up})`);
 
     const down = tileName(t.x, t.y - 1);
-    if (tileSet(bs).has(down)) facts.push(`(down ${here} ${down})`);
+    if (knownTiles.has(down)) facts.push(`(down ${here} ${down})`);
   }
   return facts;
 }
@@ -235,9 +278,11 @@ function buildGoalConjuncts(goal) {
  * Anything not declared is false (CWA), which is exactly what we want.
  */
 export function buildProblem(bs, goal) {
-  const tiles = getTiles(bs);
-  const deliveries = deliverySet(bs);
-  const pushables = pushableSet(bs);
+  // Ensure static map data is cached for this agent's map instance.
+  const tiles = ensureMapCache(bs);
+  const { adjacency, deliveries, pushables } = _mapCache.get(tiles);
+
+  // Dynamic: always recomputed — agents move, crates get pushed.
   const occupied = occupiedSet(bs);
 
   const objects = new Set();
@@ -250,12 +295,12 @@ export function buildProblem(bs, goal) {
     init.push(`(tile ${name})`);
 
     if (deliveries.has(name)) init.push(`(delivery ${name})`);
-    if (pushables.has(name)) init.push(`(pushable ${name})`);
-    if (!occupied.has(name)) init.push(`(free ${name})`);
+    if (pushables.has(name))  init.push(`(pushable ${name})`);
+    if (!occupied.has(name))  init.push(`(free ${name})`);
   }
 
-  // --- Adjacency ---
-  for (const f of adjacencyFacts(bs, tiles)) {
+  // --- Adjacency (pre-computed, static) ---
+  for (const f of adjacency) {
     init.push(f);
   }
 
