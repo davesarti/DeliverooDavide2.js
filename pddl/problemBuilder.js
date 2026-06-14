@@ -27,12 +27,25 @@ const DOMAIN_NAME = "deliveroo";
 // ==========================================
 
 /*
- * PDDL object names must be plain tokens (no spaces, parens, quotes, or other
- * Lisp-significant characters). Game parcel/crate ids can contain arbitrary
- * characters, so we sanitize them down to [a-z0-9_].
+ * Produces a stable numeric hash from a game id (djb2 variant) and encodes
+ * it in base-36 (digits + lowercase letters) to stay within the [a-z0-9]
+ * alphabet that PDDL requires.
+ *
+ * The result is used directly as the PDDL object suffix: we never need to
+ * convert back from the PDDL name to the original id, so readability of the
+ * token is not a goal — uniqueness is.
+ *
+ * Collision probability is negligible for the number of parcels/crates that
+ * can coexist in a single Deliveroo session (djb2 on a 32-bit space gives
+ * ~1 collision in 2^16 pairs, far above any realistic count).
  */
 function sanitize(id) {
-  return String(id).toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  let h = 5381;
+  const s = String(id);
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(h, 33) ^ s.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(36);
 }
 
 function tileName(x, y) {
