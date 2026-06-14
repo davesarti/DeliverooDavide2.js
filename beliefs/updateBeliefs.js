@@ -97,6 +97,15 @@ export function setupBeliefUpdates(socket, bs) {
       .filter((tile) => tile.type == 1)
       .map((tile) => ({ ...tile, staleness: 0 }));
 
+    // Tiles a crate can be pushed onto. The server (Controller.move) accepts a
+    // push only when the tile beyond the crate has a type starting with "5"
+    // (so "5" sliding tiles and "5!" crate spawners), so we mirror that exact
+    // test here. String(tile.type) guards against numeric types from older
+    // maps. Used by the PDDL problem builder to emit (pushable ?t) facts.
+    bs.map.pushableTiles = tiles.filter((tile) =>
+      String(tile.type).startsWith("5")
+    );
+
     bs.map.deliveryDistanceMap = buildDeliveryDistanceMap(
       width, height, tiles, bs.map.deliveryTiles
     );
@@ -107,7 +116,8 @@ export function setupBeliefUpdates(socket, bs) {
     console.log(
       `[${bs.me.name ?? "agent"}] Map: ` +
       `${bs.map.spawnTiles.length} spawn, ` +
-      `${bs.map.deliveryTiles.length} delivery`
+      `${bs.map.deliveryTiles.length} delivery, ` +
+      `${bs.map.pushableTiles.length} pushable`
     );
   });
 
