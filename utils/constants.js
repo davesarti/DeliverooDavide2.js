@@ -7,7 +7,7 @@ export const MIN_EDGE_COST = 0.1;
 // agents only add a step penalty (they will likely have moved by the time
 // we arrive).
 export const SOFT_OBSTACLE_HARD_RADIUS = 2;
-export const AGENT_SOFT_PENALTY = 5;
+export const AGENT_SOFT_PENALTY = 7.5;
 
 // Event-based decay model defaults (used only when the server config is
 // missing; both processes are normally read from bs.config).
@@ -79,15 +79,16 @@ export const RUNTIME = {
   GO_TO_TIMEOUT_MS: 5000,
   GO_TO_TIMEOUT_SAFETY_FACTOR: 3,
 
-  // Retry-then-replan on blocked steps: retry the same step a few times
-  // (transient crossing agent), then recompute the path from the current
-  // position, and only fail after several replans.
+  // A blocked step reroutes immediately (goTo replans around the proven
+  // blocked tile), so there is no per-step retry for static blocks — only the
+  // moving-agent yield below waits in place. MOVEMENT_RETRY_DELAY_MS is the
+  // short pause the idle camp patrol waits between loops.
   MOVEMENT_RETRY_DELAY_MS: 150,
-  MOVE_RETRY_LIMIT: 3,
-  // Each replan now hard-avoids the tiles that just refused us, so replans
-  // converge (every one rules out a blocked corridor) instead of thrashing
-  // between two — the budget can be generous without spinning.
-  MAX_REPLANS: 6,
+  // Replans hard-avoid the tiles that just refused us, so each one rules out a
+  // blocked corridor and they converge fast. A small budget is enough: after
+  // this many the target hands off to the failed pool (exponential backoff),
+  // instead of the agent persisting on a blocked path for several seconds.
+  MAX_REPLANS: 3,
 
   // Avoid-tile tenure. A tile that just physically refused us is hard-avoided
   // for only a short, movement-scaled window (this many move-durations), then
@@ -95,22 +96,27 @@ export const RUNTIME = {
   // tile in a move or two and is still in sensing then, so the route is
   // reconsidered while we can still see whether the choke really opened —
   // a long tenure would only "retry" the route after the agent left sensing.
-  AVOID_TENURE_MOVE_FACTOR: 1.5,
+  AVOID_TENURE_MOVE_FACTOR: 3,
 
   // Yield-in-place backoff. When a move is refused by a *moving* agent (not
-  // a wall/crate), wait a randomized interval and retry the same step a few
-  // times before rerouting. The randomness desynchronizes two agents caught
-  // mirroring each other, so one slips through while the other holds still.
-  YIELD_RETRY_LIMIT: 4,
-  YIELD_BACKOFF_MIN_MS: 100,
-  YIELD_BACKOFF_MAX_MS: 500,
+  // a wall/crate), wait a random interval in [0, this many server
+  // move-durations] and retry the same step once before rerouting. The upper
+  // bound scales to the server's movement duration so the wait can cover a
+  // full step of the blocking agent; the randomness desynchronizes two agents
+  // caught mirroring each other, so one slips through while the other holds.
+  // If the single wait doesn't clear it, rerouting recovers faster.
+  YIELD_RETRY_LIMIT: 1,
+  YIELD_BACKOFF_MOVE_FACTOR: 3,
 
-  // Failure pool: exponential backoff per predicate key
-  // (3s -> 6s -> 12s -> ... capped), failure counter reset after a quiet
-  // period or on success.
-  FAILED_INTENTION_RETRY_MS: 3000,
-  FAILED_INTENTION_RETRY_MAX_MS: 30000,
-  FAILURE_STATS_RESET_MS: 60000,
+  // Failure pool: a single flat cooldown before a failed predicate is retried.
+  // No exponential backoff — a failure is almost always transient congestion
+  // (a crossing agent at a choke) that clears within a moment, not a genuinely
+  // unreachable target: an unreachable free parcel is quickly taken by a closer
+  // agent and vanishes from beliefs (its id-keyed option never regenerates), so
+  // there is nothing to "back off" from. The loop's validity checks already
+  // drop taken/undeliverable intentions before they reach the pool. So just
+  // re-probe at a steady short interval.
+  FAILED_INTENTION_RETRY_MS: 1000,
 
   // Rate-limited reconsideration: full options regeneration runs on
   // significant belief changes, or at most this often.

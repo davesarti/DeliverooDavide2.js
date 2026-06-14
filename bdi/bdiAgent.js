@@ -52,10 +52,6 @@ class IntentionRevision {
   // key -> { predicate, addedAtMs, cooldownMs }: predicates waiting out a
   // post-failure cooldown.
   #failedIntentionPool = new Map();
-  // key -> { failures, lastFailureAtMs }: kept separately from the pool
-  // (whose entries are deleted on requeue) so repeated failures of the same
-  // predicate can grow the cooldown exponentially.
-  #failureStats = new Map();
   #bs;
   #executePredicate;
 
@@ -96,41 +92,18 @@ class IntentionRevision {
   }
 
   /*
-   * Stores a failed intention to retry it later.
-   * The cooldown doubles at each repeated failure of the same predicate
-   * (3s -> 6s -> 12s, capped): transient blocks recover quickly while
-   * genuinely unreachable targets stop being hammered. The failure counter
-   * restarts after a quiet period, so an old failure does not penalize a
-   * target forever.
+   * Stores a failed intention so it is filtered from the queue for a short,
+   * flat cooldown, then retried. No exponential backoff: a failure is almost
+   * always transient congestion that clears within a moment (see
+   * RUNTIME.FAILED_INTENTION_RETRY_MS), so every predicate — pickup, delivery
+   * or explore — re-probes at the same steady interval.
    */
   #recordFailedIntention(predicate) {
-    const key = this.#predicateKey(predicate);
-    const nowMs = Date.now();
-
-    const stats = this.#failureStats.get(key);
-    const failures =
-      stats && nowMs - stats.lastFailureAtMs < RUNTIME.FAILURE_STATS_RESET_MS
-        ? stats.failures + 1
-        : 1;
-    this.#failureStats.set(key, { failures, lastFailureAtMs: nowMs });
-
-    const cooldownMs = Math.min(
-      RUNTIME.FAILED_INTENTION_RETRY_MS * 2 ** (failures - 1),
-      RUNTIME.FAILED_INTENTION_RETRY_MAX_MS
-    );
-
-    this.#failedIntentionPool.set(key, {
+    this.#failedIntentionPool.set(this.#predicateKey(predicate), {
       predicate: [...predicate],
-      addedAtMs: nowMs,
-      cooldownMs,
+      addedAtMs: Date.now(),
+      cooldownMs: RUNTIME.FAILED_INTENTION_RETRY_MS,
     });
-  }
-
-  /*
-   * Clears the failure history of a predicate that finally succeeded.
-   */
-  #clearFailureStats(predicate) {
-    this.#failureStats.delete(this.#predicateKey(predicate));
   }
 
   /*
@@ -246,8 +219,8 @@ class IntentionRevision {
       const routeDist = pickupRouteDistance(newParcel, me, this.#bs);
       if (routeDist == null) return -1;
 
-      // Raw reward discounted by the chance of actually getting the parcel
-      // (race against closer opponents, crowded zones).
+      // Raw reward discounted by the chance of winning the race for the
+      // parcel against the closest known opponent.
       const expectedReward = competitionAdjustedReward(newParcel, me, this.#bs);
 
       if (myParcels.length === 0) {
@@ -263,8 +236,8 @@ class IntentionRevision {
     if (action === "explore") return EXPLORATION_INCENTIVE;
 
     if (action === "camp") {
-      // Camp is viable only while the pocket is still "hot" — a free parcel was
-      // seen within the pocket's adaptive patience window (longer for dense
+      // Camp is viable only while the pocket is still "hot" — a parcel was
+      // picked up within the pocket's adaptive patience window (longer for dense
       // spawn clusters, near-zero for isolated tiles / non-spawning maps). Once
       // it goes cold the score drops to invalid, so a distinct `explore`
       // intention (empty-handed) or delivery (carrying) takes over. Camp never
@@ -412,10 +385,6 @@ class IntentionRevision {
 
         await intention
           .achieve()
-          .then((result) => {
-            this.#clearFailureStats(intention.predicate);
-            return result;
-          })
           .catch((error) => {
             const wasPreempted = isPreemptedIntentionError(error);
             const wasStopped = isStoppedIntentionError(error);
@@ -544,8 +513,39 @@ export async function startBDIAgent(socket, bs, actions) {
     // including when the option set is unchanged — so time-varying scores (a
     // camp pocket going cold, decay drift) are re-evaluated each tick without
     // a second explicit sort. Hysteresis still guards against churn.
-    optionsGeneration(agent, bs);
+    //
+    // This runs synchronously inside a socket sensing event. A collision emits
+    // a burst of agent-position sensing events, so any throw in option
+    // generation/scoring here would otherwise propagate into the socket emitter
+    // and tear down the agent. Contain it: a bad reconsideration tick must not
+    // kill sensing — the next tick re-runs it cleanly.
+    try {
+      optionsGeneration(agent, bs);
+    } catch (error) {
+      console.error(
+        `[${bs.me.name ?? "BDI"}] optionsGeneration failed on sensing update:`,
+        error
+      );
+    }
   };
 
-  agent.loop();
+  // Supervise the intention loop. `loop()` protects each intention's execution
+  // with its own try/catch, but the surrounding while-body (requeue, queue
+  // edits, the failure-recovery push on a blocked delivery) runs unprotected;
+  // if any of it throws, the loop's promise rejects. Launched bare, that
+  // rejection is unhandled — under Node it kills the process and the agent
+  // never restarts (most often seen after a delivery is blocked by a
+  // collision). Relaunch on rejection so the agent resumes: the same `agent`
+  // is reused, so the intention queue, failed-intention pool and beliefs all
+  // survive the restart. The logged error pins the exact trigger.
+  const runLoop = () => {
+    agent.loop().catch((error) => {
+      console.error(
+        `[${bs.me.name ?? "BDI"}] intention loop crashed — restarting:`,
+        error
+      );
+      runLoop();
+    });
+  };
+  runLoop();
 }

@@ -157,28 +157,11 @@ export function setupBeliefUpdates(socket, bs) {
       bs.parcels.set(parcel.id, { ...parcel, lastSeenMs: nowMs });
     }
 
-    // Remember where parcels actually appear: the nearest free (uncarried)
-    // parcel just seen becomes the camp anchor hint. This is what makes camp
-    // "wait where I last saw a parcel".
-    let nearestFree = null;
-    let nearestFreeDist = Infinity;
-    for (const parcel of sensing.parcels ?? []) {
-      if (parcel.carriedBy) continue;
-      const d =
-        Math.abs(Math.round(parcel.x) - Math.round(bs.me.x)) +
-        Math.abs(Math.round(parcel.y) - Math.round(bs.me.y));
-      if (d < nearestFreeDist) {
-        nearestFreeDist = d;
-        nearestFree = parcel;
-      }
-    }
-    if (nearestFree) {
-      bs.lastParcelHint = {
-        x: Math.round(nearestFree.x),
-        y: Math.round(nearestFree.y),
-        ts: nowMs,
-      };
-    }
+    // The camp anchor hint (bs.lastParcelHint) is no longer set here from
+    // *seen* parcels: a sighting only proves a parcel is present, not that we
+    // can win it. It is set on a successful pickup instead (see actions.js
+    // pickup), so camp anchors on zones we actually harvest — contention-aware
+    // by construction, which matters since every spawn tile spawns equally.
 
     for (const crate of sensing.crates ?? []) {
       bs.crates.set(crate.id, crate);

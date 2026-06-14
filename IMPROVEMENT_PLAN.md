@@ -218,16 +218,21 @@ half-completed route) is expensive.
   `P(win) = 1 / (1 + e^{(myDist − oppDist)/τ})` (τ ≈ 2 tiles), or the cheaper
   step function: full value if `myDist < oppDist`, ×0.5 if comparable,
   ×0.1 if an opponent is strictly closer.
-- **Zone density penalty.** Around each candidate parcel, count agents `A`
-  and free parcels `P` within radius `r` (≈ observation distance / 2) and
-  multiply the score by `min(1, P / (A + 1))`. Zones where competitors
-  outnumber parcels become unattractive; zones with many parcels per agent
-  stay attractive (they amortize the travel). Same signal can be added to
-  exploration target choice in `findCellsToExplore` later.
+- **Zone density penalty (dropped, 2026-06-14).** Originally: around each
+  candidate parcel, count agents `A` and free parcels `P` within radius `r`
+  and multiply the score by `min(1, P / (A + 1))`. Removed because it
+  double-counts opponents the race discount already handles, and — being an
+  *absolute* multiplier against the fixed exploration floor in
+  `intentionScore` — it can push a parcel the agent would *win the race for*
+  below that floor, making the agent walk away from a winnable pickup. The
+  race discount alone is relative and self-correcting (among winnable parcels
+  it keeps the best one), and per-pickup re-decision already captures the
+  many-parcels-per-agent "amortization" benefit without a spatial factor.
 
-Both are pure score modifiers — option generation and the queue mechanism are
-unchanged. Expected effect: the agent stops paying travel cost for parcels it
-statistically never wins, and drifts towards underserved areas.
+The race discount is a pure score modifier — option generation and the queue
+mechanism are unchanged. Expected effect: the agent stops paying travel cost
+for parcels it statistically never wins, without suppressing winnable pickups
+in busy zones.
 
 ### WP5 — Event-based decay model (no wall clock anywhere) → fixes S4
 
@@ -395,11 +400,11 @@ a task's value to an agent is its *expected* marginal utility, which must
 include the probability of actually obtaining it. Discounting a parcel by a
 distance-race win probability is the degenerate (no-communication) form of a
 bid: when an opponent is strictly closer, the expected value of racing is
-near zero and the rational bid is to not race. The zone-density penalty is
-the same idea aggregated spatially, and parallels density-based dispatch
-heuristics in ride-hailing/fleet management (drivers repositioning towards
-high demand-to-supply ratio zones), a well-documented effective heuristic in
-dynamic fleet literature.
+near zero and the rational bid is to not race. (A spatially-aggregated
+zone-density penalty — paralleling density-based dispatch in ride-hailing
+fleet management — was prototyped and dropped; see WP4 above for why the
+per-parcel race discount subsumes it without the winnable-pickup suppression
+it caused.)
 
 ### 5. Event-based time model (WP5)
 

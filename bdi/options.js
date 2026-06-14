@@ -126,39 +126,17 @@ export function raceWinProbability(parcel, me, bs) {
 }
 
 /*
- * Crowding around a parcel: with A agents and P free parcels within a
- * radius, scale by min(1, P / (A + 1)). Zones where competitors outnumber
- * parcels become unattractive; zones with many parcels per agent stay
- * attractive (they amortize the travel).
- */
-export function zoneDensityFactor(parcel, bs) {
-  const obsDist = bs.config.observationDistance;
-  const radius =
-    Number.isFinite(obsDist) && obsDist > 0 ? Math.ceil(obsDist / 2) : 4;
-
-  let agentsNearby = 0;
-  for (const agent of bs.agents.values()) {
-    if (distance(agent, parcel) <= radius) agentsNearby++;
-  }
-
-  let parcelsNearby = 0;
-  for (const other of bs.parcels.values()) {
-    if (!other.carriedBy && distance(other, parcel) <= radius) parcelsNearby++;
-  }
-
-  return Math.min(1, parcelsNearby / (agentsNearby + 1));
-}
-
-/*
- * Expected value of a parcel once competition is considered: the raw
- * reward discounted by the race win probability and the zone crowding.
+ * Expected value of a parcel once competition is considered: the raw reward
+ * discounted only by the chance of winning the race to it. We deliberately do
+ * NOT add a zone-crowding (agent-presence) penalty: raceWinProbability already
+ * accounts for closer opponents per parcel, and it is relative — among parcels
+ * we can still win it keeps the best one. An absolute presence penalty, by
+ * contrast, multiplies against the fixed exploration floor in intentionScore
+ * and can push a winnable parcel below it, making the agent walk away from a
+ * pickup it would have gotten.
  */
 export function competitionAdjustedReward(parcel, me, bs) {
-  return (
-    parcel.reward *
-    raceWinProbability(parcel, me, bs) *
-    zoneDensityFactor(parcel, bs)
-  );
+  return parcel.reward * raceWinProbability(parcel, me, bs);
 }
 
 /*

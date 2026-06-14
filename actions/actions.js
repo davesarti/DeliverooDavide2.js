@@ -39,18 +39,25 @@ export function createActions(socket, bs, options = {}) {
     const moved = await socket.emitMove(direction);
 
     if (!moved) {
-      const error = new Error(`Movement failed: ${direction}`);
-      error.movementBlocked = true;
-      // Record exactly which tile the server refused, so the replanner can
-      // avoid this proven-blocked tile (see goTo) instead of re-entering it.
+      // A refused move is a control signal, not an exception: executePath/goTo
+      // read movementBlocked + blockedTile to drive yield/retry/replan, and it
+      // only reaches the loop's failure logger after repeated replans all fail.
+      // Throw a plain object (no captured stack) rather than an Error so those
+      // flags stay intact while the log shows one clean line, not a stack trace.
+      // blockedTile records exactly which tile the server refused, so the
+      // replanner avoids this proven-blocked tile (see goTo) instead of
+      // re-entering it.
       const delta = DIRECTIONS.find((d) => d.move === direction);
-      if (delta) {
-        error.blockedTile = {
-          x: Math.round(bs.me.x) + delta.dx,
-          y: Math.round(bs.me.y) + delta.dy,
-        };
-      }
-      throw error;
+      throw {
+        movementBlocked: true,
+        blockedTile: delta
+          ? {
+              x: Math.round(bs.me.x) + delta.dx,
+              y: Math.round(bs.me.y) + delta.dy,
+            }
+          : undefined,
+        message: `Movement failed: ${direction} — will retry`,
+      };
     }
 
     bs.me.x = moved.x;
@@ -60,10 +67,25 @@ export function createActions(socket, bs, options = {}) {
   }
 
   /*
-   * Asks the server to pick up the parcel on the current cell.
+   * Asks the server to pick up the parcel on the current cell. A pickup that
+   * actually collects something marks this tile as the camp anchor hint: camp
+   * should loiter where we *harvest*, not merely where we *see* parcels (a
+   * sighting we keep losing to a closer opponent is worthless). Under a uniform
+   * spawn rate this realized-harvest signal is what distinguishes a productive
+   * pocket from a contested one.
    */
   async function pickup() {
-    return await socket.emitPickup();
+    const picked = await socket.emitPickup();
+
+    if (Array.isArray(picked) && picked.length > 0) {
+      bs.lastParcelHint = {
+        x: Math.round(bs.me.x),
+        y: Math.round(bs.me.y),
+        ts: Date.now(),
+      };
+    }
+
+    return picked;
   }
 
   /*
@@ -143,7 +165,10 @@ export function createActions(socket, bs, options = {}) {
       if (shouldStop()) throw ["stopped"];
 
       if (timeoutMs != null && Date.now() - startedAt > timeoutMs) {
-        throw new Error("go_to timeout");
+        // Leg took too long (congestion / a slow contested route). Transient
+        // and re-probed after the flat retry cooldown — throw a plain string so
+        // the loop's failure logger prints one clean notice, not a stack trace.
+        throw "go_to timeout — will retry";
       }
 
       for (let attempt = 0; ; attempt++) {
@@ -153,26 +178,23 @@ export function createActions(socket, bs, options = {}) {
         } catch (error) {
           if (!error?.movementBlocked) throw error;
 
-          // A moving agent sitting on the target tile (not a wall/crate):
+          // Only a moving agent on the target tile is worth waiting for:
           // yield in place with a randomized backoff so two agents caught
-          // mirroring each other desynchronize and one slips through. A
-          // static blocker exhausts the smaller retry budget quickly and
-          // falls through to goTo's reroute.
+          // mirroring each other desynchronize and one slips through. Any
+          // other block (wall, crate, or one we can't confirm) won't clear by
+          // waiting, so it propagates straight to goTo, which reroutes.
           const blockedByAgent =
             error.blockedTile &&
             isOccupied(error.blockedTile.x, error.blockedTile.y, bs.agents);
+          if (!blockedByAgent || attempt >= RUNTIME.YIELD_RETRY_LIMIT) {
+            throw error;
+          }
 
-          const limit = blockedByAgent
-            ? RUNTIME.YIELD_RETRY_LIMIT
-            : RUNTIME.MOVE_RETRY_LIMIT;
-          if (attempt >= limit) throw error;
-
-          const delayMs = blockedByAgent
-            ? RUNTIME.YIELD_BACKOFF_MIN_MS +
-              Math.random() *
-                (RUNTIME.YIELD_BACKOFF_MAX_MS - RUNTIME.YIELD_BACKOFF_MIN_MS)
-            : RUNTIME.MOVEMENT_RETRY_DELAY_MS;
-          await wait(delayMs);
+          await wait(
+            Math.random() *
+              RUNTIME.YIELD_BACKOFF_MOVE_FACTOR *
+              movementDurationMs(bs)
+          );
           if (shouldStop()) throw ["stopped"];
         }
       }
@@ -270,7 +292,12 @@ export function createActions(socket, bs, options = {}) {
       }
 
       if (!result || !Array.isArray(result.path)) {
-        throw new Error(`Path not found to (${x}, ${y})`);
+        // No route to the target right now — usually a transient block (agents
+        // boxing a choke within the hard-obstacle radius) that clears as they
+        // move; the intention fails and is re-probed after the flat retry
+        // cooldown. Throw a plain string, not an Error, so the loop's failure
+        // logger prints one clean notice instead of a full stack trace.
+        throw `Path not found to (${x}, ${y}) — will retry`;
       }
 
       const effectiveTimeoutMs =
@@ -356,13 +383,19 @@ export function createActions(socket, bs, options = {}) {
       }
     }
 
-    throw new Error("No reachable spawn tile");
+    // Every spawn tile is momentarily unreachable — the agent is boxed in by
+    // other agents at a choke. This is an expected, transient condition (it
+    // clears as they move), so the intention still fails and is re-probed after
+    // the flat retry cooldown, but we throw a plain string instead of an Error:
+    // the loop's failure logger prints it as a single clean notice rather than
+    // dumping a full stack trace that looks like a crash.
+    throw "No reachable spawn tile (boxed in) — will retry";
   }
 
   /*
-   * Picks the tile to camp around: the place a free parcel was most recently
-   * seen (if the sighting is still fresh), otherwise the nearest spawn tile —
-   * "wait where I last saw a parcel, else where parcels are born".
+   * Picks the tile to camp around: the place a parcel was most recently
+   * picked up (if the harvest is still fresh), otherwise the nearest spawn
+   * tile — "wait where I last collected a parcel, else where parcels are born".
    */
   /*
    * Camp neighbourhood radius: the agent can only meaningfully watch as far as
@@ -384,10 +417,10 @@ export function createActions(socket, bs, options = {}) {
     const hint = bs.lastParcelHint;
     if (hint) {
       // Center the camp on the local spawn cluster rather than the exact tile a
-      // parcel was last seen on — on a big green zone that tile is often an edge,
-      // leaving the agent camping a corner. Take the centroid of the spawn tiles
-      // within the view radius of the hint and snap it to the nearest spawn tile,
-      // so the agent sits where it can watch the most of the pocket.
+      // parcel was last picked up on — on a big green zone that tile is often an
+      // edge, leaving the agent camping a corner. Take the centroid of the spawn
+      // tiles within the view radius of the hint and snap it to the nearest spawn
+      // tile, so the agent sits where it can watch the most of the pocket.
       const radius = campRadius();
       const near = (bs.map.spawnTiles ?? []).filter(
         (t) => Math.abs(t.x - hint.x) + Math.abs(t.y - hint.y) <= radius
