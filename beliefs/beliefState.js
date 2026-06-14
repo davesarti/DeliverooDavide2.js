@@ -21,6 +21,10 @@ export function createBeliefState() {
       tiles: [],
       deliveryTiles: [],
       spawnTiles: [],
+      // Tiles a crate can be pushed onto: server tile types "5" (sliding tile)
+      // and "5!" (crate spawner). Populated in updateBeliefs from onMap and
+      // consumed by the PDDL problem builder to emit (pushable ?t) facts.
+      pushableTiles: [],
       deliveryDistanceMap: [],
       spawnDistanceMap: [],
       grid: [],
