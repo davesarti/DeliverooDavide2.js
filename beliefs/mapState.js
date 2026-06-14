@@ -129,5 +129,3 @@ export function buildGrid(width, height, tiles) {
 
   return grid;
 }
-
-
