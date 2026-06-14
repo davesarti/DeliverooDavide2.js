@@ -30,7 +30,10 @@ export function astar(start, goal, bs, options = {}) {
 
   return astarOnState({
     map: bs.map.grid,
-    crates: bs.crates,
+    // ignoreCrates: treat crates as passable. Used to ask "would a path exist
+    // if crates weren't in the way?" — i.e. whether a crate is the blocker and
+    // a PDDL push could open the route (see goTo's crate-block detection).
+    crates: options.ignoreCrates ? new Map() : bs.crates,
     agents: bs.agents,
     blockedTiles,
     start,

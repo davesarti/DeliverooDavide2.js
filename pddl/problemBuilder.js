@@ -138,10 +138,19 @@ function ensureMapCache(bs) {
 
   // Cache miss: first call, or server sent a new map.
   _cachedTilesRef = tiles;
-  const knownTiles = buildTileSet(tiles);
+
+  // The server includes type-0 wall tiles in bs.map.tiles. They are NOT
+  // walkable, so they must be excluded from the tile/adjacency/free facts:
+  // otherwise the solver routes through walls and the resulting plan's first
+  // move into a wall is refused by the server (see canEnterTile, which applies
+  // the same Number(type)===0 wall test to A*). type "5!" → Number is NaN ≠ 0,
+  // so crate/spawner tiles stay walkable, which is correct.
+  const walkable = tiles.filter((t) => Number(t.type) !== 0);
+  const knownTiles = buildTileSet(walkable);
   _cachedData = {
+    walkable,
     knownTiles,
-    adjacency:  adjacencyFacts(tiles, knownTiles),
+    adjacency:  adjacencyFacts(walkable, knownTiles),
     deliveries: deliverySet(bs),
     pushables:  pushableSet(bs),
   };
@@ -292,8 +301,8 @@ function buildGoalConjuncts(goal) {
  */
 export function buildProblem(bs, goal) {
   // Ensure static map data is cached (rebuilt only when the map changes).
-  const tiles = ensureMapCache(bs);
-  const { adjacency, deliveries, pushables } = _cachedData;
+  ensureMapCache(bs);
+  const { walkable: tiles, adjacency, deliveries, pushables } = _cachedData;
 
   // Dynamic: always recomputed — agents move, crates get pushed.
   const occupied = occupiedSet(bs);

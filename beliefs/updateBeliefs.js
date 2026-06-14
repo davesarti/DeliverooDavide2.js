@@ -195,10 +195,19 @@ export function setupBeliefUpdates(socket, bs) {
       }
     }
 
-    // Crates keep plain snapshot semantics (static obstacles, cheap to re-sense).
+    // Crates are static obstacles, so they get object permanence (like agents
+    // and parcels above): a crate is forgotten only when its tile is currently
+    // observable but it is no longer there (we actually saw it leave), not just
+    // because it drifted out of sensing range. Keeping out-of-view crates lets
+    // the PDDL planner reason about multi-crate routes — push crate A, walk a
+    // few tiles, push crate B — where B sits beyond the current view. Our own
+    // pushes still update belief because we re-sense the crate's new tile from
+    // the adjacent square.
     const sensedCrates = new Set((sensing.crates ?? []).map((c) => c.id));
     for (const known of [...bs.crates.values()]) {
-      if (!sensedCrates.has(known.id)) bs.crates.delete(known.id);
+      if (!sensedCrates.has(known.id) && isObservable(known)) {
+        bs.crates.delete(known.id);
+      }
     }
 
     // Parcels: object permanence. A parcel that merely left the sensing

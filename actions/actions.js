@@ -14,6 +14,8 @@ import {
   recordStepDecaySample,
   movementDurationMs,
 } from "../utils/decayModel.js";
+import { plan as pddlPlan } from "../pddl/pddlPlanner.js";
+import { executePlan } from "../pddl/planExecutor.js";
 
 /*
  * Creates the action layer for a specific agent.
@@ -274,11 +276,30 @@ export function createActions(socket, bs, options = {}) {
       return set;
     };
 
-    const planFrom = (pos, avoid = activeAvoid()) =>
+    const planFrom = (pos, avoid = activeAvoid(), extra = {}) =>
       findPath(pos, { x, y }, AGENT_CONFIG.pathfinding.algorithm, bs, {
         blockedTiles: getBlockedTiles(),
         avoidTiles: avoid,
+        ...extra,
       });
+
+    // True when the target is reachable only once crates are treated as
+    // passable — i.e. a crate is what blocks the route and a PDDL push could
+    // open it. Agents and walls are still respected, so a pure agent/wall block
+    // returns false (PDDL, which also treats agents as obstacles, can't help).
+    const crateBlocksRoute = () => {
+      const cf = planFrom(bs.me, new Set(), { ignoreCrates: true });
+      return !!(cf && Array.isArray(cf.path));
+    };
+
+    // Tagged error the callers (goPickUp/goDropOff/explore) react to by falling
+    // back to PDDL instead of just retrying.
+    const crateBlockError = () => ({
+      blockedByCrate: true,
+      x,
+      y,
+      message: `Crate blocks route to (${x}, ${y}) — trying PDDL`,
+    });
 
     for (let replans = 0; ; replans++) {
       let result = planFrom(bs.me);
@@ -292,11 +313,11 @@ export function createActions(socket, bs, options = {}) {
       }
 
       if (!result || !Array.isArray(result.path)) {
-        // No route to the target right now — usually a transient block (agents
-        // boxing a choke within the hard-obstacle radius) that clears as they
-        // move; the intention fails and is re-probed after the flat retry
-        // cooldown. Throw a plain string, not an Error, so the loop's failure
-        // logger prints one clean notice instead of a full stack trace.
+        // No route to the target. If a crate is the blocker, signal it so the
+        // caller can fall back to PDDL; otherwise it's walls or agents — usually
+        // a transient block that clears on its own — so throw a plain string,
+        // not an Error, so the loop's failure logger prints one clean notice.
+        if (crateBlocksRoute()) throw crateBlockError();
         throw `Path not found to (${x}, ${y}) — will retry`;
       }
 
@@ -317,6 +338,14 @@ export function createActions(socket, bs, options = {}) {
         });
       } catch (error) {
         if (!error?.movementBlocked || replans >= RUNTIME.MAX_REPLANS) {
+          // A* has given up after retrying the choke. A crate sole-blocking a
+          // choke surfaces here (the agent keeps getting refused at the crate
+          // tile) rather than as a null path, so check the same crate-passable
+          // reachability and signal blockedByCrate so the caller falls back to
+          // PDDL. Pure agent/wall blocks rethrow unchanged for the normal retry.
+          if (error?.movementBlocked && crateBlocksRoute()) {
+            throw crateBlockError();
+          }
           throw error;
         }
         // Remember the choke briefly so the next replan routes around it.
@@ -332,7 +361,45 @@ export function createActions(socket, bs, options = {}) {
   }
 
   /*
-   * Goes to the parcel and tries to pick it up.
+   * Reaches (x, y) using a PDDL plan instead of A*. The PDDL planner can push
+   * crates out of the way, so this is the fallback when A* reports the route is
+   * blocked by a crate. Returns true when the agent ends up on the tile, false
+   * when no plan was found / the plan failed mid-way (caller should fall back).
+   * A clean stop is re-thrown so the BDI loop can abort the intention.
+   */
+  async function pddlReach(x, y, { shouldStop = () => false } = {}) {
+    // A crate push is a committed multi-step maneuver: it deliberately moves the
+    // agent AWAY from the target (to get behind the crate) before approaching,
+    // which temporarily lowers this intention's score. Without protection the
+    // BDI revision loop would preempt the intention mid-push and restart it from
+    // scratch — the agent goes round, pushes, gets preempted, goes round again…
+    // Flag the maneuver on the shared belief state so sortQueueByScore leaves it
+    // alone until the plan finishes (or fails).
+    bs.committedManeuver = true;
+    try {
+      const steps = await pddlPlan(bs, { type: "reach_tile", x, y });
+      if (!steps || steps.length === 0) return false;
+      if (shouldStop()) throw ["stopped"];
+      await executePlan(
+        steps,
+        { move, pickup, putdown },
+        { isStopped: shouldStop }
+      );
+      return true;
+    } catch (error) {
+      if (Array.isArray(error) && error[0] === "stopped") throw error;
+      // No plan, solver error, or a move blocked because the world moved during
+      // execution: report failure so the caller keeps its original behaviour.
+      return false;
+    } finally {
+      bs.committedManeuver = false;
+    }
+  }
+
+  /*
+   * Goes to the parcel and tries to pick it up. If A* can't reach the parcel
+   * because a crate blocks the route, retry the approach with PDDL (which can
+   * push the crate) before failing.
    */
   async function goPickUp(
     x,
@@ -340,20 +407,35 @@ export function createActions(socket, bs, options = {}) {
     parcelId = null,
     { shouldStop = () => false } = {}
   ) {
-    await goTo(x, y, { shouldStop });
+    try {
+      await goTo(x, y, { shouldStop });
+    } catch (error) {
+      if (Array.isArray(error) && error[0] === "stopped") throw error;
+      if (!(error?.blockedByCrate && (await pddlReach(x, y, { shouldStop })))) {
+        throw error;
+      }
+    }
     if (shouldStop()) throw ["stopped"];
     return await pickup();
   }
 
   /*
-   * Goes to a delivery tile and deposits the carried parcels.
+   * Goes to a delivery tile and deposits the carried parcels. Same crate-block
+   * PDDL fallback as goPickUp.
    */
   async function goDropOff(
     x,
     y,
     { shouldStop = () => false } = {}
   ) {
-    await goTo(x, y, { shouldStop });
+    try {
+      await goTo(x, y, { shouldStop });
+    } catch (error) {
+      if (Array.isArray(error) && error[0] === "stopped") throw error;
+      if (!(error?.blockedByCrate && (await pddlReach(x, y, { shouldStop })))) {
+        throw error;
+      }
+    }
     if (shouldStop()) throw ["stopped"];
     return await putdown();
   }
@@ -379,16 +461,25 @@ export function createActions(socket, bs, options = {}) {
         if (Array.isArray(error) && error[0] === "stopped") {
           throw error;
         }
+        // A* couldn't reach this spawn tile. If a crate is the blocker, PDDL
+        // can push it out of the way (the domain's push-* actions); try that
+        // before moving on to the next candidate.
+        if (
+          error?.blockedByCrate &&
+          (await pddlReach(cell.x, cell.y, { shouldStop }))
+        ) {
+          return true;
+        }
         continue;
       }
     }
 
-    // Every spawn tile is momentarily unreachable — the agent is boxed in by
-    // other agents at a choke. This is an expected, transient condition (it
-    // clears as they move), so the intention still fails and is re-probed after
-    // the flat retry cooldown, but we throw a plain string instead of an Error:
-    // the loop's failure logger prints it as a single clean notice rather than
-    // dumping a full stack trace that looks like a crash.
+    // Every spawn tile is unreachable and none was crate-blocked in a way PDDL
+    // could fix — the agent is boxed in at a choke (usually by other agents).
+    // This is an expected, transient condition that clears as they move, so the
+    // intention fails and is re-probed after the flat retry cooldown. Throw a
+    // plain string, not an Error, so the loop's failure logger prints one clean
+    // notice instead of a full stack trace.
     throw "No reachable spawn tile (boxed in) — will retry";
   }
 

@@ -9,7 +9,9 @@ import {
 export function bfs(start, goal, bs, options = {}) {
   return bfsOnState({
     map: bs.map.grid,
-    crates: bs.crates,
+    // ignoreCrates: treat crates as passable, so callers can test whether a
+    // crate is what blocks the route (see goTo's crate-block detection).
+    crates: options.ignoreCrates ? new Map() : bs.crates,
     agents: bs.agents,
     blockedTiles: options.blockedTiles ?? bs.map.blockedTiles,
     start,

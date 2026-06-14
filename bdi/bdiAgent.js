@@ -315,7 +315,10 @@ class IntentionRevision {
     );
 
     const best = this.intention_queue[0];
-    if (running && best && running !== best) {
+    // A committed PDDL maneuver (e.g. pushing a crate out of the way) must not
+    // be preempted: it temporarily lowers its own score by detouring, and
+    // restarting it from scratch wastes the partial push. Let it finish.
+    if (running && best && running !== best && !this.#bs.committedManeuver) {
       const runningScore = this.intentionScore(running.predicate);
       const challengerScore = this.intentionScore(best.predicate);
 
