@@ -23,6 +23,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ==========================================
+// Configuration
+// ==========================================
+
+/*
+ * Maximum time to wait for the online solver before giving up and falling
+ * back to the existing pathfinding. Keeps the BDI agent responsive even
+ * when the solver is slow or unreachable.
+ */
+const SOLVER_TIMEOUT_MS = 5000;
+
+// ==========================================
 // Domain caching
 // ==========================================
 
@@ -60,9 +71,19 @@ export async function plan(bs, goal) {
   const problem = buildProblem(bs, goal);
 
   try {
-    const result = await onlineSolver(domain, problem);
+    // Race the solver against a deadline: if the server is slow or
+    // unreachable the rejection propagates to the catch below, which
+    // returns null so the BDI caller falls back to A* pathfinding.
+    const result = await Promise.race([
+      onlineSolver(domain, problem),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`solver timeout after ${SOLVER_TIMEOUT_MS}ms`)),
+          SOLVER_TIMEOUT_MS
+        )
+      ),
+    ]);
 
-    // onlineSolver returns undefined when no plan is found.
     if (!result || result.length === 0) {
       return null;
     }
