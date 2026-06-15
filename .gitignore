@@ -3,3 +3,5 @@ env/
 .env
 struttura.txt
 llm/history
+CLAUDE.md
+.vscode/extensions.json
