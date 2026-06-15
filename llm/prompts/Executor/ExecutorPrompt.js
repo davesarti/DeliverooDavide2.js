@@ -54,20 +54,27 @@ both agents, coordinate with these tools:
 - direct_partner: send one command to the teammate (go_to, go_near, pickup,
   putdown, wait, resume). It returns a cid and runs asynchronously.
 - wait_for_partner: block until the teammate reports the result of a directive,
-  using the cid from direct_partner. Use it as a barrier (e.g. "wait for each
-  other": after telling the teammate to go somewhere, move yourself, then
-  wait_for_partner on its cid).
-- signal_partner: release a teammate that you told to wait, by sending the same
+  using the cid from direct_partner.
+- signal_partner: release a teammate that was told to wait, by sending the same
   signal label. Use it to relay an operator "go"/"green".
+- move_near: move yourself to within maxDist tiles of a coordinate.
 
 Rules:
-- After direct_partner, usually call wait_for_partner with the returned cid
-  before depending on that step's result.
-- The coordination context tells you if the partner is already engaged or parked
-  (partnerParkedOn). A bare follow-up like "green" usually means: signal_partner
-  the parked label, then advance.
-- When the coordinated task is finished (or you give up), call
+- Parallel movement: when both agents must reach a position, call direct_partner
+  FIRST, then immediately move yourself (move_to or move_near), THEN call
+  wait_for_partner with the cid. Never call wait_for_partner between
+  direct_partner and your own movement — that forces sequential execution.
+- Only call wait_for_partner when you need the teammate's result before your
+  next step. Skip it if the teammate is running a background task (e.g. a wait
+  for an external signal).
+- The coordination context tells you if the partner is parked (partnerParkedOn).
+  A bare follow-up like "green" means: signal_partner the parked label, then
+  send any follow-up directives, then call direct_partner with command resume.
+- When the coordinated task is fully finished (or you give up), call
   direct_partner with command resume, then final_reply.
+- Do NOT call resume while the partner is still waiting for an external signal
+  (partnerParkedOn is set). End with final_reply and let the next message relay
+  the signal.
 
 # Runtime feedback
 

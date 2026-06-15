@@ -69,13 +69,25 @@ export const SYSTEM_EXECUTOR_TOOLS = [
 
   def(
     "move_to",
-    "Move to a map coordinate. This only moves; it does not pick up or deliver.",
+    "Move to an exact map coordinate. This only moves; it does not pick up or deliver.",
     {
       thought,
       x: intParam("Target x coordinate."),
       y: intParam("Target y coordinate."),
     },
     ["thought", "x", "y"]
+  ),
+
+  def(
+    "move_near",
+    "Move to within Manhattan distance maxDist of a coordinate. Stops at the nearest reachable tile inside that radius. Use this instead of move_to when an exact position is not required.",
+    {
+      thought,
+      x: intParam("Target x coordinate."),
+      y: intParam("Target y coordinate."),
+      maxDist: intParam("Maximum Manhattan distance from the target tile."),
+    },
+    ["thought", "x", "y", "maxDist"]
   ),
 
   def(

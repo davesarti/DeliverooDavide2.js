@@ -8,6 +8,7 @@ const ACTION_NAME_MAP = {
 
   // Game actions
   move_to: "go_to",
+  move_near: "go_near",
   pick_up_parcel: "go_pick_up",
   deliver_carried_parcels: "go_drop_off",
   explore_for_parcels: "explore",

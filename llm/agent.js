@@ -134,6 +134,19 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
       }
     }
 
+    case "go_near": {
+      try {
+        await actions.goNear(params.x, params.y, params.maxDist);
+        return makeToolResult(
+          `Arrived within ${params.maxDist} tiles of (${params.x}, ${params.y}).`
+        );
+      } catch (error) {
+        return makeToolResult(
+          `Could not reach near (${params.x}, ${params.y}): ${error?.message ?? error}.`
+        );
+      }
+    }
+
     case "go_pick_up": {
       try {
         await actions.goPickUp(params.x, params.y, params.parcelId);
@@ -502,8 +515,11 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
       } catch {}
     } finally {
       // Never leave the partner BDI stuck in directive mode if this mission
-      // engaged it.
-      if (llmState.coordination.active) {
+      // engaged it — UNLESS the partner is intentionally parked waiting for an
+      // external signal (partnerParkedOn is set). In that case, the next mission
+      // turn will relay the signal and then send resume; sending it now would
+      // prematurely release a wait that hasn't been answered yet.
+      if (llmState.coordination.active && !llmState.coordination.partnerParkedOn) {
         try {
           await coordinator.directPartner("resume");
         } catch {}
