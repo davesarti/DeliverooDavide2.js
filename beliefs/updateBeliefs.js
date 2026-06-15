@@ -7,21 +7,8 @@ import {
   buildDeliveryDistanceMap,
   buildSpawnDistanceMap,
 } from "./mapState.js";
-import { decayEnabled, movementDurationMs } from "../utils/decayModel.js";
-import {
-  AGENT_MEMORY_TTL_MS,
-  PARCEL_MEMORY_TTL_FALLBACK_MS,
-} from "../utils/constants.js";
-
-/*
- * How long an out-of-view parcel is kept in beliefs before assuming someone
- * else took it: ~2x the time needed to cross the map.
- */
-function parcelMemoryTtlMs(bs) {
-  const { width, height } = bs.map;
-  if (!width || !height) return PARCEL_MEMORY_TTL_FALLBACK_MS;
-  return 2 * (width + height) * movementDurationMs(bs);
-}
+import { decayEnabled } from "../utils/decayModel.js";
+import { AGENT_MEMORY_TTL_MS } from "../utils/constants.js";
 
 /*
  * Connects socket events to the agent's internal state.
@@ -213,10 +200,10 @@ export function setupBeliefUpdates(socket, bs) {
     // Parcels: object permanence. A parcel that merely left the sensing
     // range is kept (so walking towards a border parcel no longer destroys
     // the very intention that targets it); its believed reward decays
-    // locally by the observed ticks and the belief expires after a TTL,
-    // since an unseen parcel may have been taken by someone else.
+    // locally by the observed ticks. It is forgotten only on negative
+    // evidence (its tile is observable and it is gone) or once that local
+    // decay drives the believed reward to zero.
     const sensedParcels = new Set((sensing.parcels ?? []).map((p) => p.id));
-    const ttlMs = parcelMemoryTtlMs(bs);
 
     for (const known of [...bs.parcels.values()]) {
       if (sensedParcels.has(known.id)) continue;
@@ -224,11 +211,6 @@ export function setupBeliefUpdates(socket, bs) {
       // Negative evidence: we can see its tile and it is not there —
       // picked up, delivered or expired.
       if (isObservable(known)) {
-        bs.parcels.delete(known.id);
-        continue;
-      }
-
-      if (nowMs - (known.lastSeenMs ?? 0) > ttlMs) {
         bs.parcels.delete(known.id);
         continue;
       }
