@@ -82,6 +82,11 @@ class IntentionRevision {
   #failedIntentionPool = new Map();
   #bs;
   #executePredicate;
+  // When true, the autonomous select-and-execute cycle idles: the running
+  // intention is preempted (re-queued, not failed) and no new one starts. Used
+  // by an embedded owner (the LLM agent) to stop the loop while it interprets a
+  // chat message, then resume. Distinct from coordination/directive mode.
+  #paused = false;
 
   /*
    * Initializes intention revision with state and executor.
@@ -89,6 +94,25 @@ class IntentionRevision {
   constructor(bs, executePredicate) {
     this.#bs = bs;
     this.#executePredicate = executePredicate;
+  }
+
+  /*
+   * Stops the autonomous cycle and preempts the running intention (re-queued,
+   * not failed, via the existing preemption path). Safe to call before the loop
+   * has started — it only sets a flag the loop honors on its next pass.
+   */
+  pause() {
+    this.#paused = true;
+    if (this.#currentIntention) {
+      this.#currentIntention.stop(STOP_REASON_PREEMPTION);
+    }
+  }
+
+  /*
+   * Resumes the autonomous cycle after a pause().
+   */
+  resume() {
+    this.#paused = false;
   }
 
   /*
@@ -442,6 +466,13 @@ class IntentionRevision {
    */
   async loop() {
     while (true) {
+      // Paused by an embedded owner (the LLM agent handling a chat message).
+      // Idle without scoring or executing until resume().
+      if (this.#paused) {
+        await new Promise((res) => setTimeout(res, 50));
+        continue;
+      }
+
       // Directive mode overrides scoring: do only what the LLM commands.
       if (this.#bs.coordination?.active) {
         await this.#runCoordination();
@@ -565,25 +596,50 @@ class IntentionRevisionRevise extends IntentionRevision {
 // ==========================================
 
 /*
+ * Builds the autonomous select-and-execute agent on a belief state and starts
+ * its supervised intention loop once beliefs are ready. Returns the agent
+ * synchronously (readiness wait + loop launch run in the background) so callers
+ * can hold the handle — e.g. to pause()/resume() it — immediately. Does NOT
+ * wire partner coordination; an owner that needs directives-over-the-wire (the
+ * paired BDI) layers setupBdiCoordination on top.
+ */
+export function startAutonomousBDI(bs, actions) {
+  const agent = new IntentionRevisionRevise(bs, actions.executePredicate);
+
+  (async () => {
+    console.log(`[${bs.me.name ?? "BDI"}] Waiting for initial beliefs...`);
+
+    await waitUntil(() => isReady(bs), RUNTIME.READINESS_CHECK_DELAY_MS);
+
+    console.log(`[${bs.me.name ?? "BDI"}] Agent ready`);
+
+    wireReconsideration(bs, agent);
+    superviseLoop(bs, agent);
+  })();
+
+  return agent;
+}
+
+/*
  * Starts the BDI agent and connects updates to the internal state.
  */
 export async function startBDIAgent(socket, bs, actions) {
-  console.log(`[${bs.me.name ?? "BDI"}] Waiting for initial beliefs...`);
-
-  await waitUntil(() => isReady(bs), RUNTIME.READINESS_CHECK_DELAY_MS);
-
-  console.log(`[${bs.me.name ?? "BDI"}] Agent ready`);
-
-  const agent = new IntentionRevisionRevise(bs, actions.executePredicate);
+  const agent = startAutonomousBDI(bs, actions);
 
   // Give the BDI a message channel to its LLM partner (directives in, status out).
   setupBdiCoordination(socket, bs, agent);
 
-  // Rate-limited reconsideration. Every decay tick of every visible parcel
-  // fires a sensing event; regenerating and re-sorting options on each one
-  // caused continuous preemption churn. Reconsider immediately only on a
-  // significant change (the set of free or carried parcels changed),
-  // otherwise at most every RECONSIDERATION_MIN_INTERVAL_MS.
+  return agent;
+}
+
+/*
+ * Wires rate-limited reconsideration onto the belief state. Every decay tick of
+ * every visible parcel fires a sensing event; regenerating and re-sorting
+ * options on each one caused continuous preemption churn. Reconsider
+ * immediately only on a significant change (the set of free or carried parcels
+ * changed), otherwise at most every RECONSIDERATION_MIN_INTERVAL_MS.
+ */
+function wireReconsideration(bs, agent) {
   let lastSignature = "";
   let lastGenerationMs = 0;
 
@@ -626,16 +682,20 @@ export async function startBDIAgent(socket, bs, actions) {
       );
     }
   };
+}
 
-  // Supervise the intention loop. `loop()` protects each intention's execution
-  // with its own try/catch, but the surrounding while-body (requeue, queue
-  // edits, the failure-recovery push on a blocked delivery) runs unprotected;
-  // if any of it throws, the loop's promise rejects. Launched bare, that
-  // rejection is unhandled — under Node it kills the process and the agent
-  // never restarts (most often seen after a delivery is blocked by a
-  // collision). Relaunch on rejection so the agent resumes: the same `agent`
-  // is reused, so the intention queue, failed-intention pool and beliefs all
-  // survive the restart. The logged error pins the exact trigger.
+/*
+ * Supervise the intention loop. `loop()` protects each intention's execution
+ * with its own try/catch, but the surrounding while-body (requeue, queue
+ * edits, the failure-recovery push on a blocked delivery) runs unprotected;
+ * if any of it throws, the loop's promise rejects. Launched bare, that
+ * rejection is unhandled — under Node it kills the process and the agent
+ * never restarts (most often seen after a delivery is blocked by a
+ * collision). Relaunch on rejection so the agent resumes: the same `agent`
+ * is reused, so the intention queue, failed-intention pool and beliefs all
+ * survive the restart. The logged error pins the exact trigger.
+ */
+function superviseLoop(bs, agent) {
   const runLoop = () => {
     agent.loop().catch((error) => {
       console.error(

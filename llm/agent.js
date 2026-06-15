@@ -32,6 +32,7 @@ import {
   buildValidatorSnapshot,
 } from "./tools.js";
 import { createCoordinator } from "./coordinator.js";
+import { startAutonomousBDI } from "../bdi/bdiAgent.js";
 import { isCoordMessage } from "../utils/coordProtocol.js";
 
 // ==========================================
@@ -293,6 +294,13 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
   const coordinator = createCoordinator(socket, bs, llmState);
 
+  // By default the LLM-controlled agent behaves as an autonomous BDI: it scores
+  // and harvests parcels on its own. An incoming chat message pauses this loop
+  // (see onMsg below), the message is interpreted, then the loop resumes. This
+  // is the agent's own embedded loop — separate from any partner BDI it directs
+  // over the wire in MULTI mode.
+  const bdi = startAutonomousBDI(bs, actions);
+
   const logger = createSessionLogger({
     maxIterations: MAX_ITERATIONS,
     maxMissionHistory: MAX_MISSION_HISTORY,
@@ -325,6 +333,12 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
     let missionId = null;
 
     try {
+      // Stop autonomous BDI behavior so it does not drive the agent while the
+      // message is interpreted; resumed in finally. pause() preempts the
+      // running intention (re-queued, not failed) well before the executor
+      // issues any movement.
+      bdi.pause();
+
       missionId = logger.startMission(msg);
 
       const validation = await validateMission(msg, bs, llmState);
@@ -487,12 +501,16 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         await socket.emitSay(id, "Sorry, I could not complete the mission.");
       } catch {}
     } finally {
-      // Never leave the BDI stuck in directive mode if this mission engaged it.
+      // Never leave the partner BDI stuck in directive mode if this mission
+      // engaged it.
       if (llmState.coordination.active) {
         try {
           await coordinator.directPartner("resume");
         } catch {}
       }
+
+      // Resume this agent's own autonomous BDI loop.
+      bdi.resume();
     }
   });
 }
