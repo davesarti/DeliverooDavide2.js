@@ -21,9 +21,6 @@ export const DECAY_EMA_ALPHA = 0.15;
 // Agents move fast: remember a last-seen position only briefly (it feeds
 // the soft obstacles and the congestion estimates, both short-horizon).
 export const AGENT_MEMORY_TTL_MS = 3000;
-// Out-of-view parcels are evicted after ~2x the time needed to cross the
-// map (computed from config); this is the fallback when config is missing.
-export const PARCEL_MEMORY_TTL_FALLBACK_MS = 30000;
 
 // Commitment with hysteresis: a challenger must beat the running
 // intention's score by this relative margin to preempt it.
