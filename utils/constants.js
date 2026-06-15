@@ -53,16 +53,25 @@ export const CAMP_LOSS_BUDGET_FRACTION = 0.05;
 // Driven purely by SPATIAL spawn-cluster density: the number of spawn
 // ("green") tiles within CAMP_ADJACENCY_RADIUS of the pocket, which is what
 // actually signals "worth camping". A fixed base unit is scaled UP
-// exponentially per extra green tile, so an isolated tile barely camps and a
-// dense cluster earns a long (capped) wait. The curve starts at 0 — a lone
-// green tile is not worth camping — and climbs exponentially per extra tile to
-// the MAX cap. The spawn *rate* is deliberately NOT used as the base — tying
-// patience to it is backwards, since a sporadic (slow) map would then camp
-// longest. Generation 'infinite' (no respawns) is still honoured as a yes/no
-// gate (camping disabled).
-//   patience = clamp(BASE_MS × (GROWTH^(adjacentSpawnTiles − 1) − 1), MIN, MAX)
+// exponentially per extra green tile, so a thin cluster barely camps and a
+// dense one earns a long (capped) wait. Below CAMP_PATIENCE_MIN_TILES the
+// pocket is too sparse to camp at all (patience 0); from there the curve
+// climbs exponentially and SATURATES at CAMP_PATIENCE_SATURATION_TILES, where
+// it reaches the MAX cap (counts above that add nothing). The spawn *rate* is
+// deliberately NOT used as the base — tying patience to it is backwards, since
+// a sporadic (slow) map would then camp longest. Generation 'infinite' (no
+// respawns) is still honoured as a yes/no gate (camping disabled).
+//   n = clamp(adjacentSpawnTiles, MIN_TILES, SATURATION_TILES)
+//   patience = clamp(BASE_MS × (GROWTH^(n − (MIN_TILES − 1)) − 1), MIN, MAX)
+//             (and 0 when adjacentSpawnTiles < MIN_TILES)
 export const CAMP_PATIENCE_BASE_MS = 1000;
-export const CAMP_PATIENCE_GROWTH = 1.6;
+// Below this many adjacent spawn tiles the pocket is not worth camping.
+export const CAMP_PATIENCE_MIN_TILES = 4;
+// At/above this many the curve saturates (hits MAX); extra tiles add nothing.
+export const CAMP_PATIENCE_SATURATION_TILES = 10;
+// Tuned so patience reaches CAMP_PATIENCE_MAX_MS exactly at the saturation
+// count: 1000 × (GROWTH^(10 − 3) − 1) ≈ 8000  ⇒  GROWTH ≈ 9^(1/7).
+export const CAMP_PATIENCE_GROWTH = 1.37;
 export const CAMP_ADJACENCY_RADIUS = 3;
 export const CAMP_PATIENCE_MIN_MS = 0;
 export const CAMP_PATIENCE_MAX_MS = 8000;
@@ -124,5 +133,16 @@ export const RUNTIME = {
 };
 
 // Constants used in LLM agent
-export const MAX_ITERATIONS = 75;
-export const MAX_MISSION_HISTORY = 0;
+export const MAX_ITERATIONS = 100;
+export const MAX_MISSION_HISTORY = 5;
+
+// Constants used for BDI <-> LLM coordination
+// BDI `wait` primitive self-releases after this if no signal arrives (never
+// frozen forever).
+export const COORD_WAIT_DEFAULT_TIMEOUT_MS = 60000;
+// LLM `wait_for_partner` gives up after this so the executor loop never hangs.
+export const COORD_LLM_WAIT_TIMEOUT_MS = 60000;
+// BDI auto-resumes (exits directive mode) if it sits active with an empty queue
+// and no coordination traffic this long — defends against an LLM that crashed
+// mid-mission without sending `resume`.
+export const COORD_RESUME_IDLE_TTL_MS = 120000;

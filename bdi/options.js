@@ -6,6 +6,8 @@ import {
   HOARD_CAP,
   CAMP_PATIENCE_BASE_MS,
   CAMP_PATIENCE_GROWTH,
+  CAMP_PATIENCE_MIN_TILES,
+  CAMP_PATIENCE_SATURATION_TILES,
   CAMP_ADJACENCY_RADIUS,
   CAMP_PATIENCE_MIN_MS,
   CAMP_PATIENCE_MAX_MS,
@@ -32,18 +34,23 @@ function countAdjacentSpawnTiles(bs, anchor) {
 /*
  * How long camping a pocket is worth waiting at.
  *
- * Driven purely by spatial spawn-cluster density. The curve starts at 0 — a
- * lone green tile (or none) is not worth camping — and climbs exponentially
- * per extra clustered spawn tile up to the MAX cap. The spawn rate is not used
- * as the base, only as a yes/no gate: returns 0 ("never camp") when the server
- * generates no new parcels.
+ * Driven purely by spatial spawn-cluster density. Below CAMP_PATIENCE_MIN_TILES
+ * adjacent green tiles the pocket is too sparse to camp (patience 0); from there
+ * the curve climbs exponentially per extra clustered spawn tile and saturates at
+ * CAMP_PATIENCE_SATURATION_TILES, where it reaches the MAX cap. The spawn rate is
+ * not used as the base, only as a yes/no gate: returns 0 ("never camp") when the
+ * server generates no new parcels.
  */
 export function campPatienceMs(bs, anchor) {
   if (bs.config.parcelGenerationEvent === "infinite") return 0; // no respawns
 
   const adjacent = countAdjacentSpawnTiles(bs, anchor);
+  if (adjacent < CAMP_PATIENCE_MIN_TILES) return 0; // too sparse to camp
+
+  const n = Math.min(adjacent, CAMP_PATIENCE_SATURATION_TILES);
   const patience =
-    CAMP_PATIENCE_BASE_MS * (Math.pow(CAMP_PATIENCE_GROWTH, adjacent - 1) - 1);
+    CAMP_PATIENCE_BASE_MS *
+    (Math.pow(CAMP_PATIENCE_GROWTH, n - (CAMP_PATIENCE_MIN_TILES - 1)) - 1);
 
   return Math.min(CAMP_PATIENCE_MAX_MS, Math.max(CAMP_PATIENCE_MIN_MS, patience));
 }
@@ -198,6 +205,10 @@ function generateDeliveryOptions(parcels, me, bs) {
  * Updates the intention queue with sensible options for the current moment.
  */
 export function optionsGeneration(agent, bs) {
+  // In directive mode the BDI does only what the LLM tells it; normal scored
+  // options must not compete with (or preempt) the coordination intention.
+  if (bs.coordination?.active) return;
+
   const { me, parcels } = bs;
   const deliveryDistanceMap = bs.map.deliveryDistanceMap;
 

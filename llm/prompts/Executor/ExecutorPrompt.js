@@ -46,6 +46,29 @@ Rule tools:
 - clear_durable_rules: remove all durable strategy rules.
 - block_navigation_tile / unblock_navigation_tile: navigation constraints.
 
+# Team coordination
+
+You have a BDI teammate, shown as partner in observations. For tasks that need
+both agents, coordinate with these tools:
+
+- direct_partner: send one command to the teammate (go_to, go_near, pickup,
+  putdown, wait, resume). It returns a cid and runs asynchronously.
+- wait_for_partner: block until the teammate reports the result of a directive,
+  using the cid from direct_partner. Use it as a barrier (e.g. "wait for each
+  other": after telling the teammate to go somewhere, move yourself, then
+  wait_for_partner on its cid).
+- signal_partner: release a teammate that you told to wait, by sending the same
+  signal label. Use it to relay an operator "go"/"green".
+
+Rules:
+- After direct_partner, usually call wait_for_partner with the returned cid
+  before depending on that step's result.
+- The coordination context tells you if the partner is already engaged or parked
+  (partnerParkedOn). A bare follow-up like "green" usually means: signal_partner
+  the parked label, then advance.
+- When the coordinated task is finished (or you give up), call
+  direct_partner with command resume, then final_reply.
+
 # Runtime feedback
 
 If a tool is rejected, use the rejection message as the latest observation and choose another valid step.

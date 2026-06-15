@@ -11,7 +11,12 @@ Accept the request when it is understandable and one of these applies:
 - it is an immediate mission with no explicit negative reward;
 - it is a durable strategy rule that can be stored;
 - it is a normal question;
-- it explicitly changes, removes, or replaces an active persistent rule.
+- it explicitly changes, removes, or replaces an active persistent rule;
+- it is a team mission requiring coordination with your BDI teammate — for
+  example moving both agents to/near a tile, having one agent pick up and the
+  other deliver, waiting for each other, or a "red light / green light" go-signal
+  game. The teammate is shown as snapshot.partner. A continuation message of an
+  ongoing coordination (such as a bare "green"/"go") is also admissible.
 
 # Reject
 

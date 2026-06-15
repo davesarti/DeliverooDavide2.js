@@ -199,6 +199,15 @@ export function get_environment_state(bs, llmState, missionStats = null) {
     })
     .slice(0, 5);
 
+  const partner =
+    bs.partner && bs.partner.id != null && bs.partner.x != null
+      ? {
+          id: bs.partner.id,
+          x: Math.round(bs.partner.x),
+          y: Math.round(bs.partner.y),
+        }
+      : null;
+
   return JSON.stringify({
     me: {
       x: Math.round(me.x),
@@ -218,6 +227,13 @@ export function get_environment_state(bs, llmState, missionStats = null) {
     visibleParcels,
 
     deliveryTiles,
+
+    partner,
+
+    coordination: {
+      active: !!llmState.coordination?.active,
+      partnerParkedOn: llmState.coordination?.partnerParkedOn ?? null,
+    },
 
     ...(missionStats !== null ? { missionDeliveries: missionStats.deliveries } : {}),
 
@@ -246,6 +262,15 @@ export function buildValidatorSnapshot(bs, llmState) {
     }))
     .slice(0, 8);
 
+  const partner =
+    bs.partner && bs.partner.id != null && bs.partner.x != null
+      ? {
+          id: bs.partner.id,
+          x: Math.round(bs.partner.x),
+          y: Math.round(bs.partner.y),
+        }
+      : null;
+
   return {
     me: {
       x: Math.round(bs.me.x),
@@ -258,6 +283,11 @@ export function buildValidatorSnapshot(bs, llmState) {
     },
     visibleParcels,
     deliveryTiles: bs.map.deliveryTiles.map((t) => ({ x: t.x, y: t.y })).slice(0, 8),
+    partner,
+    coordination: {
+      active: !!llmState.coordination?.active,
+      partnerParkedOn: llmState.coordination?.partnerParkedOn ?? null,
+    },
     persistentRules: llmState.persistentMemory,
   };
 }

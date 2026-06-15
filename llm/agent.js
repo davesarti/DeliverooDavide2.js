@@ -31,6 +31,8 @@ import {
   unblockTile,
   buildValidatorSnapshot,
 } from "./tools.js";
+import { createCoordinator } from "./coordinator.js";
+import { isCoordMessage } from "../utils/coordProtocol.js";
 
 // ==========================================
 // Logging
@@ -59,10 +61,58 @@ function makeToolResult(observation, extra = {}) {
 // Tool execution
 // ==========================================
 
-async function executeTool(action, bs, llmState, actions, missionStats) {
+async function executeTool(action, bs, llmState, actions, missionStats, coordinator) {
   const { name, params } = action;
 
   switch (name) {
+    case "direct_partner": {
+      const { command, x, y, maxDist, parcelId, signal, timeoutMs } = params;
+      const args = {};
+      if (command === "go_to") {
+        args.x = x;
+        args.y = y;
+      } else if (command === "go_near") {
+        args.x = x;
+        args.y = y;
+        args.maxDist = maxDist;
+      } else if (command === "pickup") {
+        args.x = x;
+        args.y = y;
+        args.parcelId = parcelId;
+      } else if (command === "putdown") {
+        args.x = x;
+        args.y = y;
+      } else if (command === "wait") {
+        args.signal = signal;
+        if (timeoutMs != null) args.timeoutMs = timeoutMs;
+      }
+
+      const { cid, delivered } = await coordinator.directPartner(command, args);
+      return makeToolResult(
+        delivered
+          ? `Directive '${command}' sent to teammate (cid=${cid}). Call wait_for_partner with cid=${cid} to await the result.`
+          : `Could not reach teammate to send '${command}' (cid=${cid}). The partner may be offline.`
+      );
+    }
+
+    case "signal_partner": {
+      const { delivered } = await coordinator.signalPartner(params.signal);
+      return makeToolResult(
+        delivered
+          ? `Signal '${params.signal}' sent to teammate.`
+          : `Could not reach teammate to send signal '${params.signal}'.`
+      );
+    }
+
+    case "wait_for_partner": {
+      const status = await coordinator.waitForPartner(params.cid, params.timeoutMs);
+      return makeToolResult(
+        status.ok
+          ? `Teammate completed directive cid=${status.cid}${status.detail ? `: ${status.detail}` : "."}`
+          : `Teammate directive cid=${status.cid} did not complete: ${status.detail ?? "unknown reason"}.`
+      );
+    }
+
     case "calculate":
       return makeToolResult(calculate(params));
 
@@ -241,6 +291,8 @@ function stripThought(action) {
 export async function startLLMAgent(socket, bs, llmState, actions) {
   logWithTime(bs.me.name, "LLM chat listener started");
 
+  const coordinator = createCoordinator(socket, bs, llmState);
+
   const logger = createSessionLogger({
     maxIterations: MAX_ITERATIONS,
     maxMissionHistory: MAX_MISSION_HISTORY,
@@ -261,7 +313,11 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
   });
 
   socket.onMsg(async (id, name, msg) => {
-    if (!msg || msg.trim() === "") return;
+    if (isCoordMessage(msg)) {
+      if (msg.type === "status") coordinator.handleStatus(msg);
+      return;
+    }
+    if (!msg || typeof msg !== "string" || msg.trim() === "") return;
     if (id === bs.me.id) return;
 
     logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
@@ -383,7 +439,8 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           bs,
           llmState,
           actions,
-          missionStats
+          missionStats,
+          coordinator
         );
         const observation = toolResult.observation;
 
@@ -429,6 +486,13 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
       try {
         await socket.emitSay(id, "Sorry, I could not complete the mission.");
       } catch {}
+    } finally {
+      // Never leave the BDI stuck in directive mode if this mission engaged it.
+      if (llmState.coordination.active) {
+        try {
+          await coordinator.directPartner("resume");
+        } catch {}
+      }
     }
   });
 }

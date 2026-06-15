@@ -22,8 +22,36 @@ import {
   PREEMPTION_HYSTERESIS,
   PREEMPTION_EPSILON,
   CAMP_LOSS_BUDGET_FRACTION,
+  COORD_RESUME_IDLE_TTL_MS,
 } from "../utils/constants.js";
 import { waitUntil } from "../utils/asyncUtils.js";
+import { setupBdiCoordination } from "./coordination.js";
+
+// ==========================================
+// Coordination
+// ==========================================
+
+/*
+ * Translates an LLM coordination directive into a BDI predicate the existing
+ * executePredicate already understands. `resume` is handled in #runCoordination,
+ * not here.
+ */
+function coordToPredicate({ command, args = {} }) {
+  switch (command) {
+    case "go_to":
+      return ["go_to", args.x, args.y];
+    case "go_near":
+      return ["go_near", args.x, args.y, args.maxDist];
+    case "pickup":
+      return ["go_pick_up", args.x, args.y, args.parcelId];
+    case "putdown":
+      return ["go_drop_off", args.x, args.y];
+    case "wait":
+      return ["wait", args.signal, args.timeoutMs];
+    default:
+      throw `Unknown coordination command: ${command}`;
+  }
+}
 
 // ==========================================
 // Readiness check
@@ -352,10 +380,74 @@ class IntentionRevision {
   }
 
   /*
+   * Interrupts the running normal intention so the loop can switch into
+   * coordination on its next pass. Called by setupBdiCoordination when a
+   * directive arrives. Uses the existing preemption path, so the interrupted
+   * intention is re-queued (not failed) and competes again after `resume`.
+   */
+  preemptForCoordination() {
+    if (this.#currentIntention) {
+      this.#currentIntention.stop(STOP_REASON_PREEMPTION);
+    }
+  }
+
+  /*
+   * One pass of directive mode: execute the next queued directive (or idle).
+   * Runs the directive through the existing executePredicate and reports a
+   * status back to the LLM, matched by cid. `resume` exits directive mode.
+   */
+  async #runCoordination() {
+    const c = this.#bs.coordination;
+
+    if (c.queue.length === 0) {
+      // Active but nothing to do. Defensive auto-resume if the LLM went away.
+      if (c.lastActivityMs && Date.now() - c.lastActivityMs > COORD_RESUME_IDLE_TTL_MS) {
+        this.log("coordination idle past TTL — auto-resuming");
+        c.active = false;
+      }
+      await new Promise((res) => setTimeout(res, 50));
+      return;
+    }
+
+    const directive = c.queue.shift();
+    c.current = directive;
+    c.lastActivityMs = Date.now();
+
+    if (directive.command === "resume") {
+      c.active = false;
+      c.current = null;
+      c.sendStatus?.({ cid: directive.cid, ok: true });
+      return;
+    }
+
+    let ok = true;
+    let detail;
+    try {
+      await this.#executePredicate(coordToPredicate(directive), {
+        shouldStop: () => false,
+      });
+    } catch (error) {
+      ok = false;
+      detail =
+        typeof error === "string" ? error : error?.message ?? String(error);
+      this.log("coordination directive failed", directive.command, detail);
+    }
+
+    c.current = null;
+    c.sendStatus?.({ cid: directive.cid, ok, detail });
+  }
+
+  /*
    * Keeps alive the cycle that selects and executes intentions.
    */
   async loop() {
     while (true) {
+      // Directive mode overrides scoring: do only what the LLM commands.
+      if (this.#bs.coordination?.active) {
+        await this.#runCoordination();
+        continue;
+      }
+
       this.#requeueFailedIntentions();
 
       if (this.intention_queue.length > 0) {
@@ -483,6 +575,9 @@ export async function startBDIAgent(socket, bs, actions) {
   console.log(`[${bs.me.name ?? "BDI"}] Agent ready`);
 
   const agent = new IntentionRevisionRevise(bs, actions.executePredicate);
+
+  // Give the BDI a message channel to its LLM partner (directives in, status out).
+  setupBdiCoordination(socket, bs, agent);
 
   // Rate-limited reconsideration. Every decay tick of every visible parcel
   // fires a sensing event; regenerating and re-sorting options on each one

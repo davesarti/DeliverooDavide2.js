@@ -53,6 +53,21 @@ export function createBeliefState() {
 
     partner: null,
 
+    // BDI <-> LLM coordination (directive mode). When `active`, normal option
+    // generation and opportunistic actions are suspended and the agent executes
+    // queued directives one at a time. `waiting` is a single bool because only
+    // one `wait` is ever parked at a time (directives run sequentially); any
+    // incoming signal flips it false. `sendStatus` and `lastActivityMs` are
+    // attached at runtime by setupBdiCoordination.
+    coordination: {
+      active: false,
+      queue: [],
+      current: null,
+      waiting: false,
+      sendStatus: null,
+      lastActivityMs: 0,
+    },
+
     // Last place a free parcel was actually seen ({ x, y, ts }). Camp uses it
     // as the anchor to loiter near — i.e. "wait where parcels appear". Null
     // until the first free parcel is observed.

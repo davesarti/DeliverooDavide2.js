@@ -30,6 +30,11 @@ const ACTION_NAME_MAP = {
   block_navigation_tile: "block_tile",
   unblock_navigation_tile: "unblock_tile",
 
+  // Team coordination
+  direct_partner: "direct_partner",
+  signal_partner: "signal_partner",
+  wait_for_partner: "wait_for_partner",
+
   // Mission termination
   final_reply: "final_reply",
 };

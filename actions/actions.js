@@ -1,11 +1,17 @@
 import { findPath } from "../pathfinding/pathfinding.js";
 import { AGENT_CONFIG, } from "../config.js";
-import { RUNTIME, CAMP_PATROL_RADIUS } from "../utils/constants.js";
-import { yieldControl, wait } from "../utils/asyncUtils.js";
+import {
+  RUNTIME,
+  CAMP_PATROL_RADIUS,
+  COORD_WAIT_DEFAULT_TIMEOUT_MS,
+} from "../utils/constants.js";
+import { yieldControl, wait, waitUntil } from "../utils/asyncUtils.js";
 import {
   findCellsToExplore,
   isDeliveryTile,
   isOccupied,
+  isInsideMap,
+  distance,
   DIRECTIONS,
 } from "../utils/mapUtils.js";
 import { spawnMapDistance } from "../utils/stateUtils.js";
@@ -112,6 +118,11 @@ export function createActions(socket, bs, options = {}) {
    * are always worth doing regardless of the current intention.
    */
   async function opportunisticActions() {
+    // While a coordination directive is active, the agent does exactly what the
+    // LLM told it — no auto-grab/auto-deliver, which would e.g. deliver a parcel
+    // meant for a handoff before it reaches the drop tile.
+    if (bs.coordination?.active) return;
+
     const x = Math.round(bs.me.x);
     const y = Math.round(bs.me.y);
 
@@ -489,6 +500,72 @@ export function createActions(socket, bs, options = {}) {
    * tile — "wait where I last collected a parcel, else where parcels are born".
    */
   /*
+   * Moves to within Manhattan distance `maxDist` of (x,y): the nearest reachable
+   * tile inside that diamond, chosen to minimize travel. Reuses goTo (and its
+   * crate/PDDL/replan machinery) once a reachable tile is found.
+   */
+  async function goNear(x, y, maxDist, { shouldStop = () => false } = {}) {
+    const target = { x: Math.round(x), y: Math.round(y) };
+    const md = Math.max(0, Math.round(maxDist ?? 0));
+
+    const candidates = [];
+    for (let dx = -md; dx <= md; dx++) {
+      const rem = md - Math.abs(dx);
+      for (let dy = -rem; dy <= rem; dy++) {
+        const cx = target.x + dx;
+        const cy = target.y + dy;
+        if (isInsideMap(cx, cy, bs.map)) candidates.push({ x: cx, y: cy });
+      }
+    }
+    candidates.sort((a, b) => distance(bs.me, a) - distance(bs.me, b));
+
+    for (const cell of candidates) {
+      if (shouldStop()) throw ["stopped"];
+      const result = findPath(
+        bs.me,
+        cell,
+        AGENT_CONFIG.pathfinding.algorithm,
+        bs,
+        { blockedTiles: getBlockedTiles() }
+      );
+      if (result && Array.isArray(result.path)) {
+        return await goTo(cell.x, cell.y, { shouldStop });
+      }
+    }
+
+    throw `No reachable tile within ${md} of (${target.x}, ${target.y}) — will retry`;
+  }
+
+  /*
+   * Freezes in place until an out-of-band signal flips bs.coordination.waiting
+   * false (set by setupBdiCoordination on a `signal` message), or until the
+   * timeout elapses. Reuses waitUntil. A timeout throws so the caller reports
+   * ok:false; a clean stop throws the standard ["stopped"].
+   */
+  async function waitForSignal(signal, timeoutMs, { shouldStop = () => false } = {}) {
+    const limit = Number.isFinite(timeoutMs)
+      ? timeoutMs
+      : COORD_WAIT_DEFAULT_TIMEOUT_MS;
+
+    bs.coordination.waiting = true;
+    const startedAt = Date.now();
+
+    await waitUntil(
+      () =>
+        !bs.coordination.waiting ||
+        shouldStop() ||
+        Date.now() - startedAt > limit
+    );
+
+    const released = !bs.coordination.waiting;
+    bs.coordination.waiting = false;
+
+    if (shouldStop()) throw ["stopped"];
+    if (!released) throw `wait('${signal}') timed out after ${limit}ms`;
+    return true;
+  }
+
+  /*
    * Camp neighbourhood radius: the agent can only meaningfully watch as far as
    * it senses, so the camp anchor search and the patrol footprint both scale to
    * the observation distance instead of a fixed constant. Falls back to
@@ -637,6 +714,9 @@ export function createActions(socket, bs, options = {}) {
     if (action === "go_drop_off") return await goDropOff(x, y, { shouldStop });
     if (action === "explore") return await explore({ shouldStop });
     if (action === "camp") return await camp({ shouldStop });
+    if (action === "go_near") return await goNear(x, y, id, { shouldStop });
+    if (action === "wait")
+      return await waitForSignal(predicate[1], predicate[2], { shouldStop });
 
     throw new Error(`Unknown predicate: ${predicate.join(" ")}`);
   }
@@ -651,6 +731,8 @@ export function createActions(socket, bs, options = {}) {
     goDropOff,
     explore,
     camp,
+    goNear,
+    waitForSignal,
     executePredicate,
   };
 }

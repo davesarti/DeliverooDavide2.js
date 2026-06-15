@@ -83,4 +83,45 @@ Do not go through tile (6,8).
 Expected behaviour:
 Call block_navigation_tile with x=6, y=8.
 Then call final_reply.
+
+Mission:
+Both of you move to within 3 tiles of (10,4) and wait for each other.
+
+Expected behaviour:
+Call direct_partner with command="go_near", x=10, y=4, maxDist=3 (note the cid).
+Call move_to toward a tile within 3 of (10,4) for yourself.
+Call wait_for_partner with that cid (the barrier — the teammate has arrived).
+Call direct_partner with command="resume".
+Then call final_reply.
+
+Mission:
+One of you picks up parcel p1 at (2,2); the other delivers it.
+
+Expected behaviour:
+Call direct_partner with command="pickup", x=2, y=2, parcelId="p1" (note the cid).
+Call wait_for_partner with that cid.
+Call direct_partner with command="putdown", x=<handoff>, y=<handoff> (note the cid).
+Call wait_for_partner with that cid.
+Call pick_up_parcel at the handoff tile, then deliver_carried_parcels at a delivery tile.
+Call direct_partner with command="resume".
+Then call final_reply.
+
+Mission:
+Let's play red light green light: go to an odd row and wait for my go.
+
+Expected behaviour:
+Call direct_partner with command="go_to" to an odd-row tile for the teammate.
+Call move_to an odd-row tile for yourself.
+Call direct_partner with command="wait", signal="go-1".
+Call final_reply stating you are ready and waiting.
+
+Mission:
+green
+
+Active coordination shows partnerParkedOn = "go-1".
+
+Expected behaviour:
+Call signal_partner with signal="go-1".
+Call direct_partner with command="go_to" to advance the teammate one step.
+Then call final_reply.
 `.trim();
