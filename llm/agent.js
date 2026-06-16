@@ -18,7 +18,6 @@ import { LLM_CONFIG } from "../config.js";
 
 import {
   calculate,
-  getMyPosition,
   findDeliveryTile,
   get_environment_state,
   setStackSize,
@@ -229,9 +228,6 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
     case "calculate":
       return makeToolResult(calculate(params));
 
-    case "get_my_position":
-      return makeToolResult(getMyPosition(bs));
-
     case "find_delivery_tile":
       return makeToolResult(findDeliveryTile(params, bs));
 
@@ -242,19 +238,6 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
       } catch (error) {
         return makeToolResult(
           `Could not reach (${params.x}, ${params.y}): ${error?.message ?? error}.`
-        );
-      }
-    }
-
-    case "go_near": {
-      try {
-        await actions.goNear(params.x, params.y, params.maxDist);
-        return makeToolResult(
-          `Arrived within ${params.maxDist} tiles of (${params.x}, ${params.y}).`
-        );
-      } catch (error) {
-        return makeToolResult(
-          `Could not reach near (${params.x}, ${params.y}): ${error?.message ?? error}.`
         );
       }
     }
@@ -295,15 +278,6 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
             deliveredCount: 0,
           }
         );
-      }
-    }
-
-    case "explore": {
-      try {
-        await actions.explore();
-        return makeToolResult("Exploration complete.");
-      } catch (error) {
-        return makeToolResult(`Could not explore: ${error?.message ?? error}.`);
       }
     }
 
@@ -498,7 +472,13 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           temperature: 0,
         });
 
-        const { thought = null, ...actionParams } = rawAction.params ?? {};
+        const { thought = null, more = false, ...actionParams } = rawAction.params ?? {};
+
+        // `more` is a control-flow flag, not a tool parameter: the model sets it
+        // when a compound mission still has a further clause to handle after this
+        // tool. Strip it (like thought) so it never reaches the tool functions or
+        // the rule-change log. Tolerate the model emitting it as a JSON string.
+        const moreToDo = more === true || more === "true";
 
         const cleanRawAction = {
           ...rawAction,
@@ -595,13 +575,18 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         // Terminal tools complete the mission on their own (durable-rule /
         // navigation stores, and the BDI-delegated play loop). End here using
         // the tool's own confirmation as the reply, skipping the extra LLM
-        // round-trip that a separate final_reply would cost. A tool that
-        // errored is NOT terminal — feed the error back so the model retries.
+        // round-trip that a separate final_reply would cost. Three things defeat
+        // terminality: an errored tool (feed the error back so the model
+        // retries), and `more: true` — the model's signal that this is a
+        // compound mission with another clause still to handle, so the loop must
+        // continue instead of ending after the first rule (otherwise compound
+        // "do X AND do Y" missions would silently drop their second clause).
         const toolErrored =
           typeof observation === "string" && observation.startsWith("Error:");
         const isTerminal =
           (TERMINAL_TOOL_NAMES.has(action.name) || toolResult.terminal === true) &&
-          !toolErrored;
+          !toolErrored &&
+          !moreToDo;
 
         if (isTerminal) {
           finalReply = observation.split("\n")[0];
