@@ -8,6 +8,21 @@ const thought = param(
   "Base it only on observed facts; never invent state."
 );
 
+// Control-flow flag for terminal tools (durable-rule stores, navigation
+// constraints, collect_and_deliver). These normally END the mission on success
+// in a single round-trip. Set `more: true` ONLY when the SAME mission still has
+// another clause to carry out after this tool (a compound "do X AND do Y"
+// request) — then the loop does NOT end and asks for the next tool. Omitting it
+// keeps the one-call fast path for the common single-clause mission.
+const more = {
+  type: "boolean",
+  description:
+    "Set to true ONLY if this mission has a FURTHER clause to handle after this " +
+    "tool (a compound 'do X AND do Y' request). When true the mission continues " +
+    "and you will be asked for the next tool. Omit it (or set false) for a " +
+    "single-clause mission so it ends immediately without an extra round-trip.",
+};
+
 function def(name, description, properties, required = ["thought"]) {
   return {
     type: "function",
@@ -32,12 +47,6 @@ export const SYSTEM_EXECUTOR_TOOLS = [
   def(
     "observe_environment",
     "Observe the current game state: your position, carried parcels, visible parcels, delivery tiles, and active rules.",
-    { thought }
-  ),
-
-  def(
-    "get_my_position",
-    "Read only your current position and score.",
     { thought }
   ),
 
@@ -81,23 +90,11 @@ export const SYSTEM_EXECUTOR_TOOLS = [
   ),
 
   def(
-    "move_near",
-    "Move to within Manhattan distance maxDist of a coordinate. Stops at the nearest reachable tile inside that radius. Use this instead of move_to when an exact position is not required.",
-    {
-      thought,
-      x: intParam("Target x coordinate."),
-      y: intParam("Target y coordinate."),
-      maxDist: intParam("Maximum Manhattan distance from the target tile."),
-    },
-    ["thought", "x", "y", "maxDist"]
-  ),
-
-  def(
     "rendezvous_with_partner",
     "Move BOTH you and the BDI teammate to within maxDist tiles of (x, y) in parallel, " +
       "wait until both have confirmed arrival, then release the teammate. " +
       "Use this for any mission that says 'both agents meet at', 'wait for each other at', 'go near together', or similar rendezvous language. " +
-      "Do NOT use direct_partner + move_near + wait_for_partner manually for a rendezvous — this tool does it in one step.",
+      "Do NOT do a rendezvous manually with separate partner-direct and self-move steps — this tool does it in one step.",
     {
       thought,
       x: intParam("Meeting point x coordinate."),
@@ -131,12 +128,6 @@ export const SYSTEM_EXECUTOR_TOOLS = [
   ),
 
   def(
-    "explore_for_parcels",
-    "Search for parcels by moving toward parcel-spawn areas.",
-    { thought }
-  ),
-
-  def(
     "collect_and_deliver",
     "Hand the whole collect-and-deliver job to the autonomous engine, which " +
       "finds, picks up and delivers parcels on its own (no step-by-step driving). " +
@@ -149,6 +140,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
       "parcel to a named tile (use deliver_carried_parcels).",
     {
       thought,
+      more,
       parcels: intParam(
         "Optional target number of parcels to deliver before stopping. Omit for an open-ended 'collect parcels' request."
       ),
@@ -173,6 +165,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
       "at_most 5); a new rule replaces any active rule it contradicts.",
     {
       thought,
+      more,
       mode: {
         type: "string",
         enum: ["exactly", "at_least", "at_most"],
@@ -201,6 +194,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
       "with neither, remove all of them.",
     {
       thought,
+      more,
       mode: {
         type: "string",
         enum: ["exactly", "at_least", "at_most"],
@@ -228,6 +222,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
       "parcels instead of the low ones.",
     {
       thought,
+      more,
       minReward: numParam("Set ONLY for 'over/above/more than N'. The rule targets parcels whose delivered value is >= this. Leave unset for an 'under N' rule."),
       maxReward: numParam("Set ONLY for 'under/below/less than N'. The rule targets parcels whose delivered value is <= this. Leave unset for an 'over N' rule."),
       mult: numParam("Optional non-negative multiplier on the targeted parcel's delivered value (default 0)."),
@@ -239,7 +234,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
   def(
     "remove_parcel_value_rule",
     "Remove all stored parcel value rules.",
-    { thought }
+    { thought, more }
   ),
 
   def(
@@ -247,6 +242,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
     "Store a rule that forbids delivery at a specific delivery tile.",
     {
       thought,
+      more,
       x: intParam("Delivery tile x coordinate."),
       y: intParam("Delivery tile y coordinate."),
       penalty: numParam("Optional non-negative penalty magnitude for delivering here; omit to use the default."),
@@ -259,6 +255,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
     "Store a rule that prefers delivery at a specific delivery tile.",
     {
       thought,
+      more,
       x: intParam("Delivery tile x coordinate."),
       y: intParam("Delivery tile y coordinate."),
       reward: numParam("Optional non-negative reward magnitude for preferring this tile; omit to use the default."),
@@ -271,6 +268,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
     "Store a reward multiplier for deliveries at a specific delivery tile.",
     {
       thought,
+      more,
       x: intParam("Delivery tile x coordinate."),
       y: intParam("Delivery tile y coordinate."),
       multiplier: numParam("Non-negative multiplier, e.g. 5 for 5x or 0 for zero reward."),
@@ -283,6 +281,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
     "Remove any stored delivery rule for a specific delivery tile.",
     {
       thought,
+      more,
       x: intParam("Delivery tile x coordinate."),
       y: intParam("Delivery tile y coordinate."),
     },
@@ -292,7 +291,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
   def(
     "clear_durable_rules",
     "Remove all durable strategy rules.",
-    { thought }
+    { thought, more }
   ),
 
   // ==========================================
@@ -304,6 +303,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
     "Forbid movement through a specific map tile.",
     {
       thought,
+      more,
       x: intParam("Tile x coordinate."),
       y: intParam("Tile y coordinate."),
       penalty: numParam("Optional non-negative penalty magnitude for passing through this tile; omit to use the default."),
@@ -316,6 +316,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
     "Allow movement through a previously blocked map tile.",
     {
       thought,
+      more,
       x: intParam("Tile x coordinate."),
       y: intParam("Tile y coordinate."),
     },
