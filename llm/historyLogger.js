@@ -68,8 +68,6 @@ export function createSessionLogger({ maxIterations, model } = {}) {
   const summary = {
     sessionId,
     missionsReceived:  0,
-    missionsAccepted:  0,
-    missionsRejected:  0,
     missionsCompleted: 0,
     missionsFailed:    0,
     runtimeRejections: 0,
@@ -129,30 +127,16 @@ export function createSessionLogger({ maxIterations, model } = {}) {
     missions.set(missionId, {
       missionId,
       request,
-      validator: null,
-      status:    "running",
-      reply:     null,
+      status:  "running",
+      reply:   null,
       startedAt,
-      endedAt:   null,
-      steps:     0,
+      endedAt: null,
+      steps:   0,
     });
 
     summary.missionsReceived++;
     logEvent("mission_received", { request }, missionId);
     return missionId;
-  }
-
-  /*
-   * Call after the Validator LLM returns its decision.
-   */
-  function logValidatorDecision(missionId, { accepted, reason, thought }) {
-    const m = missions.get(missionId);
-    if (m) m.validator = { accepted, reason };
-
-    if (accepted) summary.missionsAccepted++;
-    else          summary.missionsRejected++;
-
-    logEvent("validator_decision", { accepted, reason, thought }, missionId);
   }
 
   /*
@@ -217,14 +201,11 @@ export function createSessionLogger({ maxIterations, model } = {}) {
     m.reply   = reply;
     m.endedAt = new Date().toISOString();
 
-    if (status === "completed")      summary.missionsCompleted++;
-    else if (status === "failed")    summary.missionsFailed++;
-    // "rejected": already counted in logValidatorDecision → no additional counter
+    if (status === "completed") summary.missionsCompleted++;
+    else                        summary.missionsFailed++;
 
     logEvent(
-      status === "completed" ? "mission_completed"
-      : status === "rejected" ? "mission_rejected"
-      : "mission_failed",
+      status === "completed" ? "mission_completed" : "mission_failed",
       { reply, steps: m.steps },
       missionId
     );
@@ -253,7 +234,6 @@ export function createSessionLogger({ maxIterations, model } = {}) {
     sessionDir,
     logEvent,
     startMission,
-    logValidatorDecision,
     logExecutorAction,
     logActionRejected,
     logObservation,
@@ -272,14 +252,13 @@ function createNoopLogger(sessionId) {
   return {
     sessionId,
     sessionDir: null,
-    logEvent:              noop,
-    startMission:          () => "m_0000",
-    logValidatorDecision:  noop,
-    logExecutorAction:     noop,
-    logActionRejected:     noop,
-    logObservation:        noop,
-    logFinalReply:         noop,
-    endMission:            noop,
-    endSession:            noop,
+    logEvent:          noop,
+    startMission:      () => "m_0000",
+    logExecutorAction: noop,
+    logActionRejected: noop,
+    logObservation:    noop,
+    logFinalReply:     noop,
+    endMission:        noop,
+    endSession:        noop,
   };
 }
