@@ -99,13 +99,20 @@ class IntentionRevision {
   // by an embedded owner (the LLM agent) to stop the loop while it interprets a
   // chat message, then resume. Distinct from coordination/directive mode.
   #paused = false;
+  // Optional session logger — when set, BDI decisions are written to
+  // bdi_decisions.jsonl for post-session analysis.
+  #bdiLogger = null;
+  // Tracks the predicate key of the last queue winner to detect rank changes.
+  #lastTopKey = null;
 
   /*
    * Initializes intention revision with state and executor.
+   * bdiLogger: optional session logger (from historyLogger.js); null for standalone BDI.
    */
-  constructor(bs, executePredicate) {
+  constructor(bs, executePredicate, bdiLogger = null) {
     this.#bs = bs;
     this.#executePredicate = executePredicate;
+    this.#bdiLogger = bdiLogger;
   }
 
   /*
@@ -241,7 +248,13 @@ class IntentionRevision {
    * economics — provided distanceFactor is sound, which the event-based
    * decay model guarantees.
    */
-  intentionScore(predicate) {
+  /*
+   * Scores a predicate given the current belief state.
+   * When `out` is provided (a plain object), it is populated with intermediate
+   * values so callers can log exactly why a score was computed — useful for
+   * post-session debugging without adding overhead to the hot path.
+   */
+  intentionScore(predicate, out = null) {
     const me = this.#bs.me;
     const parcels = this.#bs.parcels;
     const deliveryDistanceMap = this.#bs.map.deliveryDistanceMap;
@@ -261,36 +274,56 @@ class IntentionRevision {
         { x: me.x, y: me.y },
         { x, y }
       );
-      if (routeDist == null) return -1;
+      if (routeDist == null) { if (out) out.reason = "unreachable"; return -1; }
 
       // Per-parcel delivered value: its current reward minus decay over the
       // delivery route, floored at 0, then remapped by any parcel-value rule
       // (e.g. "worth over 10 at delivery -> 0 pts"). With no value rule this
       // sums to the old `totalReward - estimatedLoss`.
-      let dropScore = -DROP_DISINCENTIVE;
+      let sumBanked = -DROP_DISINCENTIVE;
+      const parcelDetails = out ? [] : null;
       for (const parcel of myParcels) {
-        const delivered = Math.max(0, parcel.reward - routeDist * factor);
-        dropScore += applyParcelValueBand(delivered, this.#bs.rules);
+        const projected = Math.max(0, parcel.reward - routeDist * factor);
+        const banked = applyParcelValueBand(projected, this.#bs.rules);
+        sumBanked += banked;
+        if (parcelDetails) {
+          parcelDetails.push({ id: parcel.id, reward: parcel.reward, projected, banked });
+        }
       }
 
       // Soft stack-size value: penalise/reward this delivery by how the carried
       // count meets the rule's target (met vs unmet modifier). No gate — a
       // penalty just lowers the score so camp/gathering can outrank a premature
       // delivery; a met bonus lifts it so a completed stack is banked promptly.
-      dropScore = applyStackModifier(
-        dropScore,
-        stackDeliveryModifier(myParcels.length, this.#bs.rules)
-      );
+      const stackMod = stackDeliveryModifier(myParcels.length, this.#bs.rules);
+      const scoreAfterStack = applyStackModifier(sumBanked, stackMod);
       // Persistent delivery-tile preferences steer which delivery wins, without
       // ever gating: a preferred tile scores higher, a penalised one lower.
       // adjustDeliveryScore floors at 0, so neither preference can strand.
-      return adjustDeliveryScore(dropScore, this.#bs.rules, x, y);
+      const finalScore = adjustDeliveryScore(scoreAfterStack, this.#bs.rules, x, y);
+
+      if (out) {
+        out.routeDist = routeDist;
+        out.factor = factor;
+        out.carriedCount = myParcels.length;
+        out.parcels = parcelDetails;
+        out.sumBanked = sumBanked;
+        out.stackMod = stackMod;
+        out.scoreAfterStack = scoreAfterStack;
+        const key = `${x},${y}`;
+        out.tileMultiplier  = this.#bs.rules?.deliveryMultipliers?.get(key) ?? 1;
+        out.tileReward      = this.#bs.rules?.preferredDeliveries?.get(key)?.reward ?? 0;
+        out.tilePenalty     = this.#bs.rules?.penaltyDeliveries?.get(key)?.penalty ?? 0;
+        out.finalScore = finalScore;
+      }
+
+      return finalScore;
     }
 
     if (action === "go_pick_up") {
       const [, , , parcelId] = predicate;
       const newParcel = parcels.get(parcelId);
-      if (!newParcel) return -1;
+      if (!newParcel) { if (out) out.reason = "parcel_gone"; return -1; }
 
       // No pickup gate on value: a parcel is valued by what it will BANK at
       // delivery (the parcel-value rule), not excluded at pickup.
@@ -298,10 +331,13 @@ class IntentionRevision {
       // A full agent gains nothing from pickups: delivery becomes the only
       // scored option. The cap also guarantees banking when parcels do not
       // decay (where the rising detour bar above vanishes).
-      if (myParcels.length >= effectiveCapacity(this.#bs)) return -1;
+      if (myParcels.length >= effectiveCapacity(this.#bs)) {
+        if (out) out.reason = "at_capacity";
+        return -1;
+      }
 
       const routeDist = pickupRouteDistance(newParcel, me, this.#bs);
-      if (routeDist == null) return -1;
+      if (routeDist == null) { if (out) out.reason = "unreachable"; return -1; }
 
       // Stack-aware (approach b): value the pickup by the delivery it leads to
       // at the resulting carried count. Gathering toward the target is valued
@@ -325,22 +361,42 @@ class IntentionRevision {
       const newDelivered =
         applyParcelValueBand(newProjected, this.#bs.rules) * raceProb;
 
-      if (myParcels.length === 0) {
-        return applyStackModifier(newDelivered, pickupMod);
-      }
-
       // Already-carried parcels are also remapped at the (later) delivery.
       let carriedDelivered = 0;
-      for (const parcel of myParcels) {
-        carriedDelivered += applyParcelValueBand(
-          Math.max(0, parcel.reward - routeDist * factor),
-          this.#bs.rules
-        );
+      if (myParcels.length > 0) {
+        for (const parcel of myParcels) {
+          carriedDelivered += applyParcelValueBand(
+            Math.max(0, parcel.reward - routeDist * factor),
+            this.#bs.rules
+          );
+        }
       }
-      return applyStackModifier(carriedDelivered + newDelivered, pickupMod);
+      const pickupFinalScore = applyStackModifier(
+        carriedDelivered + newDelivered,
+        pickupMod
+      );
+
+      if (out) {
+        out.parcelId      = newParcel.id;
+        out.parcelReward  = newParcel.reward;
+        out.routeDist     = routeDist;
+        out.factor        = factor;
+        out.raceProb      = raceProb;
+        out.newProjected  = newProjected;
+        out.newDelivered  = newDelivered;
+        out.pickupMod     = pickupMod;
+        out.carriedCount  = myParcels.length;
+        out.carriedDelivered = carriedDelivered;
+        out.finalScore    = pickupFinalScore;
+      }
+
+      return pickupFinalScore;
     }
 
-    if (action === "explore") return EXPLORATION_INCENTIVE;
+    if (action === "explore") {
+      if (out) out.finalScore = EXPLORATION_INCENTIVE;
+      return EXPLORATION_INCENTIVE;
+    }
 
     if (action === "camp") {
       // Camp is viable only while the pocket is still "hot" — a parcel was
@@ -350,54 +406,81 @@ class IntentionRevision {
       // intention (empty-handed) or delivery (carrying) takes over. Camp never
       // performs exploration itself.
       const hint = this.#bs.lastParcelHint;
-      if (!hint) return -1;
+      if (!hint) {
+        if (out) { out.reason = "no_hint"; out.finalScore = -1; }
+        return -1;
+      }
       const patienceMs = campPatienceMs(this.#bs, hint);
-      const hot = patienceMs > 0 && Date.now() - hint.ts < patienceMs;
-      if (!hot) return -1;
+      const elapsedMs = Date.now() - hint.ts;
+      const hot = patienceMs > 0 && elapsedMs < patienceMs;
+      if (!hot) {
+        if (out) { out.patienceMs = patienceMs; out.elapsedMs = elapsedMs; out.hot = false; out.reason = "pocket_cold"; out.finalScore = -1; }
+        return -1;
+      }
 
       const carriedCount = myParcels.length;
 
       // Idle camp: a tiny incentive, just above exploration.
-      if (carriedCount === 0) return CAMP_INCENTIVE;
+      if (carriedCount === 0) {
+        if (out) { out.patienceMs = patienceMs; out.elapsedMs = elapsedMs; out.hot = true; out.carriedCount = 0; out.reason = "idle_camp"; out.finalScore = CAMP_INCENTIVE; }
+        return CAMP_INCENTIVE;
+      }
 
       // Carrying: camping for more is only worth it under capacity and while
       // still within the decay loss budget. Otherwise deliver.
-      if (carriedCount >= effectiveCapacity(this.#bs)) return -1;
+      if (carriedCount >= effectiveCapacity(this.#bs)) {
+        if (out) { out.patienceMs = patienceMs; out.elapsedMs = elapsedMs; out.hot = true; out.carriedCount = carriedCount; out.reason = "at_capacity"; out.finalScore = -1; }
+        return -1;
+      }
 
       // Don't camp for a fuller load when a delivery tile is right here: the
       // payoff of gathering more is amortizing a long trip, so when delivery is
       // near, quick pickup→deliver cycles win. Deliver instead of loitering.
       const nearestDelivery = nearestDeliveryTileAt(me, deliveryDistanceMap);
       if (nearestDelivery && nearestDelivery.distance <= CAMP_NEAR_DELIVERY_TILES) {
+        if (out) { out.patienceMs = patienceMs; out.elapsedMs = elapsedMs; out.hot = true; out.carriedCount = carriedCount; out.nearDeliveryDist = nearestDelivery.distance; out.reason = "delivery_near"; out.finalScore = -1; }
         return -1;
       }
 
+      let campSteps, horizon, baseBudget, stackGain;
       if (factor > 0) {
-        const used = this.#bs.carry?.campSteps ?? 0;
+        campSteps = this.#bs.carry?.campSteps ?? 0;
         // Base budget: tiles we may camp before bleeding > a fraction of the
         // carried value to decay.
-        const baseBudget = CAMP_LOSS_BUDGET_FRACTION * totalReward;
+        baseBudget = CAMP_LOSS_BUDGET_FRACTION * totalReward;
         // Stack-aware extension: if GATHERING MORE could raise the delivery
         // value (reaching an at_least/exactly target, or its met bonus), we may
         // bleed up to that extra value too — so "wait for spawns" lasts exactly
         // as long as completing the stack is worth. stackCampGain only counts
         // gains reachable by adding parcels, so an already-exceeded at_most cap
         // (which camping can never undo) adds nothing.
-        const stackGain = stackCampGain(
+        stackGain = stackCampGain(
           carriedCount,
           totalReward,
           this.#bs.rules,
           effectiveCapacity(this.#bs)
         );
-        const horizon =
-          Math.max(baseBudget, stackGain) / (factor * carriedCount);
-        if (used >= horizon) return -1;
+        horizon = Math.max(baseBudget, stackGain) / (factor * carriedCount);
+        if (campSteps >= horizon) {
+          if (out) { out.patienceMs = patienceMs; out.elapsedMs = elapsedMs; out.hot = true; out.carriedCount = carriedCount; out.campSteps = campSteps; out.horizon = horizon; out.baseBudget = baseBudget; out.stackGain = stackGain; out.totalReward = totalReward; out.reason = "budget_exhausted"; out.finalScore = -1; }
+          return -1;
+        }
       }
 
       // Eligible: outrank delivery (≈ totalReward) so the agent gathers a
       // fuller load first, but stay below any real pickup (totalReward + the
       // new parcel's reward), so visible parcels are still grabbed first.
-      return totalReward + CAMP_INCENTIVE;
+      const campScore = totalReward + CAMP_INCENTIVE;
+      if (out) {
+        out.patienceMs = patienceMs;
+        out.elapsedMs = elapsedMs;
+        out.hot = true;
+        out.carriedCount = carriedCount;
+        out.totalReward = totalReward;
+        if (campSteps != null)  { out.campSteps = campSteps; out.horizon = horizon; out.baseBudget = baseBudget; out.stackGain = stackGain; }
+        out.finalScore = campScore;
+      }
+      return campScore;
     }
 
     return 0;
@@ -414,12 +497,13 @@ class IntentionRevision {
    */
   sortQueueByScore() {
     const running = this.#currentIntention;
+    const hasLogger = !!this.#bdiLogger;
 
-    const scored = this.intention_queue.map((intention, index) => ({
-      intention,
-      index,
-      score: this.intentionScore(intention.predicate),
-    }));
+    const scored = this.intention_queue.map((intention, index) => {
+      const breakdown = hasLogger ? {} : null;
+      const score = this.intentionScore(intention.predicate, breakdown);
+      return { intention, index, score, breakdown };
+    });
 
     // Every option — deliveries included — must score strictly > 0 to stay.
     // This lets a hard block work: a forbidden delivery tile is pinned to 0 by
@@ -451,6 +535,24 @@ class IntentionRevision {
             .join(" | ")
     );
 
+    // Log the full ranked queue + winner breakdown to bdi_decisions.jsonl.
+    if (hasLogger) {
+      const topKey = valid.length > 0 ? valid[0].intention.predicate.join(" ") : null;
+      const topChanged = topKey !== this.#lastTopKey;
+      this.#lastTopKey = topKey;
+
+      this.#bdiLogger.logBdiEvent("bdi_queue_sort", {
+        queue: valid.map((e) => ({
+          predicate: e.intention.predicate,
+          score: parseFloat(e.score.toFixed(4)),
+        })),
+        winnerBreakdown: valid.length > 0 ? valid[0].breakdown : null,
+        running: running?.predicate ?? null,
+        topChanged,
+        droppedCount: scored.length - valid.length,
+      });
+    }
+
     const best = this.intention_queue[0];
     // A committed PDDL maneuver (e.g. pushing a crate out of the way) must not
     // be preempted: it temporarily lowers its own score by detouring, and
@@ -468,6 +570,15 @@ class IntentionRevision {
 
       if (challengerScore > threshold) {
         this.log("Preemption: stopping current intention");
+        if (hasLogger) {
+          this.#bdiLogger.logBdiEvent("bdi_preemption", {
+            stopped:          running.predicate,
+            stoppedScore:     parseFloat(runningScore.toFixed(4)),
+            challenger:       best.predicate,
+            challengerScore:  parseFloat(challengerScore.toFixed(4)),
+            threshold:        parseFloat(threshold.toFixed(4)),
+          });
+        }
         running.stop(STOP_REASON_PREEMPTION);
       }
     }
@@ -575,6 +686,10 @@ class IntentionRevision {
           const parcel = this.#bs.parcels.get(parcelId);
           if (!parcel || parcel.carriedBy) {
             this.log("Skipping invalid intention", intention.predicate);
+            this.#bdiLogger?.logBdiEvent("bdi_intention_skip", {
+              predicate: intention.predicate,
+              reason: parcel ? "parcel_carried" : "parcel_gone",
+            });
             this.removeIntention(intention);
             await new Promise((res) => setImmediate(res));
             continue;
@@ -585,6 +700,10 @@ class IntentionRevision {
           const carrying = (this.#bs.carry?.count ?? 0) > 0;
           if (!carrying) {
             this.log("Skipping invalid intention", intention.predicate);
+            this.#bdiLogger?.logBdiEvent("bdi_intention_skip", {
+              predicate: intention.predicate,
+              reason: "not_carrying",
+            });
             this.removeIntention(intention);
             await new Promise((res) => setImmediate(res));
             continue;
@@ -593,6 +712,18 @@ class IntentionRevision {
 
         this.#currentIntention = intention;
         let keepIntentionInQueue = false;
+        let intentionOutcome = "completed";
+        const intentionStartMs = Date.now();
+
+        if (this.#bdiLogger) {
+          const startBreakdown = {};
+          const startScore = this.intentionScore(intention.predicate, startBreakdown);
+          this.#bdiLogger.logBdiEvent("bdi_intention_start", {
+            predicate: intention.predicate,
+            score: parseFloat(startScore.toFixed(4)),
+            breakdown: startBreakdown,
+          });
+        }
 
         await intention
           .achieve()
@@ -601,6 +732,7 @@ class IntentionRevision {
             const wasStopped = isStoppedIntentionError(error);
 
             if (wasPreempted) {
+              intentionOutcome = "preempted";
               const index = this.intention_queue.indexOf(intention);
               if (index !== -1) {
                 this.intention_queue.splice(
@@ -614,14 +746,22 @@ class IntentionRevision {
             }
 
             if (!wasStopped) {
+              intentionOutcome = "failed";
               this.#recordFailedIntention(intention.predicate);
 
               if (intention.predicate[0] === "go_drop_off") {
                 this.#pushNextNearestDelivery(intention.predicate);
               }
+            } else {
+              intentionOutcome = "stopped";
             }
           })
           .finally(() => {
+            this.#bdiLogger?.logBdiEvent("bdi_intention_end", {
+              predicate: intention.predicate,
+              outcome: intentionOutcome,
+              durationMs: Date.now() - intentionStartMs,
+            });
             if (this.#currentIntention === intention) {
               this.#currentIntention = null;
             }
@@ -634,6 +774,7 @@ class IntentionRevision {
         // Idle baseline: explore. When camping is enabled, optionsGeneration
         // also queues a `camp` option that outranks explore while a pocket is
         // hot; when the pocket goes cold, explore takes over here again.
+        this.#bdiLogger?.logBdiEvent("bdi_idle", { pushed: "explore" });
         this.push(["explore"]);
       }
 
@@ -647,6 +788,10 @@ class IntentionRevision {
 // ==========================================
 
 class IntentionRevisionRevise extends IntentionRevision {
+  constructor(bs, executePredicate, bdiLogger = null) {
+    super(bs, executePredicate, bdiLogger);
+  }
+
   /*
    * Inserts a new predicate if it is not already present or blocked.
    */
@@ -688,8 +833,8 @@ class IntentionRevisionRevise extends IntentionRevision {
  * wire partner coordination; an owner that needs directives-over-the-wire (the
  * paired BDI) layers setupBdiCoordination on top.
  */
-export function startAutonomousBDI(bs, actions) {
-  const agent = new IntentionRevisionRevise(bs, actions.executePredicate);
+export function startAutonomousBDI(bs, actions, bdiLogger = null) {
+  const agent = new IntentionRevisionRevise(bs, actions.executePredicate, bdiLogger);
 
   (async () => {
     console.log(`[${bs.me.name ?? "BDI"}] Waiting for initial beliefs...`);
