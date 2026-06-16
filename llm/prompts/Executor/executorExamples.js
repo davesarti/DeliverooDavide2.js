@@ -181,7 +181,7 @@ Steps:
 ---
 Mission: Deliver the parcels you are carrying.
 Active rules: Deliver exactly 3 parcels at a time.
-Observation: carried.count = 1; visibleParcels contains valid parcels.
+Observation: carried.count = 1.
 Type: action task — collect_and_deliver honours the active stack-size rule, gathering
 to 3 before delivering.
 Steps:
