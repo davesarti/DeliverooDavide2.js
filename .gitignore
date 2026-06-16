@@ -6,5 +6,6 @@ llm/history
 CLAUDE.md
 .vscode/extensions.json
 Deliveroo.js/
+settings.json
 test-runner.js
 test-results-*.json
