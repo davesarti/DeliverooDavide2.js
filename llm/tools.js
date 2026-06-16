@@ -1,3 +1,4 @@
+import { evaluate as mathEvaluate } from "mathjs";
 import { distance, isInsideMap, isDeliveryTile } from "../utils/mapUtils.js";
 import { nearestDeliveryTileAt, deliveryMapDistance } from "../utils/stateUtils.js";
 import { getDecayPerStep } from "../utils/decayModel.js";
@@ -18,23 +19,18 @@ import { stackRulesConflict } from "../bdi/ruleScoring.js";
  */
 export function calculate({ expression }) {
   try {
-    // Normalise caret power notation (2^10) to JS exponentiation (2**10)
-    const normalised = expression.replace(/\^/g, "**");
-
-    // Whitelist: only mathematical characters allowed (** expands to * which passes)
-    if (!/^[\d\s\+\-\*\/\(\)\.\,]+$/.test(normalised)) {
-      return `Error: expression contains invalid characters: ${expression}`;
-    }
-
-    const result = Function(`"use strict"; return (${normalised})`)();
+    // mathjs evaluates in a sandboxed math scope — no access to JS globals.
+    // Supports: +, -, *, /, %, ^, **, sqrt(), abs(), floor(), ceil(), log(),
+    // negative numbers, parentheses, and all standard math functions.
+    const result = mathEvaluate(expression);
 
     if (typeof result !== "number" || !isFinite(result)) {
-      return `Error: expression did not produce a valid number: ${expression}`;
+      return `Error: expression did not produce a finite number: ${expression}`;
     }
 
     return `${expression} = ${result}`;
   } catch (error) {
-    return `Error: could not evaluate expression "${expression}": ${error.message}`;
+    return `Error: could not evaluate "${expression}": ${error.message}`;
   }
 }
 
