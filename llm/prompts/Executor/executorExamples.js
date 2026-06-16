@@ -88,20 +88,14 @@ Mission:
 Both of you move to within 3 tiles of (10,4) and wait for each other.
 
 Expected behaviour:
-Call direct_partner with command="go_near", x=10, y=4, maxDist=3 (note the cid).
-Call move_near with x=10, y=4, maxDist=3 for yourself (both agents move at the same time).
-Call wait_for_partner with that cid (the barrier — confirms the teammate arrived).
-(Do NOT use direct_partner("wait",...) here. wait_for_partner IS the rendezvous barrier.)
-Call direct_partner with command="resume".
-Then call final_reply.
+Call rendezvous_with_partner with x=10, y=4, maxDist=3.
+When it returns, both agents have arrived — the rendezvous is complete.
+Call final_reply.
 
-Mission:
-Both of you move to within 3 tiles of (10,4) and wait for each other.
-
-Wrong behaviour to avoid:
-- Calling direct_partner("wait", signal="...") after wait_for_partner. That parks
-  the partner forever waiting for an external signal that never comes. The
-  rendezvous is already achieved by wait_for_partner on the go_near cid.
+Why rendezvous_with_partner and not direct_partner + move_near + wait_for_partner?
+Those three calls in sequence leave a gap where the LLM might wrongly add
+direct_partner("wait", signal="X") — which parks the partner forever on a signal
+that never comes. rendezvous_with_partner closes the barrier atomically with no gap.
 
 Mission:
 One of you picks up parcel p1 at (2,2); the other delivers it.

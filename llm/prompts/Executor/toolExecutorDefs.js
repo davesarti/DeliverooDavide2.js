@@ -91,6 +91,21 @@ export const SYSTEM_EXECUTOR_TOOLS = [
   ),
 
   def(
+    "rendezvous_with_partner",
+    "Move BOTH you and the BDI teammate to within maxDist tiles of (x, y) in parallel, " +
+      "wait until both have confirmed arrival, then release the teammate. " +
+      "Use this for any mission that says 'both agents meet at', 'wait for each other at', 'go near together', or similar rendezvous language. " +
+      "Do NOT use direct_partner + move_near + wait_for_partner manually for a rendezvous — this tool does it in one step.",
+    {
+      thought,
+      x: intParam("Meeting point x coordinate."),
+      y: intParam("Meeting point y coordinate."),
+      maxDist: intParam("Maximum Manhattan distance from the meeting point."),
+    },
+    ["thought", "x", "y", "maxDist"]
+  ),
+
+  def(
     "pick_up_parcel",
     "Move to a visible parcel and pick it up.",
     {

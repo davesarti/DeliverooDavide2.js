@@ -532,7 +532,13 @@ export function createActions(socket, bs, options = {}) {
         { blockedTiles: getBlockedTiles() }
       );
       if (result && Array.isArray(result.path)) {
-        return await goTo(cell.x, cell.y, { shouldStop });
+        try {
+          return await goTo(cell.x, cell.y, { shouldStop });
+        } catch (err) {
+          if (Array.isArray(err) && err[0] === "stopped") throw err;
+          // goTo failed (e.g. dynamic obstacle appeared after path was planned).
+          // Try the next candidate rather than propagating immediately.
+        }
       }
     }
 

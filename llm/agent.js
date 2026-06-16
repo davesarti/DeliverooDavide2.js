@@ -114,6 +114,38 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
       );
     }
 
+    case "rendezvous_with_partner": {
+      // FENT-style single barrier: send go_near to partner, move self in
+      // parallel, wait for both arrivals, release partner. One atomic tool
+      // call eliminates the multi-step confusion that caused the LLM to add
+      // a spurious direct_partner("wait") after the barrier.
+      const { cid, delivered } = await coordinator.directPartner("go_near", {
+        x: params.x,
+        y: params.y,
+        maxDist: params.maxDist,
+      });
+
+      let selfMsg;
+      try {
+        await actions.goNear(params.x, params.y, params.maxDist);
+        selfMsg = "self arrived";
+      } catch (err) {
+        selfMsg = `self could not reach: ${err?.message ?? err}`;
+      }
+
+      const partnerStatus = delivered
+        ? await coordinator.waitForPartner(cid)
+        : { cid, ok: false, detail: "teammate not reachable" };
+
+      try { await coordinator.directPartner("resume"); } catch {}
+
+      return makeToolResult(
+        partnerStatus.ok
+          ? `Rendezvous complete: both agents within ${params.maxDist} tiles of (${params.x},${params.y}) (${selfMsg}).`
+          : `Rendezvous incomplete — teammate: ${partnerStatus.detail ?? "failed"}; ${selfMsg}.`
+      );
+    }
+
     case "calculate":
       return makeToolResult(calculate(params));
 

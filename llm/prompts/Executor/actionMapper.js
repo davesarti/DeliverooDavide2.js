@@ -35,6 +35,7 @@ const ACTION_NAME_MAP = {
   direct_partner: "direct_partner",
   signal_partner: "signal_partner",
   wait_for_partner: "wait_for_partner",
+  rendezvous_with_partner: "rendezvous_with_partner",
 
   // Mission termination
   final_reply: "final_reply",
