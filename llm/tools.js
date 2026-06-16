@@ -31,29 +31,6 @@ export function calculate({ expression }) {
 }
 
 // ==========================================
-// get_my_position
-// ==========================================
-
-/*
- * Reads the current agent position from the belief state.
- */
-export function getMyPosition(bs) {
-  const { x, y, id, name, score } = bs.me;
-
-  if (x == null || y == null) {
-    return "Error: agent position not available yet.";
-  }
-
-  return JSON.stringify({
-    id,
-    name,
-    x: Math.round(x),
-    y: Math.round(y),
-    score,
-  });
-}
-
-// ==========================================
 // find_delivery_tile
 // ==========================================
 
