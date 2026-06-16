@@ -111,6 +111,15 @@ Steps:
 Use set_delivery_tile_multiplier only when the mission explicitly says "Nx" or "N times". Do NOT use it for flat bonuses.
 
 ---
+Mission: Delivering at (9,0) gives a 50% bonus.
+Type: durable rule — percentage bonus = multiplier 1 + N/100.
+Steps:
+1. set_delivery_tile_multiplier(x=9, y=0, multiplier=1.5)
+2. final_reply
+"50% bonus" means the reward is multiplied by 1.5, NOT 0.5.
+"25% more" → 1.25; "double" → 2; "50% less" → 0.5; "75% bonus" → 1.75.
+
+---
 Mission: Every time you move to (0,0) you get +5pts.
 Type: durable rule — (0,0) is a delivery tile, so this is a flat delivery bonus.
 Steps:
@@ -124,6 +133,17 @@ Steps:
 1. set_stack_size_rule(mode="exactly", count=1)
 2. final_reply
 Do NOT go collect and deliver parcels. Storing the rule is the whole task.
+
+---
+Mission: From now on deliver at most 1 parcel.
+Active rules: Prefer delivering when carrying exactly 1 parcel.
+Type: durable rule — "from now on X" replaces ALL existing stack rules.
+Steps:
+1. remove_stack_size_rule()   ← no args = clears every stack rule
+2. set_stack_size_rule(mode="at_most", count=1)
+3. final_reply
+ALWAYS call remove_stack_size_rule() first when the mission says "from now on"
+or otherwise replaces a standing delivery-stack policy.
 
 ---
 Mission: Do not go through tile (6,8).
