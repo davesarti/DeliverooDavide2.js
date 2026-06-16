@@ -88,11 +88,35 @@ Steps:
 2. final_reply
 
 ---
+Mission: Every time you deliver in (2,4), you get +5 pts.
+Type: durable rule — flat bonus per delivery.
+Steps:
+1. prefer_delivery_tile(x=2, y=4, reward=5)
+2. final_reply
+Use prefer_delivery_tile for flat bonuses (+N pts). Do NOT use set_delivery_tile_multiplier.
+
+---
 Mission: Every time you deliver in (2,4), you get 5x reward.
-Type: durable rule.
+Type: durable rule — reward multiplier.
 Steps:
 1. set_delivery_tile_multiplier(x=2, y=4, multiplier=5)
 2. final_reply
+Use set_delivery_tile_multiplier only when the mission explicitly says "Nx" or "N times". Do NOT use it for flat bonuses.
+
+---
+Mission: Every time you move to (0,0) you get +5pts.
+Type: durable rule — (0,0) is a delivery tile, so this is a flat delivery bonus.
+Steps:
+1. prefer_delivery_tile(x=0, y=0, reward=5)
+2. final_reply
+
+---
+Mission: Deliver every parcel immediately after picking it up.
+Type: durable rule — "immediately after picking up" = stack size exactly 1.
+Steps:
+1. set_stack_size_rule(mode="exactly", count=1)
+2. final_reply
+Do NOT go collect and deliver parcels. Storing the rule is the whole task.
 
 ---
 Mission: Do not go through tile (6,8).
