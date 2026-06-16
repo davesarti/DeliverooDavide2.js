@@ -57,9 +57,11 @@ For a durable rule:
 2. Capture every magnitude from the mission — never drop a number:
    - bonus/reward for hitting the target stack -> metReward (or metMultiplier)
    - penalty/zero for missing the target stack -> unmetPenalty (or unmetMultiplier)
-3. Call final_reply.
-4. Do NOT collect, pick up, deliver, or move to "earn" the rule. Storing it is the
+3. Do NOT collect, pick up, deliver, or move to "earn" the rule. Storing it is the
    whole task.
+4. The rule tool COMPLETES the mission on its own — its confirmation is sent as the
+   reply automatically. Do NOT call final_reply afterwards, and do NOT take any
+   further action.
 
 Delivery-tile rule tool selection:
 - Flat bonus (+N pts every delivery): prefer_delivery_tile(reward=N)
@@ -74,6 +76,13 @@ An action TASK is a bare goal to carry out NOW, with no standing scoring clause,
 e.g. "collect 5 parcels", "deliver the parcels you are carrying", "move to (4,7)".
 Carry it out using the play loop below.
 
+For any harvesting task — "collect N parcels", "deliver parcels", "gather and
+deliver", "fill up and deliver" — call collect_and_deliver (with parcels=N when a
+count is given) and nothing else: it runs the whole collect/deliver job by itself
+and completes the mission. Only fall back to the manual play loop below for tasks
+collect_and_deliver does not cover (a single exact move, or delivering a specific
+already-carried parcel to a named tile).
+
 A FACTUAL QUERY is a question or calculation that requires no game action — general
 knowledge, arithmetic, or anything answerable from your own knowledge, e.g.:
 - "What is the capital of Italy?"
@@ -86,7 +95,7 @@ For a factual query:
 2. For everything else: call final_reply directly with the answer.
 Do NOT reject factual queries as "unrelated to the game". Answer them.
 
-# Play loop (for action tasks involving parcels)
+# Play loop (FALLBACK only — prefer collect_and_deliver for harvesting tasks)
 
 1. observe_environment.
 2. pick_up_parcel for visible parcels that help the mission.
