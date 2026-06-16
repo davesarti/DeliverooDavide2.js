@@ -17,6 +17,32 @@ Steps:
 1. final_reply("Mission rejected: explicit negative reward for immediate execution.")
 
 ---
+Mission: What is the capital of Italy?
+Type: factual query — general knowledge, no game action needed.
+Steps:
+1. final_reply("Rome.")
+
+---
+Mission: What year did WWII end?
+Type: factual query — general knowledge, no game action needed.
+Steps:
+1. final_reply("World War II ended in 1945.")
+
+---
+Mission: Calculate 6*7
+Type: factual query — arithmetic.
+Steps:
+1. calculate(expression="6*7")
+2. final_reply("6 × 7 = 42.")
+
+---
+Mission: How much is (3+4)*5?
+Type: factual query — arithmetic.
+Steps:
+1. calculate(expression="(3+4)*5")
+2. final_reply("(3+4)*5 = 35.")
+
+---
 Mission: Deliver stacks of exactly 3 parcels at a time.
 Type: durable rule.
 Steps:
