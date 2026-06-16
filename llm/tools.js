@@ -18,12 +18,15 @@ import { stackRulesConflict } from "../bdi/ruleScoring.js";
  */
 export function calculate({ expression }) {
   try {
-    // Whitelist: only mathematical characters allowed
-    if (!/^[\d\s\+\-\*\/\(\)\.\,]+$/.test(expression)) {
+    // Normalise caret power notation (2^10) to JS exponentiation (2**10)
+    const normalised = expression.replace(/\^/g, "**");
+
+    // Whitelist: only mathematical characters allowed (** expands to * which passes)
+    if (!/^[\d\s\+\-\*\/\(\)\.\,]+$/.test(normalised)) {
       return `Error: expression contains invalid characters: ${expression}`;
     }
 
-    const result = Function(`"use strict"; return (${expression})`)();
+    const result = Function(`"use strict"; return (${normalised})`)();
 
     if (typeof result !== "number" || !isFinite(result)) {
       return `Error: expression did not produce a valid number: ${expression}`;
@@ -83,9 +86,9 @@ export function findDeliveryTile({ query }, bs) {
   } else if (normalized === "rightmost") {
     tile = tiles.reduce((a, b) => (b.x > a.x ? b : a));
   } else if (normalized === "topmost") {
-    tile = tiles.reduce((a, b) => (b.y > a.y ? b : a));
-  } else if (normalized === "bottommost") {
     tile = tiles.reduce((a, b) => (b.y < a.y ? b : a));
+  } else if (normalized === "bottommost") {
+    tile = tiles.reduce((a, b) => (b.y > a.y ? b : a));
   } else if (normalized === "nearest") {
     const nearest = nearestDeliveryTileAt(bs.me, bs.map.deliveryDistanceMap);
     if (!nearest) return "Error: could not find nearest delivery tile.";
