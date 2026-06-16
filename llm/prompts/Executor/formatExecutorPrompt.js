@@ -1,15 +1,20 @@
 export function buildMissionUserPrompt(
   mission,
-  persistentMemory = "None."
+  persistentMemory = "None.",
+  snapshot = null
 ) {
+  const snapshotSection = snapshot
+    ? `\n\n## Current game state\n${JSON.stringify(snapshot, null, 2)}`
+    : "";
+
   return `
-Complete ONLY the current mission below, one tool call at a time. First classify it
-as a durable rule or an action task, then proceed.
+First check whether the mission must be rejected, then classify and execute it.
+One tool call at a time.
 
 ## Current mission
 ${mission}
 
 ## Active persistent rules
-${persistentMemory || "None."}
+${persistentMemory || "None."}${snapshotSection}
 `.trim();
 }
