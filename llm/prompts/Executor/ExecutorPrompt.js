@@ -77,17 +77,28 @@ EXCEPT the last:
 - ... (further clauses, each more=true)
 - Final clause tool with more omitted -> mission ends, its confirmation is the reply.
 
+Before acting, count the distinct requirements in the mission and handle EVERY one: a
+clause joined by "AND", a comma, or "also" is a separate requirement with its own tool.
+Never drop a clause because another one feels more salient (e.g. a "from now on ... AND
+..." mission has TWO clauses — handle both, not just the reset).
+
 Only set more=true when a further clause genuinely remains. For an ordinary
 single-clause mission, omit it so the mission ends in one fast round-trip.
 
-Delivery-tile rule tool selection:
-- Flat bonus (+N pts every delivery): prefer_delivery_tile(reward=N)
-- Multiplier (Nx, "double", "triple"): set_delivery_tile_multiplier(multiplier=N)
-- Percentage bonus ("50% bonus", "25% more"): set_delivery_tile_multiplier(multiplier=1+N/100)
-  e.g. "50% bonus" → multiplier=1.5; "25% more" → multiplier=1.25; "50% less" → multiplier=0.5
+Delivery-tile rule tool selection — read the wording literally:
+- A FLAT point amount ("+N pts", "N points", "a bonus of N points"): prefer_delivery_tile(reward=N).
+  "+20 pts" means reward=20, NOT a multiplier. NEVER turn a flat "+N pts" into multiplier=N.
+- A MULTIPLIER ("Nx", "N times", "double", "triple"): set_delivery_tile_multiplier(multiplier=N).
+- A PERCENTAGE ("50% bonus", "25% more"): set_delivery_tile_multiplier(multiplier=1+N/100)
+  e.g. "50% bonus" → 1.5; "25% more" → 1.25; "50% less" → 0.5.
 
-Stack rule replacement: "from now on X" replaces all existing stack rules.
-Call remove_stack_size_rule() (no args = clears all) before set_stack_size_rule.
+Stack rule replacement:
+- A plain new stack rule needs ONLY set_stack_size_rule — it already replaces any
+  contradicting stack rule on its own. Do NOT call remove_stack_size_rule first.
+- Only for an explicit full reset ("from now on", "forget all rules") call
+  remove_stack_size_rule FIRST with more=true (so the mission does not end on the
+  removal), THEN set_stack_size_rule as the terminal final step. Without more=true the
+  mission ends on the removal and the new rule is never stored.
 
 An action TASK is a bare goal to carry out NOW, with no standing scoring clause,
 e.g. "collect 5 parcels", "deliver the parcels you are carrying", "move to (4,7)".
