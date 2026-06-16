@@ -2,11 +2,7 @@ import { evaluate as mathEvaluate } from "mathjs";
 import { distance, isInsideMap, isDeliveryTile } from "../utils/mapUtils.js";
 import { nearestDeliveryTileAt, deliveryMapDistance } from "../utils/stateUtils.js";
 import { getDecayPerStep } from "../utils/decayModel.js";
-import {
-  DEFAULT_FORBID_PENALTY,
-  DEFAULT_PREFER_REWARD,
-  DEFAULT_BLOCK_PENALTY,
-} from "../utils/constants.js";
+import { DEFAULT_RULE_MAGNITUDE } from "../utils/constants.js";
 import { stackRulesConflict, applyParcelValueBand, isValidValueRule } from "../bdi/ruleScoring.js";
 
 // ==========================================
@@ -481,8 +477,11 @@ export function setStackSize(
   // mission from landing an effect on the wrong side — e.g. "0 points under 2"
   // is unmetMultiplier 0, "double for 3+" is metMultiplier 2, "under 3 costs
   // 10" is unmetPenalty 10, "+20 for a full stack" is metReward 20.
+  // On-target (met) is neutral by default; off-target (unmet) defaults to a hard
+  // penalty of DEFAULT_RULE_MAGNITUDE so a stack rule given no explicit penalty
+  // still strongly discourages delivering off the target stack (acts as a block).
   const met = { mult: 1, delta: 0 };
-  const unmet = { mult: 1, delta: 0 };
+  const unmet = { mult: 1, delta: -DEFAULT_RULE_MAGNITUDE };
 
   if (typeof metReward === "number" && isFinite(metReward)) {
     met.delta = metReward;
@@ -600,7 +599,7 @@ export function forbidDeliveryTile({ x, y, penalty }, bs) {
   const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
-  const magnitude = resolveMagnitude(penalty, DEFAULT_FORBID_PENALTY);
+  const magnitude = resolveMagnitude(penalty, DEFAULT_RULE_MAGNITUDE);
   if (typeof magnitude === "string") return magnitude;
 
   const rules = bs.rules;
@@ -619,7 +618,7 @@ export function preferDeliveryTile({ x, y, reward }, bs) {
   const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
-  const magnitude = resolveMagnitude(reward, DEFAULT_PREFER_REWARD);
+  const magnitude = resolveMagnitude(reward, DEFAULT_RULE_MAGNITUDE);
   if (typeof magnitude === "string") return magnitude;
 
   const rules = bs.rules;
@@ -706,7 +705,7 @@ export function blockTile({ x, y, penalty }, bs) {
     return `Error: tile (${x}, ${y}) is outside the map.`;
   }
 
-  const magnitude = resolveMagnitude(penalty, DEFAULT_BLOCK_PENALTY);
+  const magnitude = resolveMagnitude(penalty, DEFAULT_RULE_MAGNITUDE);
   if (typeof magnitude === "string") return magnitude;
 
   const key = `${x},${y}`;

@@ -277,11 +277,20 @@ export function createActions(socket, bs, options = {}) {
         ...extra,
       });
 
-    // True when the target is reachable only once crates are treated as
-    // passable — i.e. a crate is what blocks the route and a PDDL push could
-    // open it. Agents and walls are still respected, so a pure agent/wall block
-    // returns false (PDDL, which also treats agents as obstacles, can't help).
+    // True when the target is reachable ONLY once crates are treated as
+    // passable — i.e. a crate is genuinely what blocks the route and a PDDL push
+    // could open it. This needs both halves: no crate-respecting route exists
+    // AND a crate-ignoring one does. Checking only the crate-ignoring half is a
+    // trap — it succeeds whenever ANY route exists. An agent orbiting a choke is
+    // a hard obstacle (see astar's hard-radius split) that fails the route
+    // through MAX_REPLANS, but it moves; by the time this runs post-failure the
+    // choke is often clear, so a crate-ignoring plan finds the now-open route and
+    // we'd divert to a useless PDDL solve (a multi-second stall) with no crate
+    // involved. Requiring the crate-respecting plan to genuinely fail closes that
+    // false positive. Empty avoid set: probe the real map, not transient memory.
     const crateBlocksRoute = () => {
+      const open = planFrom(bs.me, new Set());
+      if (open && Array.isArray(open.path)) return false;
       const cf = planFrom(bs.me, new Set(), { ignoreCrates: true });
       return !!(cf && Array.isArray(cf.path));
     };
