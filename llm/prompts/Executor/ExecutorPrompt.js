@@ -38,7 +38,7 @@ Do NOT reject for these reasons:
 - Call observe_environment when the state may have changed during execution
   (after a move, pick-up, or delivery).
 
-# First, classify the mission: durable RULE or action TASK?
+# First, classify the mission: RULE, TASK, or QUERY?
 
 This choice is the most common mistake. Decide before acting.
 
@@ -63,6 +63,18 @@ For a durable rule:
 An action TASK is a bare goal to carry out NOW, with no standing scoring clause,
 e.g. "collect 5 parcels", "deliver the parcels you are carrying", "move to (4,7)".
 Carry it out using the play loop below.
+
+A FACTUAL QUERY is a question or calculation that requires no game action — general
+knowledge, arithmetic, or anything answerable from your own knowledge, e.g.:
+- "What is the capital of Italy?"
+- "How much is (3+4)*5?"
+- "Calculate 6*7"
+- "What year did WWII end?"
+
+For a factual query:
+1. For pure arithmetic: call calculate, then final_reply with the result.
+2. For everything else: call final_reply directly with the answer.
+Do NOT reject factual queries as "unrelated to the game". Answer them.
 
 # Play loop (for action tasks involving parcels)
 
