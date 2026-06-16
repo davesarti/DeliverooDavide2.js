@@ -12,6 +12,10 @@ export function setupBdiCoordination(socket, bs, agent) {
   bs.coordination.sendStatus = ({ cid, ok, detail }) => {
     const partnerId = bs.partner?.id;
     if (partnerId == null) return;
+    // Refresh the idle TTL so long-running directives don't trigger auto-resume
+    // the moment they complete. The TTL is now measured from when the last
+    // status was sent, not from when the directive arrived.
+    bs.coordination.lastActivityMs = Date.now();
     Promise.resolve(socket.emitSay(partnerId, makeStatus(cid, ok, detail))).catch(
       () => {}
     );

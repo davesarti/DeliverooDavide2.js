@@ -90,9 +90,18 @@ Both of you move to within 3 tiles of (10,4) and wait for each other.
 Expected behaviour:
 Call direct_partner with command="go_near", x=10, y=4, maxDist=3 (note the cid).
 Call move_near with x=10, y=4, maxDist=3 for yourself (both agents move at the same time).
-Call wait_for_partner with that cid (the barrier — the teammate has arrived).
+Call wait_for_partner with that cid (the barrier — confirms the teammate arrived).
+(Do NOT use direct_partner("wait",...) here. wait_for_partner IS the rendezvous barrier.)
 Call direct_partner with command="resume".
 Then call final_reply.
+
+Mission:
+Both of you move to within 3 tiles of (10,4) and wait for each other.
+
+Wrong behaviour to avoid:
+- Calling direct_partner("wait", signal="...") after wait_for_partner. That parks
+  the partner forever waiting for an external signal that never comes. The
+  rendezvous is already achieved by wait_for_partner on the go_near cid.
 
 Mission:
 One of you picks up parcel p1 at (2,2); the other delivers it.

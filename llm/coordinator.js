@@ -17,11 +17,26 @@ export function createCoordinator(socket, bs, llmState) {
   function handleStatus(msg) {
     const waiter = pendingWaiters.get(msg.cid);
     if (waiter) {
+      // Someone called wait_for_partner for this cid — deliver it normally.
       pendingWaiters.delete(msg.cid);
+      if (llmState.coordination.parkedCid === msg.cid) {
+        llmState.coordination.partnerParkedOn = null;
+        llmState.coordination.parkedCid = null;
+      }
       waiter(msg);
-    } else {
-      bufferedStatuses.set(msg.cid, msg);
+      return;
     }
+
+    // No waiter. If this is the status for a `wait` directive (partner's
+    // waitForSignal timed out), clear the now-stale partnerParkedOn rather
+    // than buffering a status nobody will ever read.
+    if (llmState.coordination.parkedCid != null && msg.cid === llmState.coordination.parkedCid) {
+      llmState.coordination.partnerParkedOn = null;
+      llmState.coordination.parkedCid = null;
+      return;
+    }
+
+    bufferedStatuses.set(msg.cid, msg);
   }
 
   /*
@@ -41,10 +56,12 @@ export function createCoordinator(socket, bs, llmState) {
     if (command === "resume") {
       llmState.coordination.active = false;
       llmState.coordination.partnerParkedOn = null;
+      llmState.coordination.parkedCid = null;
     } else {
       llmState.coordination.active = true;
       if (command === "wait") {
         llmState.coordination.partnerParkedOn = args.signal ?? null;
+        llmState.coordination.parkedCid = cid;
       }
     }
 
@@ -60,6 +77,7 @@ export function createCoordinator(socket, bs, llmState) {
 
     const status = await socket.emitSay(partnerId, makeSignal(signal));
     llmState.coordination.partnerParkedOn = null;
+    llmState.coordination.parkedCid = null;
     return { delivered: status === "successful" };
   }
 

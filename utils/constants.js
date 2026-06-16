@@ -135,11 +135,13 @@ export const MAX_MISSION_HISTORY = 5;
 
 // Constants used for BDI <-> LLM coordination
 // BDI `wait` primitive self-releases after this if no signal arrives (never
-// frozen forever).
-export const COORD_WAIT_DEFAULT_TIMEOUT_MS = 60000;
+// frozen forever). Kept short so an accidental `wait` directive (e.g. the LLM
+// mistakenly parking the partner instead of using wait_for_partner) recovers
+// quickly rather than blocking for a full minute.
+export const COORD_WAIT_DEFAULT_TIMEOUT_MS = 12000;
 // LLM `wait_for_partner` gives up after this so the executor loop never hangs.
 export const COORD_LLM_WAIT_TIMEOUT_MS = 60000;
 // BDI auto-resumes (exits directive mode) if it sits active with an empty queue
 // and no coordination traffic this long — defends against an LLM that crashed
 // mid-mission without sending `resume`.
-export const COORD_RESUME_IDLE_TTL_MS = 120000;
+export const COORD_RESUME_IDLE_TTL_MS = 15000;

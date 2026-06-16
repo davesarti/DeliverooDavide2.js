@@ -11,6 +11,9 @@ export function createLLMState() {
     coordination: {
       active: false,
       partnerParkedOn: null,
+      // cid of the active `wait` directive, so handleStatus can clear the
+      // stale partnerParkedOn when the wait times out without a signal.
+      parkedCid: null,
     },
 
     persistentRules: {

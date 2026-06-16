@@ -64,6 +64,12 @@ Rules:
   FIRST, then immediately move yourself (move_to or move_near), THEN call
   wait_for_partner with the cid. Never call wait_for_partner between
   direct_partner and your own movement — that forces sequential execution.
+- "Wait for each other" at a rendezvous: use wait_for_partner on the movement
+  directive cid. Do NOT use direct_partner("wait", ...) — that parks the
+  partner indefinitely waiting for an external signal, which is wrong here.
+- direct_partner("wait", signal) is ONLY for external-signal scenarios (e.g.
+  "red light / green light" where an operator sends a go message later). Never
+  use it just to synchronise two agents at a location.
 - Only call wait_for_partner when you need the teammate's result before your
   next step. Skip it if the teammate is running a background task (e.g. a wait
   for an external signal).
