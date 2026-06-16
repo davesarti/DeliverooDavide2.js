@@ -1,5 +1,11 @@
 import { callLLMTool } from "./client.js";
-import { MAX_ITERATIONS } from "../utils/constants.js";
+import {
+  MAX_ITERATIONS,
+  BDI_DELEGATION_POLL_MS,
+  BDI_DELEGATION_PER_PARCEL_MS,
+  BDI_DELEGATION_DEFAULT_MS,
+} from "../utils/constants.js";
+import { waitUntil } from "../utils/asyncUtils.js";
 import { validateActionAgainstPersistentRules } from "./rulesValidator.js";
 import {
   SYSTEM_EXECUTOR_PROMPT,
@@ -39,8 +45,8 @@ import { isCoordMessage } from "../utils/coordProtocol.js";
 const RULE_TOOL_NAMES = new Set([
   "set_stack_size",
   "remove_stack_size",
-  "set_parcel_filter",
-  "remove_parcel_filter",
+  "set_parcel_value_rule",
+  "remove_parcel_value_rule",
   "forbid_delivery_tile",
   "prefer_delivery_tile",
   "set_delivery_multiplier",
@@ -49,6 +55,16 @@ const RULE_TOOL_NAMES = new Set([
   "block_tile",
   "unblock_tile",
 ]);
+
+// Tools that, on success, fully complete a mission on their own — storing a
+// durable rule (or a navigation constraint) IS the whole task per the executor
+// contract (RULE missions are classified as such and never combined with a
+// TASK). Treating them as terminal lets the loop end the mission immediately,
+// using the tool's own confirmation as the chat reply, instead of paying a
+// second full LLM round-trip just to emit final_reply. The rule set above
+// already enumerates exactly these store-tools, so it doubles as the terminal
+// set; collect_and_deliver signals terminality per-call via toolResult.terminal.
+const TERMINAL_TOOL_NAMES = RULE_TOOL_NAMES;
 
 // ==========================================
 // Logging
@@ -77,10 +93,59 @@ function makeToolResult(observation, extra = {}) {
 // Tool execution
 // ==========================================
 
-async function executeTool(action, bs, llmState, actions, missionStats, coordinator) {
+async function executeTool(action, bs, llmState, actions, missionStats, coordinator, bdi) {
   const { name, params } = action;
 
   switch (name) {
+    case "collect_and_deliver": {
+      // Hand the whole pick-up/deliver play loop to the embedded autonomous BDI
+      // instead of micro-driving it one LLM round-trip per move. The BDI already
+      // scores and harvests parcels locally with zero model calls; here we just
+      // un-pause it for a bounded window, watch the shared delivery counter, then
+      // re-pause it. One LLM call starts the whole task; this tool is terminal,
+      // so the mission ends without a second round-trip.
+      const target =
+        Number.isInteger(params.parcels) && params.parcels > 0
+          ? params.parcels
+          : null;
+      const timeoutMs =
+        Number.isInteger(params.timeoutMs) && params.timeoutMs > 0
+          ? params.timeoutMs
+          : target
+            ? target * BDI_DELEGATION_PER_PARCEL_MS
+            : BDI_DELEGATION_DEFAULT_MS;
+
+      const start = bs.metrics?.deliveredParcels ?? 0;
+      const startedAt = Date.now();
+
+      bdi.resume();
+      try {
+        await waitUntil(() => {
+          const delivered = (bs.metrics?.deliveredParcels ?? 0) - start;
+          if (target != null && delivered >= target) return true;
+          return Date.now() - startedAt > timeoutMs;
+        }, BDI_DELEGATION_POLL_MS);
+      } finally {
+        // Always re-pause: the mission loop owns the BDI's paused state while a
+        // chat mission is being handled, and resumes it for good in its finally.
+        bdi.pause();
+      }
+
+      const delivered = (bs.metrics?.deliveredParcels ?? 0) - start;
+      const reason =
+        target != null && delivered >= target
+          ? "target reached"
+          : "time budget elapsed";
+
+      // Terminal-only: the delivered count is already in the observation and the
+      // reply. Do NOT set deliverySucceeded here — the loop's delivery logger keys
+      // off action.params.x/y, which this tool does not carry.
+      return makeToolResult(
+        `Delivered ${delivered} parcel(s) via autonomous collection (${reason}).`,
+        { terminal: true }
+      );
+    }
+
     case "direct_partner": {
       const { command, x, y, maxDist, parcelId, signal, timeoutMs } = params;
       const args = {};
@@ -359,19 +424,20 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
     coordinator.syncRules().catch(() => {});
   };
 
-  // By default the LLM-controlled agent behaves as an autonomous BDI: it scores
-  // and harvests parcels on its own. An incoming chat message pauses this loop
-  // (see onMsg below), the message is interpreted, then the loop resumes. This
-  // is the agent's own embedded loop — separate from any partner BDI it directs
-  // over the wire in MULTI mode.
-  const bdi = startAutonomousBDI(bs, actions, logger);
-
   const logger = createSessionLogger({
     maxIterations: MAX_ITERATIONS,
     model: LLM_CONFIG?.model,
   });
 
   logWithTime(bs.me.name, `Session logging → ${logger.sessionDir}`);
+
+  // By default the LLM-controlled agent behaves as an autonomous BDI: it scores
+  // and harvests parcels on its own. An incoming chat message pauses this loop
+  // (see onMsg below), the message is interpreted, then the loop resumes. This
+  // is the agent's own embedded loop — separate from any partner BDI it directs
+  // over the wire in MULTI mode. (logger must be created first: it is passed in
+  // here and a const cannot be read before its declaration.)
+  const bdi = startAutonomousBDI(bs, actions, logger);
 
   const onExit = () => logger.endSession();
   process.once("exit", onExit);
@@ -495,7 +561,8 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           llmState,
           actions,
           missionStats,
-          coordinator
+          coordinator,
+          bdi
         );
         const observation = toolResult.observation;
 
@@ -524,6 +591,28 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
         logWithTime(bs.me.name, "Observation:", observation);
         logger.logObservation(missionId, action.name, observation);
+
+        // Terminal tools complete the mission on their own (durable-rule /
+        // navigation stores, and the BDI-delegated play loop). End here using
+        // the tool's own confirmation as the reply, skipping the extra LLM
+        // round-trip that a separate final_reply would cost. A tool that
+        // errored is NOT terminal — feed the error back so the model retries.
+        const toolErrored =
+          typeof observation === "string" && observation.startsWith("Error:");
+        const isTerminal =
+          (TERMINAL_TOOL_NAMES.has(action.name) || toolResult.terminal === true) &&
+          !toolErrored;
+
+        if (isTerminal) {
+          finalReply = observation.split("\n")[0];
+
+          logger.logFinalReply(missionId, finalReply);
+          await socket.emitSay(id, finalReply);
+
+          logger.endMission(missionId, "completed", finalReply, bs.rules.rendered ?? "None.");
+          completed = true;
+          break;
+        }
 
         messages.push({
           role: "tool",
