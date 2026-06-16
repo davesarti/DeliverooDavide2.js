@@ -17,8 +17,8 @@ import {
   get_environment_state,
   setStackSize,
   removeStackSize,
-  setParcelFilter,
-  removeParcelFilter,
+  setParcelValueRule,
+  removeParcelValueRule,
   forbidDeliveryTile,
   preferDeliveryTile,
   setDeliveryMultiplier,
@@ -233,11 +233,11 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
     case "remove_stack_size":
       return makeToolResult(removeStackSize(params, bs));
 
-    case "set_parcel_filter":
-      return makeToolResult(setParcelFilter(params, bs));
+    case "set_parcel_value_rule":
+      return makeToolResult(setParcelValueRule(params, bs));
 
-    case "remove_parcel_filter":
-      return makeToolResult(removeParcelFilter(params, bs));
+    case "remove_parcel_value_rule":
+      return makeToolResult(removeParcelValueRule(params, bs));
 
     case "forbid_delivery_tile":
       return makeToolResult(forbidDeliveryTile(params, bs));

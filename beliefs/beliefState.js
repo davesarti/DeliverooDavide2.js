@@ -84,10 +84,11 @@ export function createBeliefState() {
       // at_most 5); conflicting ones are resolved when set (see setStackSize).
       stackSize: [],
 
-      parcelFilters: {
-        minReward: null,
-        maxReward: null,
-      },
+      // Array of parcel value rules { minReward, maxReward, mult, delta }.
+      // Each remaps a parcel's delivered value when that value is in band
+      // [minReward, maxReward] (null bound = open). Bidirectional: set
+      // minReward for "over N", maxReward for "under N", both for "between".
+      parcelValueRules: [],
 
       penaltyDeliveries: new Map(),   // "x,y" -> { x, y, penalty }
       preferredDeliveries: new Map(), // "x,y" -> { x, y, reward }

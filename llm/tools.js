@@ -7,7 +7,7 @@ import {
   DEFAULT_PREFER_REWARD,
   DEFAULT_BLOCK_PENALTY,
 } from "../utils/constants.js";
-import { stackRulesConflict } from "../bdi/ruleScoring.js";
+import { stackRulesConflict, applyParcelValueBand, isValidValueRule } from "../bdi/ruleScoring.js";
 
 // ==========================================
 // calculate
@@ -110,15 +110,6 @@ export function get_environment_state(bs, llmState, missionStats = null) {
   const me = bs.me;
   const rules = bs.rules ?? {};
 
-  const minReward = rules.parcelFilters?.minReward ?? null;
-  const maxReward = rules.parcelFilters?.maxReward ?? null;
-
-  const passesFilter = (reward) => {
-    if (minReward != null && reward < minReward) return false;
-    if (maxReward != null && reward > maxReward) return false;
-    return true;
-  };
-
   const carriedParcels = [...bs.parcels.values()]
     .filter((parcel) => parcel.carriedBy === me.id)
     .map((parcel) => ({
@@ -126,19 +117,23 @@ export function get_environment_state(bs, llmState, missionStats = null) {
       reward: parcel.reward ?? 0,
     }));
 
-  // Only parcels that satisfy the active reward filter are returned.
-  // Parcels rejected by the filter are omitted entirely so the model
-  // never has to evaluate suitability itself.
+  // No pickup gate: every visible free parcel is reported. Each carries
+  // `bankedAtDelivery` — its current reward remapped by the active parcel-value
+  // rules — so the model sees what it would actually score, not a hidden filter.
   const visibleParcels = [...bs.parcels.values()]
     .filter((parcel) => !parcel.carriedBy)
-    .filter((parcel) => passesFilter(parcel.reward ?? 0))
-    .map((parcel) => ({
-      id: parcel.id,
-      x: Math.round(parcel.x),
-      y: Math.round(parcel.y),
-      reward: parcel.reward ?? 0,
-      distanceToMe: distance(me, parcel),
-    }))
+    .map((parcel) => {
+      const reward = parcel.reward ?? 0;
+      const banked = applyParcelValueBand(reward, rules);
+      return {
+        id: parcel.id,
+        x: Math.round(parcel.x),
+        y: Math.round(parcel.y),
+        reward,
+        ...(banked !== reward ? { bankedAtDelivery: banked } : {}),
+        distanceToMe: distance(me, parcel),
+      };
+    })
     .sort((a, b) => {
       if (b.reward !== a.reward) return b.reward - a.reward;
       return a.distanceToMe - b.distanceToMe;
@@ -290,7 +285,6 @@ export function buildValidatorSnapshot(bs, llmState) {
       active: !!llmState.coordination?.active,
       partnerParkedOn: llmState.coordination?.partnerParkedOn ?? null,
     },
-    persistentRules: bs.rules?.rendered,
   };
 }
 
@@ -339,14 +333,25 @@ export function formatPersistentRules(rules) {
     );
   }
 
-  const minReward = rules.parcelFilters?.minReward;
-  const maxReward = rules.parcelFilters?.maxReward;
-
-  if (minReward != null) {
-    lines.push(`- Ignore parcels with reward lower than ${minReward}.`);
-  }
-  if (maxReward != null) {
-    lines.push(`- Ignore parcels with reward higher than ${maxReward}.`);
+  const valueRules = Array.isArray(rules.parcelValueRules)
+    ? rules.parcelValueRules
+    : [];
+  for (const r of valueRules) {
+    let band;
+    if (r.minReward != null && r.maxReward != null) {
+      band = `between ${r.minReward} and ${r.maxReward}`;
+    } else if (r.minReward != null) {
+      band = `over ${r.minReward}`;
+    } else {
+      band = `under ${r.maxReward}`;
+    }
+    const mult = r.mult ?? 1;
+    const delta = r.delta ?? 0;
+    let effect;
+    if (mult === 0) effect = delta === 0 ? "bank 0 pts" : `bank ${delta} pts`;
+    else if (mult !== 1) effect = `bank ${mult}x their value`;
+    else effect = `bank +${delta} pts`;
+    lines.push(`- Parcels worth ${band} at delivery ${effect}.`);
   }
 
   for (const [key, entry] of rules.penaltyDeliveries ?? []) {
@@ -545,38 +550,48 @@ export function removeStackSize({ mode, count } = {}, bs) {
   return applyRuleChange(bs, `All stack-size rules removed (${rules.length}).`);
 }
 
-// ---------- parcel reward filters ----------
+// ---------- parcel value rules ----------
 
-export function setParcelFilter({ minReward, maxReward }, bs) {
-  const hasMin = typeof minReward === "number" && isFinite(minReward);
-  const hasMax = typeof maxReward === "number" && isFinite(maxReward);
+/*
+ * Stores one parcel-value rule: a value band [minReward, maxReward] (null bound
+ * = open; at least one required) and a remap of the in-band delivered value via
+ * mult and/or delta (defaults 0/0 => "worth 0 pts"). Bidirectional by which
+ * bound is set: minReward for "over N", maxReward for "under N", both for
+ * "between". A new rule whose band exactly matches an existing one replaces it.
+ */
+export function setParcelValueRule({ minReward, maxReward, mult, delta }, bs) {
+  const rule = {
+    minReward: typeof minReward === "number" && isFinite(minReward) ? minReward : null,
+    maxReward: typeof maxReward === "number" && isFinite(maxReward) ? maxReward : null,
+    mult: typeof mult === "number" && isFinite(mult) ? mult : 0,
+    delta: typeof delta === "number" && isFinite(delta) ? delta : 0,
+  };
 
-  if (!hasMin && !hasMax) {
-    return "Error: provide at least one of minReward or maxReward as a number.";
+  if (!isValidValueRule(rule)) {
+    return "Error: provide at least one of minReward/maxReward, with non-negative mult and delta.";
   }
 
-  const filters = bs.rules.parcelFilters;
+  if (!Array.isArray(bs.rules.parcelValueRules)) bs.rules.parcelValueRules = [];
 
-  if (hasMin) filters.minReward = minReward;
-  if (hasMax) filters.maxReward = maxReward;
+  // Drop any existing rule covering the same band before adding the new one.
+  bs.rules.parcelValueRules = bs.rules.parcelValueRules.filter(
+    (r) => !(r.minReward === rule.minReward && r.maxReward === rule.maxReward)
+  );
+  bs.rules.parcelValueRules.push(rule);
 
   return applyRuleChange(
     bs,
-    `Parcel filter updated: minReward=${filters.minReward ?? "none"}, maxReward=${filters.maxReward ?? "none"}.`
+    `Parcel value rule set: band [${rule.minReward ?? "-inf"}, ${rule.maxReward ?? "+inf"}] -> value*${rule.mult}+${rule.delta} at delivery.`
   );
 }
 
-export function removeParcelFilter(params, bs) {
-  const filters = bs.rules.parcelFilters;
-
-  if (filters.minReward == null && filters.maxReward == null) {
-    return "No parcel reward filter was stored.";
-  }
-
-  filters.minReward = null;
-  filters.maxReward = null;
-
-  return applyRuleChange(bs, "Parcel reward filters removed.");
+export function removeParcelValueRule(params, bs) {
+  const rules = Array.isArray(bs.rules.parcelValueRules)
+    ? bs.rules.parcelValueRules
+    : [];
+  if (rules.length === 0) return "No parcel value rule was stored.";
+  bs.rules.parcelValueRules = [];
+  return applyRuleChange(bs, `All parcel value rules removed (${rules.length}).`);
 }
 
 // ---------- delivery tile rules ----------
@@ -666,8 +681,7 @@ export function clearPersistentRules(params, bs) {
   const rules = bs.rules;
 
   rules.stackSize = [];
-  rules.parcelFilters.minReward = null;
-  rules.parcelFilters.maxReward = null;
+  rules.parcelValueRules = [];
   rules.penaltyDeliveries.clear();
   rules.preferredDeliveries.clear();
   rules.deliveryMultipliers.clear();

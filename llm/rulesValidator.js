@@ -79,9 +79,6 @@ function validateGoPickUp(params, bs, rules) {
     return `pickup rejected: parcel ${params.parcelId} is already carried by ${parcel.carriedBy}`;
   }
 
-  const rewardError = validateParcelReward(parcel, rules, "pickup");
-  if (rewardError) return rewardError;
-
   return null;
 }
 
@@ -138,24 +135,6 @@ function validateCoordinates(x, y, bs, label) {
 
   if (!isInsideMap(x, y, bs.map)) {
     return `${label} rejected: tile (${x}, ${y}) is outside the map`;
-  }
-
-  return null;
-}
-
-function validateParcelReward(parcel, rules, actionLabel) {
-  const reward = parcel.reward ?? 0;
-  const parcelId = parcel.id ?? "unknown";
-
-  const minReward = rules.parcelFilters?.minReward;
-  const maxReward = rules.parcelFilters?.maxReward;
-
-  if (minReward != null && reward < minReward) {
-    return `${actionLabel} rejected: parcel ${parcelId} has reward ${reward}, below minimum allowed reward ${minReward}`;
-  }
-
-  if (maxReward != null && reward > maxReward) {
-    return `${actionLabel} rejected: parcel ${parcelId} has reward ${reward}, above maximum allowed reward ${maxReward}`;
   }
 
   return null;

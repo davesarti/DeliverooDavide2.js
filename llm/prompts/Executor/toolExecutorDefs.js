@@ -189,19 +189,33 @@ export const SYSTEM_EXECUTOR_TOOLS = [
   ),
 
   def(
-    "set_parcel_reward_filter",
-    "Store reward limits for parcels to ignore.",
+    "set_parcel_value_rule",
+    "Change how many points a parcel banks WHEN DELIVERED, for the parcels in a " +
+      "value band. This is NOT a pickup restriction. Choose the bound by asking " +
+      "'which parcels does the rule TARGET?': " +
+      "'worth more than / over / above N' -> minReward=N (targets parcels >= N); " +
+      "'worth less than / under / below N' -> maxReward=N (targets parcels <= N); " +
+      "'between A and B' -> minReward=A and maxReward=B. " +
+      "The targeted parcel's delivered value becomes value*mult+delta: omit both " +
+      "(or mult=0, delta=0) for 'worth 0 pts', delta=5 with mult=0 for 'worth 5 " +
+      "pts', mult=0.5 for 'worth half'. " +
+      "WORKED EXAMPLE: 'delivered parcels under 25 are worth 0' -> maxReward=25, " +
+      "mult=0, delta=0 (a parcel delivered at 30 still banks 30; one delivered at " +
+      "20 banks 0). Do NOT set minReward here — that would wrongly zero the high " +
+      "parcels instead of the low ones.",
     {
       thought,
-      minReward: numParam("Ignore parcels with reward below this value."),
-      maxReward: numParam("Ignore parcels with reward above this value."),
+      minReward: numParam("Set ONLY for 'over/above/more than N'. The rule targets parcels whose delivered value is >= this. Leave unset for an 'under N' rule."),
+      maxReward: numParam("Set ONLY for 'under/below/less than N'. The rule targets parcels whose delivered value is <= this. Leave unset for an 'over N' rule."),
+      mult: numParam("Optional non-negative multiplier on the targeted parcel's delivered value (default 0)."),
+      delta: numParam("Optional non-negative points added to the targeted parcel's delivered value (default 0)."),
     },
     ["thought"]
   ),
 
   def(
-    "remove_parcel_reward_filter",
-    "Remove all stored parcel reward filters.",
+    "remove_parcel_value_rule",
+    "Remove all stored parcel value rules.",
     { thought }
   ),
 

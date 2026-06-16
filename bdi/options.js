@@ -13,7 +13,6 @@ import {
   CAMP_PATIENCE_MAX_MS,
 } from "../utils/constants.js";
 import { AGENT_CONFIG } from "../config.js";
-import { passesParcelFilter } from "./ruleScoring.js";
 
 /*
  * Number of spawn ("green") tiles clustered within CAMP_ADJACENCY_RADIUS of a
@@ -171,9 +170,6 @@ function generatePickupOptions(parcels, me, bs) {
 
   for (const parcel of parcels.values()) {
     if (parcel.carriedBy) continue;
-    // Persistent reward filter: a parcel outside the band is never a candidate.
-    // Cheap short-circuit matching the same gate in intentionScore exactly.
-    if (!passesParcelFilter(parcel, bs.rules)) continue;
     if (pickupRouteDistance(parcel, me, bs) == null) continue;
     pickupOptions.push(["go_pick_up", parcel.x, parcel.y, parcel.id]);
   }

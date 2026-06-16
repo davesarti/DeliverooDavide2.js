@@ -9,16 +9,19 @@ import {
   optionsGeneration,
   distanceFactor,
   pickupRouteDistance,
-  competitionAdjustedReward,
+  raceWinProbability,
   effectiveCapacity,
   campPatienceMs,
   EXPLORATION_INCENTIVE,
   CAMP_INCENTIVE,
   DROP_DISINCENTIVE,
 } from "./options.js";
-import { deliveryMapDistance } from "../utils/stateUtils.js";
 import {
-  passesParcelFilter,
+  deliveryMapDistance,
+  nearestDeliveryTileAt,
+} from "../utils/stateUtils.js";
+import {
+  applyParcelValueBand,
   adjustDeliveryScore,
   applyStackModifier,
   stackDeliveryModifier,
@@ -30,6 +33,7 @@ import {
   PREEMPTION_HYSTERESIS,
   PREEMPTION_EPSILON,
   CAMP_LOSS_BUDGET_FRACTION,
+  CAMP_NEAR_DELIVERY_TILES,
   COORD_RESUME_IDLE_TTL_MS,
 } from "../utils/constants.js";
 import { waitUntil } from "../utils/asyncUtils.js";
@@ -247,7 +251,6 @@ class IntentionRevision {
     );
     const totalReward = myParcels.reduce((sum, p) => sum + p.reward, 0);
     const factor = distanceFactor(this.#bs);
-    let estimatedLoss = 0;
 
     const action = predicate[0];
 
@@ -260,10 +263,16 @@ class IntentionRevision {
       );
       if (routeDist == null) return -1;
 
+      // Per-parcel delivered value: its current reward minus decay over the
+      // delivery route, floored at 0, then remapped by any parcel-value rule
+      // (e.g. "worth over 10 at delivery -> 0 pts"). With no value rule this
+      // sums to the old `totalReward - estimatedLoss`.
+      let dropScore = -DROP_DISINCENTIVE;
       for (const parcel of myParcels) {
-        estimatedLoss += Math.min(parcel.reward, routeDist * factor);
+        const delivered = Math.max(0, parcel.reward - routeDist * factor);
+        dropScore += applyParcelValueBand(delivered, this.#bs.rules);
       }
-      let dropScore = totalReward - estimatedLoss - DROP_DISINCENTIVE;
+
       // Soft stack-size value: penalise/reward this delivery by how the carried
       // count meets the rule's target (met vs unmet modifier). No gate — a
       // penalty just lowers the score so camp/gathering can outrank a premature
@@ -283,8 +292,8 @@ class IntentionRevision {
       const newParcel = parcels.get(parcelId);
       if (!newParcel) return -1;
 
-      // Persistent reward filter: parcels outside the band are never picked up.
-      if (!passesParcelFilter(newParcel, this.#bs.rules)) return -1;
+      // No pickup gate on value: a parcel is valued by what it will BANK at
+      // delivery (the parcel-value rule), not excluded at pickup.
 
       // A full agent gains nothing from pickups: delivery becomes the only
       // scored option. The cap also guarantees banking when parcels do not
@@ -293,10 +302,6 @@ class IntentionRevision {
 
       const routeDist = pickupRouteDistance(newParcel, me, this.#bs);
       if (routeDist == null) return -1;
-
-      // Raw reward discounted by the chance of winning the race for the
-      // parcel against the closest known opponent.
-      const expectedReward = competitionAdjustedReward(newParcel, me, this.#bs);
 
       // Stack-aware (approach b): value the pickup by the delivery it leads to
       // at the resulting carried count. Gathering toward the target is valued
@@ -307,17 +312,32 @@ class IntentionRevision {
         this.#bs.rules
       );
 
+      // New parcel's delivered value (its reward minus decay over the route),
+      // remapped by the value rule, THEN discounted by the chance of winning the
+      // race for it. Order matters: the value-band threshold must see the
+      // parcel's TRUE delivered value. Folding the race probability in first can
+      // push a high-value parcel into a "worth 0" band (e.g. a 35pt parcel under
+      // "delivered under 25 -> 0" the moment any agent contests it), making the
+      // agent wrongly skip it and idle. Race is an acquisition probability, so it
+      // scales the banked value — it must not decide which band the parcel is in.
+      const raceProb = raceWinProbability(newParcel, me, this.#bs);
+      const newProjected = Math.max(0, newParcel.reward - routeDist * factor);
+      const newDelivered =
+        applyParcelValueBand(newProjected, this.#bs.rules) * raceProb;
+
       if (myParcels.length === 0) {
-        return applyStackModifier(expectedReward - routeDist * factor, pickupMod);
+        return applyStackModifier(newDelivered, pickupMod);
       }
 
+      // Already-carried parcels are also remapped at the (later) delivery.
+      let carriedDelivered = 0;
       for (const parcel of myParcels) {
-        estimatedLoss += Math.min(parcel.reward, routeDist * factor);
+        carriedDelivered += applyParcelValueBand(
+          Math.max(0, parcel.reward - routeDist * factor),
+          this.#bs.rules
+        );
       }
-      return applyStackModifier(
-        totalReward + expectedReward - routeDist * factor - estimatedLoss,
-        pickupMod
-      );
+      return applyStackModifier(carriedDelivered + newDelivered, pickupMod);
     }
 
     if (action === "explore") return EXPLORATION_INCENTIVE;
@@ -343,6 +363,14 @@ class IntentionRevision {
       // Carrying: camping for more is only worth it under capacity and while
       // still within the decay loss budget. Otherwise deliver.
       if (carriedCount >= effectiveCapacity(this.#bs)) return -1;
+
+      // Don't camp for a fuller load when a delivery tile is right here: the
+      // payoff of gathering more is amortizing a long trip, so when delivery is
+      // near, quick pickup→deliver cycles win. Deliver instead of loitering.
+      const nearestDelivery = nearestDeliveryTileAt(me, deliveryDistanceMap);
+      if (nearestDelivery && nearestDelivery.distance <= CAMP_NEAR_DELIVERY_TILES) {
+        return -1;
+      }
 
       if (factor > 0) {
         const used = this.#bs.carry?.campSteps ?? 0;

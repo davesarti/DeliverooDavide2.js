@@ -3,8 +3,8 @@
  *
  * These feed the autonomous option/score loop. Two flavours, matching intent:
  *
- *  - parcelFilters is a *gate* (an exclusion rule): a parcel outside the reward
- *    band is never a pickup candidate.
+ *  - parcelValueRules is an array of value-band remaps: the delivered value of a
+ *    parcel is multiplied/shifted by matching rules at scoring time.
  *  - stackSize and the delivery-tile rules are *preferences*: they shift a
  *    delivery's (or pickup's) score so the favoured option wins, but never make
  *    a delivery impossible. stackSize is therefore soft — it penalises/rewards
@@ -19,20 +19,54 @@
 const IDENTITY = { mult: 1, delta: 0 };
 
 /*
- * Pickup gate from the persistent reward filter. True when the parcel's reward
- * is within [minReward, maxReward]; null bounds are open. Mirrors
- * validateParcelReward so the autonomous path excludes exactly the parcels the
- * directive path rejects.
+ * Parcel value rules (an array of value-band remaps). A rule is
+ * { minReward, maxReward, mult, delta } with null bounds open and bounds
+ * inclusive. A parcel's delivered value `v` is "in band" when it lies in
+ * [minReward, maxReward]; every in-band rule contributes its { mult, delta }
+ * (mults multiply, deltas sum, mirroring combineStack), so the delivered value
+ * banks `v * mult + delta` instead of `v`. Out-of-band rules contribute the
+ * identity, so a parcel no rule covers banks `v` unchanged.
+ *
+ * No floor is applied: setParcelValueRule validates mult >= 0 and delta >= 0,
+ * so an in-band remap of a non-negative delivered value stays non-negative, and
+ * with no matching rule the value passes through untouched. This keeps the
+ * existing no-rule scoring arithmetic in intentionScore byte-for-byte identical.
  */
-export function passesParcelFilter(parcel, rules) {
-  const reward = parcel?.reward ?? 0;
-  const minReward = rules?.parcelFilters?.minReward;
-  const maxReward = rules?.parcelFilters?.maxReward;
+function valueRulesOf(rules) {
+  const vr = rules?.parcelValueRules;
+  return Array.isArray(vr) ? vr.filter(isValidValueRule) : [];
+}
 
-  if (minReward != null && reward < minReward) return false;
-  if (maxReward != null && reward > maxReward) return false;
+export function isValidValueRule(r) {
+  if (!r) return false;
+  const numOrNull = (v) =>
+    v == null || (typeof v === "number" && Number.isFinite(v));
+  const hasBound = r.minReward != null || r.maxReward != null;
+  const multOk =
+    r.mult == null ||
+    (typeof r.mult === "number" && Number.isFinite(r.mult) && r.mult >= 0);
+  const deltaOk =
+    r.delta == null ||
+    (typeof r.delta === "number" && Number.isFinite(r.delta) && r.delta >= 0);
+  return numOrNull(r.minReward) && numOrNull(r.maxReward) && hasBound && multOk && deltaOk;
+}
 
+function valueInBand(value, rule) {
+  if (rule.minReward != null && value < rule.minReward) return false;
+  if (rule.maxReward != null && value > rule.maxReward) return false;
   return true;
+}
+
+export function applyParcelValueBand(value, rules) {
+  let mult = 1;
+  let delta = 0;
+  for (const rule of valueRulesOf(rules)) {
+    if (valueInBand(value, rule)) {
+      mult *= rule.mult ?? 1;
+      delta += rule.delta ?? 0;
+    }
+  }
+  return value * mult + delta;
 }
 
 /*

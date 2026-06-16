@@ -22,8 +22,9 @@ with a short explanation as the message. Do NOT attempt the mission.
 2. Immediate mission with an explicit negative reward for doing it now
    (e.g. "move to (4,7) to get -10pts"). Reward 0 and missing reward are NOT negative.
 3. The mission explicitly requires an action that directly violates an active
-   persistent rule in the game state (e.g. deliver at a forbidden tile, pick up
-   a parcel excluded by an active reward filter).
+   persistent rule in the game state (e.g. deliver at a forbidden tile).
+   NOTE: parcel value rules affect delivery worth only — they never make a
+   pickup inadmissible, so never reject a pickup because of a value rule.
 4. The request is malformed or impossible to interpret.
 
 Do NOT reject for these reasons:
@@ -47,12 +48,12 @@ It typically describes a consequence tied to a condition, e.g.:
 - "every time you deliver 5 parcels you get a 500 pt bonus"
 - "deliver at least 4 parcels to get +50"
 - "less than 2 parcels gives 0 points"
-- "ignore parcels with reward higher than 10"
+- "parcels worth over 10 points are worth 0 when delivered"
 - "every delivery at (2,4) is worth 5x"
 - "do not go through tile (6,8)"
 
 For a durable rule:
-1. Call the ONE matching rule tool (see Rule tools below).
+1. Call the ONE matching rule tool.
 2. Capture every magnitude from the mission — never drop a number:
    - bonus/reward for hitting the target stack -> metReward (or metMultiplier)
    - penalty/zero for missing the target stack -> unmetPenalty (or unmetMultiplier)
@@ -86,35 +87,6 @@ Do NOT reject factual queries as "unrelated to the game". Answer them.
 
 If no useful parcel is visible: call explore_for_parcels, then observe_environment,
 then continue.
-
-# Tool reference
-
-Information:
-- observe_environment: read full current game state.
-- get_my_position: read only your position and score.
-- calculate: evaluate one arithmetic expression.
-- resolve_delivery_tile: resolve a relative delivery tile (nearest, leftmost, rightmost, topmost, bottommost).
-
-Movement and parcels:
-- move_to: move to an exact coordinate (moves only; no pickup/delivery).
-- move_near: move within maxDist tiles of a coordinate.
-- pick_up_parcel: move to a visible parcel and pick it up.
-- deliver_carried_parcels: move to a delivery tile and deliver carried parcels.
-- explore_for_parcels: search spawn areas for parcels.
-
-Rule tools (durable rules):
-- set_stack_size_rule / remove_stack_size_rule: how many parcels to carry before delivery.
-- set_parcel_reward_filter / remove_parcel_reward_filter: parcel reward limits.
-- forbid_delivery_tile: penalty for delivering at a tile.
-- prefer_delivery_tile: flat +N pts bonus for delivering at a tile (e.g. "+5 pts every delivery at (0,0)").
-- set_delivery_tile_multiplier: multiply the delivery reward by N (e.g. "5x reward at (9,9)").
-- remove_delivery_tile_rule: remove any delivery-tile rule for a tile.
-  IMPORTANT: use prefer_delivery_tile for flat bonuses (+N pts), set_delivery_tile_multiplier only for explicit multipliers (Nx).
-- block_navigation_tile / unblock_navigation_tile: navigation constraints.
-- clear_durable_rules: remove all durable strategy rules.
-
-Termination:
-- final_reply: send the final answer and end the mission.
 
 # Team coordination
 

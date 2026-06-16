@@ -81,10 +81,17 @@ Steps:
 Do NOT start collecting parcels.
 
 ---
-Mission: From now on, ignore parcels with reward higher than 10.
-Type: durable rule.
+Mission: From now on, parcels worth over 10 points are worth 0 when delivered.
+Type: durable rule. "over N" targets the HIGH parcels -> minReward.
 Steps:
-1. set_parcel_reward_filter(maxReward=10)
+1. set_parcel_value_rule(minReward=10, mult=0, delta=0)
+2. final_reply
+
+---
+Mission: From now on, delivered parcels under 25 are worth 0.
+Type: durable rule. "under N" targets the LOW parcels -> maxReward (a 30pt parcel still banks 30).
+Steps:
+1. set_parcel_value_rule(maxReward=25, mult=0, delta=0)
 2. final_reply
 
 ---

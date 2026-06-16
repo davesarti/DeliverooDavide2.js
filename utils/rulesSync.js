@@ -13,10 +13,9 @@
 export function serializeRules(rules) {
   return {
     stackSize: Array.isArray(rules.stackSize) ? rules.stackSize : [],
-    parcelFilters: {
-      minReward: rules.parcelFilters?.minReward ?? null,
-      maxReward: rules.parcelFilters?.maxReward ?? null,
-    },
+    parcelValueRules: Array.isArray(rules.parcelValueRules)
+      ? rules.parcelValueRules
+      : [],
     penaltyDeliveries: [...rules.penaltyDeliveries],
     preferredDeliveries: [...rules.preferredDeliveries],
     deliveryMultipliers: [...rules.deliveryMultipliers],
@@ -34,8 +33,9 @@ export function applyRulesSnapshot(target, snapshot) {
   if (!target || !snapshot) return;
 
   target.stackSize = Array.isArray(snapshot.stackSize) ? snapshot.stackSize : [];
-  target.parcelFilters.minReward = snapshot.parcelFilters?.minReward ?? null;
-  target.parcelFilters.maxReward = snapshot.parcelFilters?.maxReward ?? null;
+  target.parcelValueRules = Array.isArray(snapshot.parcelValueRules)
+    ? snapshot.parcelValueRules
+    : [];
   target.penaltyDeliveries = new Map(snapshot.penaltyDeliveries ?? []);
   target.preferredDeliveries = new Map(snapshot.preferredDeliveries ?? []);
   target.deliveryMultipliers = new Map(snapshot.deliveryMultipliers ?? []);

@@ -17,8 +17,8 @@ const ACTION_NAME_MAP = {
   set_stack_size_rule: "set_stack_size",
   remove_stack_size_rule: "remove_stack_size",
 
-  set_parcel_reward_filter: "set_parcel_filter",
-  remove_parcel_reward_filter: "remove_parcel_filter",
+  set_parcel_value_rule: "set_parcel_value_rule",
+  remove_parcel_value_rule: "remove_parcel_value_rule",
 
   forbid_delivery_tile: "forbid_delivery_tile",
   prefer_delivery_tile: "prefer_delivery_tile",

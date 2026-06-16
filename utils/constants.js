@@ -46,6 +46,13 @@ export const CAMP_PATROL_RADIUS = 5;
 // fast decay ⇒ ~0 steps ⇒ it delivers right away.
 export const CAMP_LOSS_BUDGET_FRACTION = 0.05;
 
+// Camp-while-carrying delivery proximity guard: camping to GATHER MORE only pays
+// off when delivery is far enough that amortizing the trip beats quick
+// pickup→deliver cycles. When a delivery tile is within this many tiles, a
+// carrying agent delivers instead of loitering for a fuller load. Only gates the
+// carrying camp; idle camping (empty-handed pickup loitering) is unaffected.
+export const CAMP_NEAR_DELIVERY_TILES = 8;
+
 // Adaptive camp patience — "is this pocket worth waiting at, and for how long".
 // Driven purely by SPATIAL spawn-cluster density: the number of spawn
 // ("green") tiles within CAMP_ADJACENCY_RADIUS of the pocket, which is what
