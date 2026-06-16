@@ -12,6 +12,7 @@ const ACTION_NAME_MAP = {
   pick_up_parcel: "go_pick_up",
   deliver_carried_parcels: "go_drop_off",
   explore_for_parcels: "explore",
+  collect_and_deliver: "collect_and_deliver",
 
   // Durable strategy rules
   set_stack_size_rule: "set_stack_size",
