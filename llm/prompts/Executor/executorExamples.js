@@ -136,12 +136,13 @@ Do NOT go collect and deliver parcels. Storing the rule is the whole task.
 ---
 Mission: From now on deliver at most 1 parcel.
 Active rules: Prefer delivering when carrying exactly 1 parcel.
-Type: durable rule — "from now on X" replaces ALL existing stack rules.
+Type: durable rule — explicit "from now on" full reset.
 Steps:
-1. remove_stack_size_rule()   ← no args = clears every stack rule
-2. set_stack_size_rule(mode="at_most", count=1)   ← terminal; STOP here
-ALWAYS call remove_stack_size_rule() first when the mission says "from now on"
-or otherwise replaces a standing delivery-stack policy. The final set_*_rule is terminal.
+1. remove_stack_size_rule(more=true)   ← more=true so the mission does NOT end here
+2. set_stack_size_rule(mode="at_most", count=1)   ← last step; terminal, STOP here
+The remove MUST carry more=true, otherwise the mission ends on the removal and the new
+rule is never stored. For a plain new stack rule (no "from now on" / "forget"), skip the
+remove entirely — set_stack_size_rule already replaces any contradicting stack rule.
 
 ---
 Mission: Do not go through tile (6,8).
