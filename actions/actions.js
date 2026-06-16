@@ -440,7 +440,19 @@ export function createActions(socket, bs, options = {}) {
       }
     }
     if (shouldStop()) throw ["stopped"];
-    return await putdown();
+
+    // Count what this delivery banks so collect_and_deliver can watch progress
+    // when it hands the play loop to the autonomous BDI. The carried set only
+    // changes on sensing, so read the count just before putdown (matches how the
+    // LLM go_drop_off handler reports deliveredCount). A delivery tile banks all
+    // carried parcels at once.
+    const deliveredNow = carriedCount();
+    const result = await putdown();
+    if (deliveredNow > 0) {
+      bs.metrics ??= { deliveredParcels: 0 };
+      bs.metrics.deliveredParcels += deliveredNow;
+    }
+    return result;
   }
 
   /*
