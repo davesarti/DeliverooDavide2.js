@@ -79,7 +79,10 @@ export function createBeliefState() {
     // in A* (they never make a tile impassable), so a rule can never strand
     // the agent.
     rules: {
-      stackSize: null,
+      // Array of stack-size rules { mode, count, met, unmet }. Several
+      // compatible constraints can be active at once (e.g. at_least 2 +
+      // at_most 5); conflicting ones are resolved when set (see setStackSize).
+      stackSize: [],
 
       parcelFilters: {
         minReward: null,

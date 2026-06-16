@@ -6,6 +6,7 @@ import {
   DEFAULT_PREFER_REWARD,
   DEFAULT_BLOCK_PENALTY,
 } from "../utils/constants.js";
+import { stackRulesConflict } from "../bdi/ruleScoring.js";
 
 // ==========================================
 // calculate
@@ -308,15 +309,31 @@ export function formatPersistentRules(rules) {
 
   const lines = [];
 
-  if (rules.stackSize) {
-    const modeLabels = {
-      exactly: "exactly",
-      at_least: "at least",
-      at_most: "at most",
-    };
-    const label = modeLabels[rules.stackSize.mode] ?? rules.stackSize.mode;
+  const modeLabels = {
+    exactly: "exactly",
+    at_least: "at least",
+    at_most: "at most",
+  };
+  const stackRules = Array.isArray(rules.stackSize)
+    ? rules.stackSize
+    : rules.stackSize
+      ? [rules.stackSize]
+      : [];
+
+  for (const ss of stackRules) {
+    const label = modeLabels[ss.mode] ?? ss.mode;
+
+    const mods = [];
+    const penalty = ss.unmet?.delta ?? 0;
+    if (penalty < 0) mods.push(`penalty ${-penalty} otherwise`);
+    if (ss.met?.delta) mods.push(`reward ${ss.met.delta} when met`);
+    if (ss.met?.mult != null && ss.met.mult !== 1) {
+      mods.push(`${ss.met.mult}x reward when met`);
+    }
+    const suffix = mods.length ? ` [${mods.join(", ")}]` : "";
+
     lines.push(
-      `- Deliver only when carrying ${label} ${rules.stackSize.count} parcel(s).`
+      `- Prefer delivering when carrying ${label} ${ss.count} parcel(s)${suffix}.`
     );
   }
 
@@ -425,7 +442,7 @@ function applyRuleChange(bs, outcome) {
 
 // ---------- stack size ----------
 
-export function setStackSize({ mode, count }, bs) {
+export function setStackSize({ mode, count, penalty, reward, multiplier }, bs) {
   const allowedModes = new Set(["exactly", "at_least", "at_most"]);
 
   if (!allowedModes.has(mode)) {
@@ -436,22 +453,76 @@ export function setStackSize({ mode, count }, bs) {
     return `Error: count must be a positive integer, received ${count}.`;
   }
 
-  bs.rules.stackSize = { mode, count };
+  // The stack rule is a soft delivery-score modifier (not a hard gate). It has
+  // two regimes: `unmet` (carried count off the target) and `met` (on target).
+  // The mission supplies the magnitudes: a penalty discourages delivering off
+  // target, a reward/multiplier rewards delivering on target. Defaults are
+  // identity, so a bare {mode,count} just expresses a soft preference for that
+  // stack size with no numeric push.
+  const unmet = { mult: 1, delta: 0 };
+  const met = { mult: 1, delta: 0 };
+
+  if (typeof penalty === "number" && isFinite(penalty)) {
+    unmet.delta = -Math.abs(penalty);
+  }
+  if (typeof reward === "number" && isFinite(reward)) {
+    met.delta = reward;
+  }
+  if (typeof multiplier === "number" && isFinite(multiplier)) {
+    met.mult = multiplier;
+  }
+
+  const newRule = { mode, count, met, unmet };
+
+  if (!Array.isArray(bs.rules.stackSize)) bs.rules.stackSize = [];
+
+  // Several compatible constraints coexist. Overwrite only those the new rule
+  // genuinely contradicts (or restates with the same target) — the LLM
+  // validator already decided to accept this as an override; here we just clear
+  // the now-superseded rules so the active set stays self-consistent.
+  const superseded = bs.rules.stackSize.filter(
+    (r) =>
+      (r.mode === mode && r.count === count) || stackRulesConflict(r, newRule)
+  );
+  bs.rules.stackSize = bs.rules.stackSize.filter(
+    (r) => !superseded.includes(r)
+  );
+  bs.rules.stackSize.push(newRule);
+
+  const label = `${mode.replace("_", " ")} ${count}`;
+  const note =
+    superseded.length > 0
+      ? ` (replaced ${superseded.length} conflicting rule(s))`
+      : ` (now ${bs.rules.stackSize.length} stack rule(s) active)`;
 
   return applyRuleChange(
     bs,
-    `Stack-size rule set: deliver only when carrying ${mode.replace("_", " ")} ${count} parcel(s).`
+    `Stack-size rule set: prefer delivering when carrying ${label} parcel(s)${note}.`
   );
 }
 
-export function removeStackSize(params, bs) {
-  if (!bs.rules.stackSize) {
+export function removeStackSize({ mode, count } = {}, bs) {
+  const rules = Array.isArray(bs.rules.stackSize) ? bs.rules.stackSize : [];
+
+  if (rules.length === 0) {
     return "No stack-size rule was stored.";
   }
 
-  bs.rules.stackSize = null;
+  // With a mode+count, remove just that rule; otherwise clear them all.
+  if (mode != null && count != null) {
+    const kept = rules.filter((r) => !(r.mode === mode && r.count === count));
+    if (kept.length === rules.length) {
+      return `No stack-size rule matching "${mode} ${count}" was stored.`;
+    }
+    bs.rules.stackSize = kept;
+    return applyRuleChange(
+      bs,
+      `Stack-size rule removed: ${mode.replace("_", " ")} ${count}.`
+    );
+  }
 
-  return applyRuleChange(bs, "Stack-size rule removed.");
+  bs.rules.stackSize = [];
+  return applyRuleChange(bs, `All stack-size rules removed (${rules.length}).`);
 }
 
 // ---------- parcel reward filters ----------
@@ -574,7 +645,7 @@ export function removeDeliveryTileRule({ x, y }, bs) {
 export function clearPersistentRules(params, bs) {
   const rules = bs.rules;
 
-  rules.stackSize = null;
+  rules.stackSize = [];
   rules.parcelFilters.minReward = null;
   rules.parcelFilters.maxReward = null;
   rules.penaltyDeliveries.clear();

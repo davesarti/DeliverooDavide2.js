@@ -140,7 +140,12 @@ export const SYSTEM_EXECUTOR_TOOLS = [
 
   def(
     "set_stack_size_rule",
-    "Store a rule about how many parcels should be carried before delivery.",
+    "Store a soft preference about how many parcels to carry before delivery. " +
+      "It does not block delivery; it adjusts the delivery score. Supply the " +
+      "magnitudes from the mission: penalty discourages delivering off the " +
+      "target stack, reward/multiplier reward delivering on the target stack. " +
+      "Several compatible rules can be active at once (e.g. at_least 2 and " +
+      "at_most 5); a new rule replaces any active rule it contradicts.",
     {
       thought,
       mode: {
@@ -148,15 +153,34 @@ export const SYSTEM_EXECUTOR_TOOLS = [
         enum: ["exactly", "at_least", "at_most"],
         description: "Comparison mode for the carried parcel count.",
       },
-      count: intParam("Positive number of parcels."),
+      count: intParam("Positive number of parcels (the target stack)."),
+      penalty: numParam(
+        "Optional. Points subtracted from a delivery made off the target stack."
+      ),
+      reward: numParam(
+        "Optional. Points added to a delivery made on the target stack."
+      ),
+      multiplier: numParam(
+        "Optional. Multiplier applied to a delivery made on the target stack (e.g. 2 = double)."
+      ),
     },
     ["thought", "mode", "count"]
   ),
 
   def(
     "remove_stack_size_rule",
-    "Remove the stored stack-size rule.",
-    { thought }
+    "Remove stored stack-size rules. With mode+count, remove just that rule; " +
+      "with neither, remove all of them.",
+    {
+      thought,
+      mode: {
+        type: "string",
+        enum: ["exactly", "at_least", "at_most"],
+        description: "Optional. Mode of the specific rule to remove.",
+      },
+      count: intParam("Optional. Count of the specific rule to remove."),
+    },
+    ["thought"]
   ),
 
   def(

@@ -104,9 +104,10 @@ function validateGoDropOff(params, bs, rules) {
     return "delivery rejected: no carried parcels to deliver";
   }
 
-  const stackError = validateStackSize(carriedCount, rules);
-  if (stackError) return stackError;
-
+  // stackSize is a soft preference, not a hard constraint: it penalises or
+  // rewards delivering at a given stack value in the autonomous scorer, but it
+  // must never reject an explicit "deliver" action — otherwise a mission to
+  // deliver a single parcel is refused just because a stack rule prefers more.
   return null;
 }
 
@@ -155,39 +156,6 @@ function validateParcelReward(parcel, rules, actionLabel) {
 
   if (maxReward != null && reward > maxReward) {
     return `${actionLabel} rejected: parcel ${parcelId} has reward ${reward}, above maximum allowed reward ${maxReward}`;
-  }
-
-  return null;
-}
-
-function validateStackSize(carriedCount, rules) {
-  const stackSize = rules.stackSize;
-
-  if (!stackSize) return null;
-
-  const mode = stackSize.mode;
-  const count = stackSize.count;
-
-  const allowedModes = new Set(["exactly", "at_least", "at_most"]);
-
-  if (!allowedModes.has(mode)) {
-    return `delivery rejected: invalid persistent stack-size mode "${mode}"`;
-  }
-
-  if (!Number.isInteger(count) || count <= 0) {
-    return `delivery rejected: invalid persistent stack-size rule ${JSON.stringify(stackSize)}`;
-  }
-
-  if (mode === "exactly" && carriedCount !== count) {
-    return `delivery rejected: carrying ${carriedCount} parcel(s), but persistent rules require exactly ${count}`;
-  }
-
-  if (mode === "at_least" && carriedCount < count) {
-    return `delivery rejected: carrying ${carriedCount} parcel(s), but persistent rules require at least ${count}`;
-  }
-
-  if (mode === "at_most" && carriedCount > count) {
-    return `delivery rejected: carrying ${carriedCount} parcel(s), but persistent rules allow at most ${count}`;
   }
 
   return null;

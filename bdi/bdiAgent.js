@@ -18,6 +18,14 @@ import {
 } from "./options.js";
 import { deliveryMapDistance } from "../utils/stateUtils.js";
 import {
+  passesParcelFilter,
+  adjustDeliveryScore,
+  applyStackModifier,
+  stackDeliveryModifier,
+  stackPickupModifier,
+  stackMetModifier,
+} from "./ruleScoring.js";
+import {
   RUNTIME,
   PREEMPTION_HYSTERESIS,
   PREEMPTION_EPSILON,
@@ -255,13 +263,28 @@ class IntentionRevision {
       for (const parcel of myParcels) {
         estimatedLoss += Math.min(parcel.reward, routeDist * factor);
       }
-      return totalReward - estimatedLoss - DROP_DISINCENTIVE;
+      let dropScore = totalReward - estimatedLoss - DROP_DISINCENTIVE;
+      // Soft stack-size value: penalise/reward this delivery by how the carried
+      // count meets the rule's target (met vs unmet modifier). No gate — a
+      // penalty just lowers the score so camp/gathering can outrank a premature
+      // delivery; a met bonus lifts it so a completed stack is banked promptly.
+      dropScore = applyStackModifier(
+        dropScore,
+        stackDeliveryModifier(myParcels.length, this.#bs.rules)
+      );
+      // Persistent delivery-tile preferences steer which delivery wins, without
+      // ever gating: a preferred tile scores higher, a penalised one lower.
+      // adjustDeliveryScore floors at 0, so neither preference can strand.
+      return adjustDeliveryScore(dropScore, this.#bs.rules, x, y);
     }
 
     if (action === "go_pick_up") {
       const [, , , parcelId] = predicate;
       const newParcel = parcels.get(parcelId);
       if (!newParcel) return -1;
+
+      // Persistent reward filter: parcels outside the band are never picked up.
+      if (!passesParcelFilter(newParcel, this.#bs.rules)) return -1;
 
       // A full agent gains nothing from pickups: delivery becomes the only
       // scored option. The cap also guarantees banking when parcels do not
@@ -275,14 +298,26 @@ class IntentionRevision {
       // parcel against the closest known opponent.
       const expectedReward = competitionAdjustedReward(newParcel, me, this.#bs);
 
+      // Stack-aware (approach b): value the pickup by the delivery it leads to
+      // at the resulting carried count. Gathering toward the target is valued
+      // optimistically (met); only overshooting an exactly/at_most cap is
+      // priced with the unmet modifier, so a rich enough parcel can still win.
+      const pickupMod = stackPickupModifier(
+        myParcels.length + 1,
+        this.#bs.rules
+      );
+
       if (myParcels.length === 0) {
-        return expectedReward - routeDist * factor;
+        return applyStackModifier(expectedReward - routeDist * factor, pickupMod);
       }
 
       for (const parcel of myParcels) {
         estimatedLoss += Math.min(parcel.reward, routeDist * factor);
       }
-      return totalReward + expectedReward - routeDist * factor - estimatedLoss;
+      return applyStackModifier(
+        totalReward + expectedReward - routeDist * factor - estimatedLoss,
+        pickupMod
+      );
     }
 
     if (action === "explore") return EXPLORATION_INCENTIVE;
@@ -311,10 +346,23 @@ class IntentionRevision {
 
       if (factor > 0) {
         const used = this.#bs.carry?.campSteps ?? 0;
-        // Steps we may still camp before bleeding > fraction of carried value.
+        // Base budget: tiles we may camp before bleeding > a fraction of the
+        // carried value to decay.
+        const baseBudget = CAMP_LOSS_BUDGET_FRACTION * totalReward;
+        // Stack-aware extension: if reaching the rule's target stack raises the
+        // delivery value (a met bonus, or escaping an unmet penalty), we may
+        // bleed up to that extra value too — so "wait for spawns" lasts exactly
+        // as long as completing the stack is worth and no longer.
+        const stackGain = Math.max(
+          0,
+          applyStackModifier(totalReward, stackMetModifier(this.#bs.rules)) -
+            applyStackModifier(
+              totalReward,
+              stackDeliveryModifier(carriedCount, this.#bs.rules)
+            )
+        );
         const horizon =
-          (CAMP_LOSS_BUDGET_FRACTION * totalReward) /
-          (factor * carriedCount);
+          Math.max(baseBudget, stackGain) / (factor * carriedCount);
         if (used >= horizon) return -1;
       }
 
@@ -364,6 +412,17 @@ class IntentionRevision {
       0,
       this.intention_queue.length,
       ...valid.map((e) => e.intention)
+    );
+
+    // Diagnostic: dump the queue in its freshly sorted order, each entry with
+    // the score that placed it there.
+    this.log(
+      "Queue resorted:",
+      valid.length === 0
+        ? "(empty)"
+        : valid
+            .map((e) => `${e.intention.predicate.join(" ")}=${e.score.toFixed(2)}`)
+            .join(" | ")
     );
 
     const best = this.intention_queue[0];

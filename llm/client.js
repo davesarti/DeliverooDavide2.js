@@ -89,7 +89,13 @@ function safeJsonParse(text) {
 
 function coerceNumericParams(obj) {
   const integerFields = new Set(["x", "y", "count", "cid", "maxDist", "timeoutMs"]);
-  const floatFields = new Set(["minReward", "maxReward", "multiplier"]);
+  const floatFields = new Set([
+    "minReward",
+    "maxReward",
+    "multiplier",
+    "penalty",
+    "reward",
+  ]);
 
   for (const key in obj) {
     if (typeof obj[key] !== "string") continue;

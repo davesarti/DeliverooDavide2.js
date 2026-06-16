@@ -13,6 +13,7 @@ import {
   CAMP_PATIENCE_MAX_MS,
 } from "../utils/constants.js";
 import { AGENT_CONFIG } from "../config.js";
+import { passesParcelFilter } from "./ruleScoring.js";
 
 /*
  * Number of spawn ("green") tiles clustered within CAMP_ADJACENCY_RADIUS of a
@@ -82,6 +83,9 @@ export function effectiveCapacity(bs) {
   const declared = Number(bs.config.playerCapacity);
   const capacity =
     Number.isFinite(declared) && declared > 0 ? declared : Infinity;
+  // Stack-size no longer hard-caps carrying: over-gathering past an
+  // exactly/at_most target is discouraged softly in pickup scoring
+  // (stackPickupModifier), so a rich enough parcel can still justify it.
   return Math.min(capacity, HOARD_CAP);
 }
 
@@ -167,6 +171,9 @@ function generatePickupOptions(parcels, me, bs) {
 
   for (const parcel of parcels.values()) {
     if (parcel.carriedBy) continue;
+    // Persistent reward filter: a parcel outside the band is never a candidate.
+    // Cheap short-circuit matching the same gate in intentionScore exactly.
+    if (!passesParcelFilter(parcel, bs.rules)) continue;
     if (pickupRouteDistance(parcel, me, bs) == null) continue;
     pickupOptions.push(["go_pick_up", parcel.x, parcel.y, parcel.id]);
   }

@@ -50,6 +50,22 @@ accepted = true
 reason = Request admitted.
 
 Request:
+Delivering at tile (9,9) costs you 50 points from now on.
+Snapshot:
+Any.
+Decision:
+accepted = true
+reason = Request admitted.
+
+Request:
+Avoid delivering at (3,5), it carries a -20 penalty.
+Snapshot:
+Any.
+Decision:
+accepted = true
+reason = Request admitted.
+
+Request:
 Deliver the parcels you are carrying.
 Active persistent rules:
 - Deliver exactly 3 parcels at a time.

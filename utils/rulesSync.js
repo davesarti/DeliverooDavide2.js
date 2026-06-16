@@ -12,7 +12,7 @@
  */
 export function serializeRules(rules) {
   return {
-    stackSize: rules.stackSize,
+    stackSize: Array.isArray(rules.stackSize) ? rules.stackSize : [],
     parcelFilters: {
       minReward: rules.parcelFilters?.minReward ?? null,
       maxReward: rules.parcelFilters?.maxReward ?? null,
@@ -33,7 +33,7 @@ export function serializeRules(rules) {
 export function applyRulesSnapshot(target, snapshot) {
   if (!target || !snapshot) return;
 
-  target.stackSize = snapshot.stackSize ?? null;
+  target.stackSize = Array.isArray(snapshot.stackSize) ? snapshot.stackSize : [];
   target.parcelFilters.minReward = snapshot.parcelFilters?.minReward ?? null;
   target.parcelFilters.maxReward = snapshot.parcelFilters?.maxReward ?? null;
   target.penaltyDeliveries = new Map(snapshot.penaltyDeliveries ?? []);
