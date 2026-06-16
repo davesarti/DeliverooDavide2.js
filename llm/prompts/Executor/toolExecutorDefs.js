@@ -136,6 +136,29 @@ export const SYSTEM_EXECUTOR_TOOLS = [
     { thought }
   ),
 
+  def(
+    "collect_and_deliver",
+    "Hand the whole collect-and-deliver job to the autonomous engine, which " +
+      "finds, picks up and delivers parcels on its own (no step-by-step driving). " +
+      "Use this for any open-ended or counted harvesting task — 'collect N parcels', " +
+      "'deliver parcels', 'gather and deliver', 'fill up and deliver'. " +
+      "It honours all active durable rules (stack size, delivery-tile and parcel-value rules). " +
+      "Prefer this over manual observe_environment + pick_up_parcel + deliver_carried_parcels " +
+      "loops: it is far faster and ends the mission by itself. Do NOT use it for a single " +
+      "explicit move to a coordinate (use move_to) or for delivering a specific already-carried " +
+      "parcel to a named tile (use deliver_carried_parcels).",
+    {
+      thought,
+      parcels: intParam(
+        "Optional target number of parcels to deliver before stopping. Omit for an open-ended 'collect parcels' request."
+      ),
+      timeoutMs: intParam(
+        "Optional maximum time to spend, in milliseconds. Omit to use the default budget."
+      ),
+    },
+    ["thought"]
+  ),
+
   // ==========================================
   // Durable strategy rules
   // ==========================================
