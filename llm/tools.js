@@ -215,22 +215,13 @@ export function get_environment_state(bs, llmState, missionStats = null) {
   * Builds a snapshot of the current environment state for the validator prompt.
 */
 export function buildValidatorSnapshot(bs, llmState) {
-  const carriedParcels = [...bs.parcels.values()]
-    .filter((p) => p.carriedBy === bs.me.id)
-    .map((p) => ({
-      id: p.id,
-      reward: p.reward ?? 0,
-    }));
-
-  const visibleParcels = [...bs.parcels.values()]
-    .filter((p) => !p.carriedBy)
-    .map((p) => ({
-      id: p.id,
-      x: Math.round(p.x),
-      y: Math.round(p.y),
-      reward: p.reward ?? 0,
-    }))
-    .slice(0, 8);
+  // Only the count of carried parcels matters to the LLM (deliver delivers all);
+  // it never needs the per-parcel ids/rewards. Finding parcels is the BDI's job
+  // (collect_and_deliver, or observe_environment on demand), so visible parcels
+  // are intentionally NOT in this snapshot.
+  const carriedCount = [...bs.parcels.values()].filter(
+    (p) => p.carriedBy === bs.me.id
+  ).length;
 
   const partner =
     bs.partner && bs.partner.id != null && bs.partner.x != null
@@ -245,13 +236,10 @@ export function buildValidatorSnapshot(bs, llmState) {
     me: {
       x: Math.round(bs.me.x),
       y: Math.round(bs.me.y),
-      score: bs.me.score,
     },
     carried: {
-      count: carriedParcels.length,
-      parcels: carriedParcels,
+      count: carriedCount,
     },
-    visibleParcels,
     deliveryTiles: bs.map.deliveryTiles.map((t) => ({ x: t.x, y: t.y })).slice(0, 8),
     partner,
     coordination: {
