@@ -121,33 +121,13 @@ export function createActions(socket, bs, options = {}) {
    * are always worth doing regardless of the current intention.
    */
   async function opportunisticActions() {
-    // While a coordination directive is active, the agent does exactly what the
-    // LLM told it — no auto-grab/auto-deliver, which would e.g. deliver a parcel
-    // meant for a handoff before it reaches the drop tile.
-    if (bs.coordination?.active) return;
-
-    const x = Math.round(bs.me.x);
-    const y = Math.round(bs.me.y);
-
-    if (carriedCount() < effectiveCapacity(bs)) {
-      for (const parcel of bs.parcels.values()) {
-        if (
-          !parcel.carriedBy &&
-          Math.round(parcel.x) === x &&
-          Math.round(parcel.y) === y
-        ) {
-          await pickup();
-          break;
-        }
-      }
-    }
-
-    if (
-      carriedCount() > 0 &&
-      isDeliveryTile(x, y, bs.map.deliveryTiles ?? [])
-    ) {
-      await putdown();
-    }
+    // Opportunistic auto-grab/auto-deliver is disabled: it acts on STEP cost
+    // alone (zero detour) but bypasses the scored BDI loop, so it ignores the
+    // persistent rules that price the ACT itself (reward filter, stack-size,
+    // delivery-tile penalties) and can trigger strong penalties. Until it
+    // properly consults the scoring authority, every pickup/delivery goes
+    // through the scored loop only. No-op for now.
+    return;
   }
 
   /*

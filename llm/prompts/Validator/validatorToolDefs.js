@@ -1,7 +1,10 @@
 const param = (description) => ({ type: "string", description });
 
 const thought = param(
-  "Briefly check the request before deciding. Consider coherence, reward sign, placeholders, arithmetic coordinates, and conflicts with active persistent rules."
+  "One short sentence justifying the decision. Name the deciding check: " +
+  "coherence, coordinate placeholder, arithmetic coordinate, reward sign " +
+  "(negative only if below zero), durable rule vs immediate mission, or conflict " +
+  "with an active persistent rule."
 );
 
 export const SYSTEM_VALIDATOR_TOOLS = [
@@ -9,7 +12,9 @@ export const SYSTEM_VALIDATOR_TOOLS = [
     type: "function",
     function: {
       name: "validate_mission",
-      description: "Return whether the incoming request is admissible.",
+      description:
+        "Record the admissibility decision for the incoming request. Call this " +
+        "exactly once. Set accepted=true to admit, accepted=false to reject.",
       parameters: {
         type: "object",
         required: ["thought", "accepted", "reason"],
@@ -19,12 +24,13 @@ export const SYSTEM_VALIDATOR_TOOLS = [
           accepted: {
             type: "boolean",
             description:
-              "True if the request is admissible. False if it must be rejected.",
+              "true if the request is admissible, false if it must be rejected.",
           },
           reason: {
             type: "string",
             description:
-              "Concise reason for the decision. If accepted, use 'Request admitted.' If rejected, explain the blocking issue.",
+              "Concise justification. If accepted, write exactly 'Request admitted.' " +
+              "If rejected, state the single blocking issue.",
           },
         },
       },

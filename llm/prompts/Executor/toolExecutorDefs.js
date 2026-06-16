@@ -3,7 +3,9 @@ const intParam = (description) => ({ type: "integer", description });
 const numParam = (description) => ({ type: "number", description });
 
 const thought = param(
-  "Briefly state what the latest observation shows, what the mission needs next, and why this tool is the next step."
+  "One or two sentences, in this order: (1) what the latest observation shows, " +
+  "(2) what the mission still needs, (3) why THIS tool is the correct next step. " +
+  "Base it only on observed facts; never invent state."
 );
 
 function def(name, description, properties, required = ["thought"]) {
@@ -343,9 +345,9 @@ export const SYSTEM_EXECUTOR_TOOLS = [
     "Send the final response and end the mission.",
     {
       thought: param(
-        "Before ending, trace back through this conversation: " +
-        "what was the original mission goal? What has been accomplished so far? " +
-        "Is the goal fully and completely achieved? Only proceed if yes."
+        "Trace back before ending: (1) the original mission goal, " +
+        "(2) what has been accomplished, (3) whether the goal is FULLY achieved. " +
+        "Only call final_reply if the answer to (3) is yes."
       ),
       message: param("Concise message stating what was done or why the mission ended."),
     },

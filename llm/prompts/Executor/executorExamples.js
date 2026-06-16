@@ -1,149 +1,133 @@
 export const EXECUTOR_EXAMPLES = `
 # Examples
 
-Mission:
-Deliver stacks of exactly 3 parcels at a time.
+Each example shows a mission (and any context) followed by the exact tool sequence
+to produce. Follow these patterns.
 
-Expected behaviour:
-Call set_stack_size_rule with mode="exactly" and count=3.
-Then call final_reply.
-Do not start collecting or delivering unless the mission explicitly asks to do it now.
+---
+Mission: Deliver stacks of exactly 3 parcels at a time.
+Type: durable rule.
+Steps:
+1. set_stack_size_rule(mode="exactly", count=3)
+2. final_reply
+Do NOT collect or deliver — storing the rule is the whole task.
 
-Mission:
-Every time you deliver 5 parcels you get a 500 pt bonus.
+---
+Mission: Every time you deliver 5 parcels you get a 500 pt bonus.
+Type: durable rule with a met reward.
+Steps:
+1. set_stack_size_rule(mode="exactly", count=5, metReward=500)
+2. final_reply
+Do NOT collect, pick up, or deliver anything to "earn" the bonus.
 
-Expected behaviour:
-This is a standing scoring rule, not a task.
-Call set_stack_size_rule with mode="exactly", count=5, metReward=500.
-Then call final_reply.
-Do NOT collect, pick up, or deliver any parcels to earn the bonus.
-
-Mission:
-Deliver at least 4 parcels to get a +50 bonus.
-
-Expected behaviour:
-Call set_stack_size_rule with mode="at_least", count=4, metReward=50.
-Then call final_reply.
+---
+Mission: Deliver at least 4 parcels to get a +50 bonus.
+Type: durable rule with a met reward.
+Steps:
+1. set_stack_size_rule(mode="at_least", count=4, metReward=50)
+2. final_reply
 Do NOT start collecting parcels.
 
-Mission:
-From now on, ignore parcels with reward higher than 10.
+---
+Mission: From now on, ignore parcels with reward higher than 10.
+Type: durable rule.
+Steps:
+1. set_parcel_reward_filter(maxReward=10)
+2. final_reply
 
-Expected behaviour:
-Call set_parcel_reward_filter with maxReward=10.
-Then call final_reply.
+---
+Mission: Every time you deliver in (2,4), you get 5x reward.
+Type: durable rule.
+Steps:
+1. set_delivery_tile_multiplier(x=2, y=4, multiplier=5)
+2. final_reply
 
-Mission:
-Deliver the parcels you are carrying.
+---
+Mission: Do not go through tile (6,8).
+Type: durable rule.
+Steps:
+1. block_navigation_tile(x=6, y=8)
+2. final_reply
 
-Active rules:
-- Deliver exactly 3 parcels at a time.
+---
+Mission: Deliver the parcels you are carrying.
+Active rules: Deliver exactly 3 parcels at a time.
+Observation: carried.count = 1; visibleParcels contains valid parcels.
+Type: action task, adapt to the active rule.
+Steps:
+1. Do NOT deliver yet (only 1 carried, rule wants 3).
+2. pick_up_parcel for visible parcels until carried.count satisfies the stack-size rule.
+3. deliver_carried_parcels.
 
-Observation:
-carried.count = 1
-visibleParcels contains valid parcels.
+---
+Mission: Collect 5 parcels.
+Type: action task.
+Steps:
+1. observe_environment.
+2. pick_up_parcel for parcels that help the goal.
+3. deliver_carried_parcels when needed.
+4. Continue until 5 parcels are collected in total — do not stop after one partial delivery.
 
-Expected behaviour:
-Do not deliver yet.
-Pick up visible parcels until the carried count satisfies the active stack-size rule.
-Then deliver_carried_parcels.
+---
+Mission: Collect 5 parcels.
+Observation: visibleParcels is empty.
+Steps:
+1. explore_for_parcels.
+2. observe_environment.
+3. Continue the mission from the new observation.
 
-Mission:
-Collect 5 parcels.
+---
+Mission: Deliver at the nearest delivery tile.
+Steps:
+1. resolve_delivery_tile(query="nearest").
+2. deliver_carried_parcels at the resolved coordinates.
 
-Expected behaviour:
-Observe the environment.
-Pick up visible parcels that help the goal.
-Deliver when needed.
-Continue collecting until 5 parcels have been collected in total.
-Do not stop after only one partial delivery.
+---
+Mission: Deliver the carried parcels.
+Observation: deliver_carried_parcels was rejected because the active stack-size rule requires exactly 3 parcels.
+Steps:
+1. Treat the rejection as the latest observation; do NOT repeat the same delivery.
+2. Collect more valid parcels if possible, then deliver once the rule is satisfied.
 
-Mission:
-Collect 5 parcels.
+---
+Mission: Both of you move to within 3 tiles of (10,4) and wait for each other.
+Type: rendezvous.
+Steps:
+1. rendezvous_with_partner(x=10, y=4, maxDist=3).
+2. final_reply (when it returns, both agents have arrived).
+Why not direct_partner + move_near + wait_for_partner? Those three calls leave a gap
+where a stray direct_partner(command="wait", signal="X") would park the partner forever
+on a signal that never comes. rendezvous_with_partner closes the barrier atomically.
 
-Observation:
-visibleParcels is empty.
+---
+Mission: One of you picks up parcel p1 at (2,2); the other delivers it.
+Type: handoff (parallel, different roles).
+Steps:
+1. direct_partner(command="pickup", x=2, y=2, parcelId="p1") — note the cid.
+2. wait_for_partner(cid).
+3. direct_partner(command="putdown", x=<handoff>, y=<handoff>) — note the cid.
+4. wait_for_partner(cid).
+5. pick_up_parcel at the handoff tile, then deliver_carried_parcels at a delivery tile.
+6. direct_partner(command="resume").
+7. final_reply.
 
-Expected behaviour:
-Call explore_for_parcels.
-Then call observe_environment.
-Continue the mission from the new observation.
+---
+Mission: Let's play red light green light: go to an odd row and wait for my go.
+Type: external-signal scenario.
+Steps:
+1. direct_partner(command="go_to", to an odd-row tile for the teammate) — note the cid.
+2. wait_for_partner(cid).
+3. move_to an odd-row tile for yourself.
+4. direct_partner(command="wait", signal="go-1").
+5. final_reply stating you are ready and waiting for the green light.
+Do NOT call resume here — the partner is intentionally parked on signal "go-1".
 
-Mission:
-Deliver at the nearest delivery tile.
-
-Expected behaviour:
-Call resolve_delivery_tile with query="nearest".
-Then deliver_carried_parcels at the resolved coordinates.
-
-Mission:
-Deliver the carried parcels.
-
-Observation:
-deliver_carried_parcels is rejected because the active stack-size rule requires exactly 3 parcels.
-
-Expected behaviour:
-Treat the rejection as the latest observation.
-Do not repeat the same delivery action.
-Collect more valid parcels if possible, then deliver when the rule is satisfied.
-
-Mission:
-Every time you deliver in (2,4), you get 5x reward.
-
-Expected behaviour:
-Call set_delivery_tile_multiplier with x=2, y=4, multiplier=5.
-Then call final_reply.
-
-Mission:
-Do not go through tile (6,8).
-
-Expected behaviour:
-Call block_navigation_tile with x=6, y=8.
-Then call final_reply.
-
-Mission:
-Both of you move to within 3 tiles of (10,4) and wait for each other.
-
-Expected behaviour:
-Call rendezvous_with_partner with x=10, y=4, maxDist=3.
-When it returns, both agents have arrived — the rendezvous is complete.
-Call final_reply.
-
-Why rendezvous_with_partner and not direct_partner + move_near + wait_for_partner?
-Those three calls in sequence leave a gap where the LLM might wrongly add
-direct_partner("wait", signal="X") — which parks the partner forever on a signal
-that never comes. rendezvous_with_partner closes the barrier atomically with no gap.
-
-Mission:
-One of you picks up parcel p1 at (2,2); the other delivers it.
-
-Expected behaviour:
-Call direct_partner with command="pickup", x=2, y=2, parcelId="p1" (note the cid).
-Call wait_for_partner with that cid.
-Call direct_partner with command="putdown", x=<handoff>, y=<handoff> (note the cid).
-Call wait_for_partner with that cid.
-Call pick_up_parcel at the handoff tile, then deliver_carried_parcels at a delivery tile.
-Call direct_partner with command="resume".
-Then call final_reply.
-
-Mission:
-Let's play red light green light: go to an odd row and wait for my go.
-
-Expected behaviour:
-Call direct_partner with command="go_to" to an odd-row tile for the teammate (note the cid).
-Call wait_for_partner with that cid.
-Call move_to an odd-row tile for yourself.
-Call direct_partner with command="wait", signal="go-1".
-Call final_reply stating you are ready and waiting for the green light.
-(Do NOT call resume here — the partner is intentionally parked on signal "go-1".)
-
-Mission:
-green
-
-Active coordination shows partnerParkedOn = "go-1".
-
-Expected behaviour:
-Call signal_partner with signal="go-1" (releases the teammate's wait).
-Call direct_partner with command="resume".
-Then call final_reply.
+---
+Mission: green
+Context: active coordination shows partnerParkedOn = "go-1".
+Type: signal relay.
+Steps:
+1. signal_partner(signal="go-1") — releases the teammate's wait.
+2. direct_partner(command="resume").
+3. final_reply.
 `.trim();

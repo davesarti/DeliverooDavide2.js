@@ -3,14 +3,13 @@ export function buildMissionUserPrompt(
   persistentMemory = "None."
 ) {
   return `
-Current mission:
+Complete ONLY the current mission below, one tool call at a time. First classify it
+as a durable rule or an action task, then proceed.
 
+## Current mission
 ${mission}
 
-Active persistent rules:
-
+## Active persistent rules
 ${persistentMemory || "None."}
-
-Complete only the current mission, one tool call at a time.
 `.trim();
 }
