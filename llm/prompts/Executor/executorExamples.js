@@ -5,6 +5,18 @@ Each example shows a mission (and any context) followed by the exact tool sequen
 to produce. Follow these patterns.
 
 ---
+Mission: Move to (x,y) to get +10pts
+Type: rejection — unresolved coordinate placeholder.
+Steps:
+1. final_reply("Mission rejected: unresolved coordinate placeholder (x,y).")
+
+---
+Mission: Move to (4,7) to get -10pts
+Type: rejection — explicit negative immediate reward.
+Steps:
+1. final_reply("Mission rejected: explicit negative reward for immediate execution.")
+
+---
 Mission: Deliver stacks of exactly 3 parcels at a time.
 Type: durable rule.
 Steps:
