@@ -3,9 +3,7 @@ const intParam = (description) => ({ type: "integer", description });
 const numParam = (description) => ({ type: "number", description });
 
 const thought = param(
-  "One or two sentences, in this order: (1) what the latest observation shows, " +
-  "(2) what the mission still needs, (3) why THIS tool is the correct next step. " +
-  "Base it only on observed facts; never invent state."
+  "Brief: what the state shows, what's still needed, why this tool. Observed facts only."
 );
 
 // Control-flow flag for terminal tools (durable-rule stores, navigation
@@ -17,10 +15,8 @@ const thought = param(
 const more = {
   type: "boolean",
   description:
-    "Set to true ONLY if this mission has a FURTHER clause to handle after this " +
-    "tool (a compound 'do X AND do Y' request). When true the mission continues " +
-    "and you will be asked for the next tool. Omit it (or set false) for a " +
-    "single-clause mission so it ends immediately without an extra round-trip.",
+    "Set true only if a compound mission has another clause to handle after this " +
+    "tool; omit for a single-clause mission so it ends in one round-trip.",
 };
 
 function def(name, description, properties, required = ["thought"]) {
