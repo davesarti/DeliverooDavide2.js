@@ -139,6 +139,18 @@ export const RUNTIME = {
 // Constants used in LLM agent
 export const MAX_ITERATIONS = 100;
 
+// BDI delegation (collect_and_deliver): the LLM hands a pick-up/deliver task to
+// the embedded autonomous BDI and watches the shared delivery counter instead
+// of micro-stepping the play loop itself.
+// Poll interval while waiting for the BDI to make progress.
+export const BDI_DELEGATION_POLL_MS = 200;
+// Time budget allotted per target parcel before giving up (covers walking,
+// picking up, and delivering on a typical map). A counted task ends as soon as
+// the target is met; this only bounds the worst case.
+export const BDI_DELEGATION_PER_PARCEL_MS = 12000;
+// Time budget for an open-ended "go collect parcels" with no explicit count.
+export const BDI_DELEGATION_DEFAULT_MS = 30000;
+
 // Single default magnitude for every LLM tile rule (forbid/prefer/block),
 // used when the executor does not supply an explicit penalty/reward. Set high
 // (1000) so an unspecified rule behaves as a hard block/strong preference
