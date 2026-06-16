@@ -270,6 +270,43 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
 // ==========================================
 
 // ==========================================
+// Mission queue
+// ==========================================
+
+/*
+ * Serialises all incoming chat missions so they never run concurrently.
+ * Without this, two rapid messages would both pause/resume the BDI loop
+ * and race over the same parcels, causing cascading pickup rejections and
+ * delivering to the wrong tile.
+ */
+function createMissionQueue(logFn) {
+  const queue = [];
+  let running = false;
+
+  async function drain() {
+    running = true;
+    while (queue.length > 0) {
+      const { task, label } = queue.shift();
+      if (queue.length > 0) {
+        logFn(`Queue: executing "${label}" (${queue.length} mission(s) waiting)`);
+      }
+      await task();
+    }
+    running = false;
+  }
+
+  return {
+    enqueue(label, task) {
+      if (running) {
+        logFn(`Queue: "${label}" enqueued (1 mission already running)`);
+      }
+      queue.push({ task, label });
+      if (!running) drain();
+    },
+  };
+}
+
+// ==========================================
 // Thought stripping
 // ==========================================
 
@@ -329,6 +366,8 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
     process.exit(0);
   });
 
+  const missionQueue = createMissionQueue((...args) => logWithTime(bs.me.name, ...args));
+
   socket.onMsg(async (id, name, msg) => {
     if (isCoordMessage(msg)) {
       if (msg.type === "status") coordinator.handleStatus(msg);
@@ -338,6 +377,8 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
     if (id === bs.me.id) return;
 
     logWithTime(bs.me.name, `Mission from ${name} (${id}): ${msg}`);
+
+    missionQueue.enqueue(msg.slice(0, 60), async () => {
 
     let missionId = null;
 
@@ -492,5 +533,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
       // Resume this agent's own autonomous BDI loop.
       bdi.resume();
     }
+
+    }); // end missionQueue.enqueue
   });
 }
