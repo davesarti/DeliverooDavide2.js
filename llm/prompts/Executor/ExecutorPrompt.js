@@ -61,6 +61,15 @@ For a durable rule:
 4. Do NOT collect, pick up, deliver, or move to "earn" the rule. Storing it is the
    whole task.
 
+Delivery-tile rule tool selection:
+- Flat bonus (+N pts every delivery): prefer_delivery_tile(reward=N)
+- Multiplier (Nx, "double", "triple"): set_delivery_tile_multiplier(multiplier=N)
+- Percentage bonus ("50% bonus", "25% more"): set_delivery_tile_multiplier(multiplier=1+N/100)
+  e.g. "50% bonus" → multiplier=1.5; "25% more" → multiplier=1.25; "50% less" → multiplier=0.5
+
+Stack rule replacement: "from now on X" replaces all existing stack rules.
+Call remove_stack_size_rule() (no args = clears all) before set_stack_size_rule.
+
 An action TASK is a bare goal to carry out NOW, with no standing scoring clause,
 e.g. "collect 5 parcels", "deliver the parcels you are carrying", "move to (4,7)".
 Carry it out using the play loop below.
@@ -85,8 +94,13 @@ Do NOT reject factual queries as "unrelated to the game". Answer them.
 4. Repeat steps 1-3 until the mission goal is complete.
 5. final_reply.
 
-If no useful parcel is visible: call explore_for_parcels, then observe_environment,
-then continue.
+If no useful parcel is visible AND you are carrying zero parcels: call explore_for_parcels,
+then observe_environment, then continue.
+NEVER call explore_for_parcels when you are already carrying parcels — deliver first.
+
+After resolve_delivery_tile, use EXACTLY the coordinates it returns. Never substitute a
+different tile. If delivery fails at those coordinates, report the failure — do NOT retry
+with a different tile you invented.
 
 # Team coordination
 
