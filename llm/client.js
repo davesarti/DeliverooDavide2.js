@@ -95,6 +95,10 @@ function coerceNumericParams(obj) {
     "multiplier",
     "penalty",
     "reward",
+    "metReward",
+    "metMultiplier",
+    "unmetPenalty",
+    "unmetMultiplier",
   ]);
 
   for (const key in obj) {

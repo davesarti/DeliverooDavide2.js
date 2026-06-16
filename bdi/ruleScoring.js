@@ -94,15 +94,18 @@ export function stackRulesConflict(a, b) {
 }
 
 /*
- * Combines several { mult, delta } modifiers into one: multiply the multipliers,
- * sum the deltas. Empty -> identity.
+ * Combines every active stack rule into one { mult, delta } modifier: `pick`
+ * chooses the modifier each rule contributes (its met or unmet side, depending
+ * on context), then the multipliers multiply and the deltas sum. No rules ->
+ * identity.
  */
-function combine(modifiers) {
+function combineStack(rules, pick) {
   let mult = 1;
   let delta = 0;
-  for (const m of modifiers) {
-    mult *= m?.mult ?? 1;
-    delta += m?.delta ?? 0;
+  for (const rule of stackRulesOf(rules)) {
+    const m = pick(rule) ?? IDENTITY;
+    mult *= m.mult ?? 1;
+    delta += m.delta ?? 0;
   }
   return { mult, delta };
 }
@@ -122,10 +125,8 @@ export function applyStackModifier(value, modifier) {
  * satisfied, `unmet` otherwise. Identity when no rules are active.
  */
 export function stackDeliveryModifier(carriedCount, rules) {
-  return combine(
-    stackRulesOf(rules).map((r) =>
-      stackRuleSatisfied(r, carriedCount) ? r.met ?? IDENTITY : r.unmet ?? IDENTITY
-    )
+  return combineStack(rules, (r) =>
+    stackRuleSatisfied(r, carriedCount) ? r.met : r.unmet
   );
 }
 
@@ -139,23 +140,50 @@ export function stackDeliveryModifier(carriedCount, rules) {
  * bonus so an exceptionally rich parcel can still justify breaking the stack.
  */
 export function stackPickupModifier(resultingCount, rules) {
-  return combine(
-    stackRulesOf(rules).map((r) => {
-      const overshoot =
-        (r.mode === "exactly" || r.mode === "at_most") &&
-        resultingCount > r.count;
-      return overshoot ? r.unmet ?? IDENTITY : r.met ?? IDENTITY;
-    })
-  );
+  return combineStack(rules, (r) => {
+    const overshoot =
+      (r.mode === "exactly" || r.mode === "at_most") &&
+      resultingCount > r.count;
+    return overshoot ? r.unmet : r.met;
+  });
 }
 
 /*
- * Combined modifier the agent would earn once every active rule's target stack
- * is met (all `met` sides). Used to value how much continuing to camp toward
- * the targets is worth. Identity when no rules are active.
+ * How much extra delivery value the agent could still unlock by CAMPING from
+ * the current carried count, applied to `value` (its carried reward). Camping
+ * only ever ADDS parcels, so this looks solely at higher counts (>= current,
+ * up to `maxCount`): the best delivery modifier reachable by gathering more,
+ * minus the modifier now. It is the budget by which "wait for spawns" may
+ * exceed the base decay budget.
+ *
+ * Crucially this is 0 when no higher count improves things — e.g. an `at_most`
+ * cap that is already exceeded, which camping can never undo (you can't shed
+ * parcels by waiting). Using a global "all met" value here instead would
+ * wrongly tell the agent to loiter toward an unreachable state.
+ *
+ * The delivery modifier is piecewise-constant in the count, changing only at
+ * rule thresholds, so only those thresholds above the current count need to be
+ * probed for the maximum.
  */
-export function stackMetModifier(rules) {
-  return combine(stackRulesOf(rules).map((r) => r.met ?? IDENTITY));
+export function stackCampGain(carriedCount, value, rules, maxCount = Infinity) {
+  const ruleList = stackRulesOf(rules);
+  if (ruleList.length === 0) return 0;
+
+  const now = applyStackModifier(value, stackDeliveryModifier(carriedCount, rules));
+
+  let best = now;
+  const probes = new Set();
+  for (const r of ruleList) {
+    if (r.count > carriedCount && r.count <= maxCount) probes.add(r.count);
+  }
+  for (const c of probes) {
+    best = Math.max(
+      best,
+      applyStackModifier(value, stackDeliveryModifier(c, rules))
+    );
+  }
+
+  return Math.max(0, best - now);
 }
 
 /*

@@ -23,7 +23,7 @@ import {
   applyStackModifier,
   stackDeliveryModifier,
   stackPickupModifier,
-  stackMetModifier,
+  stackCampGain,
 } from "./ruleScoring.js";
 import {
   RUNTIME,
@@ -349,17 +349,17 @@ class IntentionRevision {
         // Base budget: tiles we may camp before bleeding > a fraction of the
         // carried value to decay.
         const baseBudget = CAMP_LOSS_BUDGET_FRACTION * totalReward;
-        // Stack-aware extension: if reaching the rule's target stack raises the
-        // delivery value (a met bonus, or escaping an unmet penalty), we may
+        // Stack-aware extension: if GATHERING MORE could raise the delivery
+        // value (reaching an at_least/exactly target, or its met bonus), we may
         // bleed up to that extra value too — so "wait for spawns" lasts exactly
-        // as long as completing the stack is worth and no longer.
-        const stackGain = Math.max(
-          0,
-          applyStackModifier(totalReward, stackMetModifier(this.#bs.rules)) -
-            applyStackModifier(
-              totalReward,
-              stackDeliveryModifier(carriedCount, this.#bs.rules)
-            )
+        // as long as completing the stack is worth. stackCampGain only counts
+        // gains reachable by adding parcels, so an already-exceeded at_most cap
+        // (which camping can never undo) adds nothing.
+        const stackGain = stackCampGain(
+          carriedCount,
+          totalReward,
+          this.#bs.rules,
+          effectiveCapacity(this.#bs)
         );
         const horizon =
           Math.max(baseBudget, stackGain) / (factor * carriedCount);

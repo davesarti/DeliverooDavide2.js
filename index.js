@@ -7,12 +7,17 @@ import { createActions } from "./actions/actions.js";
 import { createLLMState } from "./llm/llmState.js";
 import { startBDIAgent } from "./bdi/bdiAgent.js";
 import { startLLMAgent } from "./llm/agent.js";
+import { startRulesLogger } from "./utils/rulesLogger.js";
 import { createSocket } from "./socket.js";
 
 
 validateConfig();
 
 console.log(`Starting ${INSTANCES.length} agent instance(s) (mode: ${INSTANCES[0].mode})`);
+
+// Belief states of every agent started below, so the periodic rules logger can
+// report on all of them from a single interval.
+const allBeliefStates = [];
 
 for (const instance of INSTANCES) {
   if (instance.mode === "MULTI") {
@@ -33,6 +38,7 @@ for (const instance of INSTANCES) {
 
     startBDIAgent(bdiSocket, bdibs, bdiActions);
     startLLMAgent(llmSocket, llmbs, llmState, llmActions);
+    allBeliefStates.push(bdibs, llmbs);
   } else if (instance.mode === "LLM") {
     const llmSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenLlm);
     const llmbs = createBeliefState();
@@ -41,6 +47,7 @@ for (const instance of INSTANCES) {
     setupBeliefUpdates(llmSocket, llmbs);
 
     startLLMAgent(llmSocket, llmbs, llmState, llmActions);
+    allBeliefStates.push(llmbs);
   } else {
     const bdiSocket = createSocket(DELIVEROO_CONFIG.host, instance.tokenBdi);
     const bdibs = createBeliefState();
@@ -48,5 +55,9 @@ for (const instance of INSTANCES) {
     setupBeliefUpdates(bdiSocket, bdibs);
 
     startBDIAgent(bdiSocket, bdibs, bdiActions);
+    allBeliefStates.push(bdibs);
   }
 }
+
+// Log every agent's belief-state ruleset every 5 seconds.
+startRulesLogger(allBeliefStates);

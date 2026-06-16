@@ -10,6 +10,23 @@ Then call final_reply.
 Do not start collecting or delivering unless the mission explicitly asks to do it now.
 
 Mission:
+Every time you deliver 5 parcels you get a 500 pt bonus.
+
+Expected behaviour:
+This is a standing scoring rule, not a task.
+Call set_stack_size_rule with mode="exactly", count=5, metReward=500.
+Then call final_reply.
+Do NOT collect, pick up, or deliver any parcels to earn the bonus.
+
+Mission:
+Deliver at least 4 parcels to get a +50 bonus.
+
+Expected behaviour:
+Call set_stack_size_rule with mode="at_least", count=4, metReward=50.
+Then call final_reply.
+Do NOT start collecting parcels.
+
+Mission:
 From now on, ignore parcels with reward higher than 10.
 
 Expected behaviour:

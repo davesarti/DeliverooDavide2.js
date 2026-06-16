@@ -154,14 +154,17 @@ export const SYSTEM_EXECUTOR_TOOLS = [
         description: "Comparison mode for the carried parcel count.",
       },
       count: intParam("Positive number of parcels (the target stack)."),
-      penalty: numParam(
-        "Optional. Points subtracted from a delivery made off the target stack."
+      unmetPenalty: numParam(
+        "Optional. Points subtracted from a delivery made OFF the target stack."
       ),
-      reward: numParam(
-        "Optional. Points added to a delivery made on the target stack."
+      unmetMultiplier: numParam(
+        "Optional non-negative multiplier on a delivery made OFF the target stack (0 = no points off target, e.g. '0 points for fewer than 2')."
       ),
-      multiplier: numParam(
-        "Optional. Multiplier applied to a delivery made on the target stack (e.g. 2 = double)."
+      metReward: numParam(
+        "Optional. Points added to a delivery made ON the target stack."
+      ),
+      metMultiplier: numParam(
+        "Optional non-negative multiplier on a delivery made ON the target stack (e.g. 2 = double)."
       ),
     },
     ["thought", "mode", "count"]

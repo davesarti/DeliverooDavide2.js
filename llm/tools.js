@@ -326,6 +326,9 @@ export function formatPersistentRules(rules) {
     const mods = [];
     const penalty = ss.unmet?.delta ?? 0;
     if (penalty < 0) mods.push(`penalty ${-penalty} otherwise`);
+    if (ss.unmet?.mult != null && ss.unmet.mult !== 1) {
+      mods.push(`${ss.unmet.mult}x reward otherwise`);
+    }
     if (ss.met?.delta) mods.push(`reward ${ss.met.delta} when met`);
     if (ss.met?.mult != null && ss.met.mult !== 1) {
       mods.push(`${ss.met.mult}x reward when met`);
@@ -442,7 +445,10 @@ function applyRuleChange(bs, outcome) {
 
 // ---------- stack size ----------
 
-export function setStackSize({ mode, count, penalty, reward, multiplier }, bs) {
+export function setStackSize(
+  { mode, count, metReward, metMultiplier, unmetPenalty, unmetMultiplier },
+  bs
+) {
   const allowedModes = new Set(["exactly", "at_least", "at_most"]);
 
   if (!allowedModes.has(mode)) {
@@ -453,23 +459,38 @@ export function setStackSize({ mode, count, penalty, reward, multiplier }, bs) {
     return `Error: count must be a positive integer, received ${count}.`;
   }
 
-  // The stack rule is a soft delivery-score modifier (not a hard gate). It has
-  // two regimes: `unmet` (carried count off the target) and `met` (on target).
-  // The mission supplies the magnitudes: a penalty discourages delivering off
-  // target, a reward/multiplier rewards delivering on target. Defaults are
-  // identity, so a bare {mode,count} just expresses a soft preference for that
-  // stack size with no numeric push.
-  const unmet = { mult: 1, delta: 0 };
-  const met = { mult: 1, delta: 0 };
+  // Multipliers must be non-negative: a negative one would flip the delivery's
+  // sign, which is meaningless. 0 is allowed and meaningful (e.g. "no points off
+  // target" => unmetMultiplier 0).
+  for (const [v, name] of [
+    [metMultiplier, "metMultiplier"],
+    [unmetMultiplier, "unmetMultiplier"],
+  ]) {
+    if (v !== undefined && (typeof v !== "number" || !isFinite(v) || v < 0)) {
+      return `Error: ${name} must be a non-negative number, received ${v}.`;
+    }
+  }
 
-  if (typeof penalty === "number" && isFinite(penalty)) {
-    unmet.delta = -Math.abs(penalty);
+  // Soft delivery-score modifier with two regimes: `met` (carried count on the
+  // target) and `unmet` (off it). Each regime takes an optional flat shift and
+  // an optional multiplier; defaults are identity. Per-regime names keep the
+  // mission from landing an effect on the wrong side — e.g. "0 points under 2"
+  // is unmetMultiplier 0, "double for 3+" is metMultiplier 2, "under 3 costs
+  // 10" is unmetPenalty 10, "+20 for a full stack" is metReward 20.
+  const met = { mult: 1, delta: 0 };
+  const unmet = { mult: 1, delta: 0 };
+
+  if (typeof metReward === "number" && isFinite(metReward)) {
+    met.delta = metReward;
   }
-  if (typeof reward === "number" && isFinite(reward)) {
-    met.delta = reward;
+  if (typeof metMultiplier === "number" && isFinite(metMultiplier)) {
+    met.mult = metMultiplier;
   }
-  if (typeof multiplier === "number" && isFinite(multiplier)) {
-    met.mult = multiplier;
+  if (typeof unmetPenalty === "number" && isFinite(unmetPenalty)) {
+    unmet.delta = -Math.abs(unmetPenalty);
+  }
+  if (typeof unmetMultiplier === "number" && isFinite(unmetMultiplier)) {
+    unmet.mult = unmetMultiplier;
   }
 
   const newRule = { mode, count, met, unmet };

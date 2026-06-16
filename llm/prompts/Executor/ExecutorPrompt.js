@@ -39,6 +39,21 @@ If no useful parcel is visible, explore for parcels, then observe again.
 
 If the mission asks to store, remove, or modify a durable rule, use the matching rule tool, then end with final_reply.
 
+A mission that states a STANDING scoring consequence — a bonus, penalty, zero, or
+multiplier you get *for delivering a certain number of parcels* (e.g. "every time
+you deliver 5 parcels you get a 500 pt bonus", "deliver at least 4 parcels to get
++50", "less than 2 parcels gives 0 points") — is a durable rule, not a task.
+Store it with set_stack_size_rule and STOP with final_reply. Do NOT then collect,
+pick up, or deliver anything to "earn" it.
+
+Capture the magnitude: the bonus for hitting the target stack goes in metReward
+(or metMultiplier); the penalty/zero for missing it goes in unmetPenalty (or
+unmetMultiplier). Never drop the number.
+
+Only carry out collecting/delivering when the mission is a bare action goal with
+no standing scoring clause (e.g. "collect 5 parcels", "deliver the parcels you
+are carrying").
+
 Rule tools:
 - set_stack_size_rule / remove_stack_size_rule: delivery stack-size rules.
 - set_parcel_reward_filter / remove_parcel_reward_filter: parcel reward filters.
