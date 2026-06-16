@@ -8,6 +8,10 @@ A durable-rule tool and collect_and_deliver are TERMINAL: each completes the
 mission by itself and its result is sent as the reply automatically. After one of
 them, STOP — do not call final_reply or any other tool.
 
+EXCEPTION — compound missions ("do X AND do Y"): set "more": true on every
+terminal tool except the last clause, so the mission keeps going instead of ending
+after the first one. Omit "more" on the final clause to end the mission.
+
 ---
 Mission: Move to (x,y) to get +10pts
 Type: rejection — unresolved coordinate placeholder.
@@ -146,6 +150,22 @@ Steps:
 1. block_navigation_tile(x=6, y=8)   ← terminal; STOP here
 
 ---
+Mission: Deliver stacks of exactly 3 parcels AND do not go through tile (5,5).
+Type: COMPOUND durable rule — two clauses.
+Steps:
+1. set_stack_size_rule(mode="exactly", count=3, more=true)   ← more=true: another clause follows
+2. block_navigation_tile(x=5, y=5)   ← last clause, no more; terminal, STOP here
+The first tool carries more=true so the mission does NOT end after clause 1.
+
+---
+Mission: From now on parcels worth over 30 are worth 0, AND deliver one parcel at a time.
+Type: COMPOUND durable rule — two clauses (a parcel-value rule and a stack rule).
+Steps:
+1. set_parcel_value_rule(minReward=30, mult=0, delta=0, more=true)   ← more=true
+2. set_stack_size_rule(mode="exactly", count=1)   ← last clause; terminal, STOP here
+Each clause sets its own rule; only the last omits more. Do NOT drop either clause.
+
+---
 Mission: Collect 5 parcels.
 Type: action task — harvesting. Delegate the whole job to the autonomous engine.
 Steps:
@@ -181,7 +201,7 @@ Type: rendezvous.
 Steps:
 1. rendezvous_with_partner(x=10, y=4, maxDist=3).
 2. final_reply (when it returns, both agents have arrived).
-Why not direct_partner + move_near + wait_for_partner? Those three calls leave a gap
+Why not direct_partner + self-move + wait_for_partner? Those separate calls leave a gap
 where a stray direct_partner(command="wait", signal="X") would park the partner forever
 on a signal that never comes. rendezvous_with_partner closes the barrier atomically.
 
