@@ -1,4 +1,5 @@
-import { makeDirective, makeSignal } from "../utils/coordProtocol.js";
+import { makeDirective, makeSignal, makeRulesUpdate } from "../utils/coordProtocol.js";
+import { serializeRules } from "../utils/rulesSync.js";
 import { COORD_LLM_WAIT_TIMEOUT_MS } from "../utils/constants.js";
 
 /*
@@ -105,5 +106,21 @@ export function createCoordinator(socket, bs, llmState) {
     });
   }
 
-  return { handleStatus, directPartner, signalPartner, waitForPartner };
+  /*
+   * Pushes the current ruleset to the BDI-only partner so it mirrors the rules
+   * the LLM has set. Fire-and-forget; a no-op (delivered:false) when there is
+   * no partner, e.g. LLM-only mode.
+   */
+  async function syncRules() {
+    const partnerId = bs.partner?.id;
+    if (partnerId == null) return { delivered: false };
+
+    const status = await socket.emitSay(
+      partnerId,
+      makeRulesUpdate(serializeRules(bs.rules))
+    );
+    return { delivered: status === "successful" };
+  }
+
+  return { handleStatus, directPartner, signalPartner, waitForPartner, syncRules };
 }

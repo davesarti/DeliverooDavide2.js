@@ -168,6 +168,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
       thought,
       x: intParam("Delivery tile x coordinate."),
       y: intParam("Delivery tile y coordinate."),
+      penalty: numParam("Optional non-negative penalty magnitude for delivering here; omit to use the default."),
     },
     ["thought", "x", "y"]
   ),
@@ -179,6 +180,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
       thought,
       x: intParam("Delivery tile x coordinate."),
       y: intParam("Delivery tile y coordinate."),
+      reward: numParam("Optional non-negative reward magnitude for preferring this tile; omit to use the default."),
     },
     ["thought", "x", "y"]
   ),
@@ -223,6 +225,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
       thought,
       x: intParam("Tile x coordinate."),
       y: intParam("Tile y coordinate."),
+      penalty: numParam("Optional non-negative penalty magnitude for passing through this tile; omit to use the default."),
     },
     ["thought", "x", "y"]
   ),

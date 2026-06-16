@@ -1,6 +1,11 @@
 import { distance, isInsideMap, isDeliveryTile } from "../utils/mapUtils.js";
 import { nearestDeliveryTileAt, deliveryMapDistance } from "../utils/stateUtils.js";
 import { getDecayPerStep } from "../utils/decayModel.js";
+import {
+  DEFAULT_FORBID_PENALTY,
+  DEFAULT_PREFER_REWARD,
+  DEFAULT_BLOCK_PENALTY,
+} from "../utils/constants.js";
 
 // ==========================================
 // calculate
@@ -103,7 +108,7 @@ export function findDeliveryTile({ query }, bs) {
 
 export function get_environment_state(bs, llmState, missionStats = null) {
   const me = bs.me;
-  const rules = llmState.persistentRules ?? {};
+  const rules = bs.rules ?? {};
 
   const minReward = rules.parcelFilters?.minReward ?? null;
   const maxReward = rules.parcelFilters?.maxReward ?? null;
@@ -140,9 +145,8 @@ export function get_environment_state(bs, llmState, missionStats = null) {
     })
     .slice(0, 8);
 
-  const forbidden = rules.forbiddenDeliveryTiles ?? new Set();
   const multipliers = rules.deliveryMultipliers ?? new Map();
-  const preferred = rules.preferredDeliveryTiles ?? new Set();
+  const preferred = rules.preferredDeliveries ?? new Map();
 
   // Reward lost per tile per carried parcel, shared across all delivery-tile
   // estimates. Same event-based decay model the BDI agent uses (decay ticks
@@ -158,7 +162,6 @@ export function get_environment_state(bs, llmState, missionStats = null) {
   //   - rewardMultiplier and preferred flags when rules apply
   //   - estimatedNetValue: expected reward after decay and multiplier
   //     (only meaningful when carrying parcels)
-  // Forbidden tiles are dropped entirely.
   // Tiles are sorted by estimatedNetValue desc when carrying,
   // or by distance asc when not carrying.
   const deliveryTiles = bs.map.deliveryTiles
@@ -187,7 +190,6 @@ export function get_environment_state(bs, llmState, missionStats = null) {
         ...(estimatedNetValue !== null ? { estimatedNetValue } : {}),
       };
     })
-    .filter((tile) => !forbidden.has(`${tile.x},${tile.y}`))
     .sort((a, b) => {
       if (numCarried > 0) {
         // Primary: highest estimated net value
@@ -237,7 +239,7 @@ export function get_environment_state(bs, llmState, missionStats = null) {
 
     ...(missionStats !== null ? { missionDeliveries: missionStats.deliveries } : {}),
 
-    persistentMemory: llmState.persistentMemory ?? "None.",
+    persistentMemory: bs.rules?.rendered ?? "None.",
   });
 }
 
@@ -288,7 +290,7 @@ export function buildValidatorSnapshot(bs, llmState) {
       active: !!llmState.coordination?.active,
       partnerParkedOn: llmState.coordination?.partnerParkedOn ?? null,
     },
-    persistentRules: llmState.persistentMemory,
+    persistentRules: bs.rules?.rendered,
   };
 }
 
@@ -298,8 +300,8 @@ export function buildValidatorSnapshot(bs, llmState) {
 // ==========================================
 
 /*
- * Renders persistentRules (the single source of truth) into the
- * human/LLM-readable string stored in llmState.persistentMemory.
+ * Renders the rule set (the single source of truth, bs.rules) into the
+ * human/LLM-readable string stored in bs.rules.rendered.
  */
 export function formatPersistentRules(rules) {
   if (!rules) return "None.";
@@ -328,27 +330,30 @@ export function formatPersistentRules(rules) {
     lines.push(`- Ignore parcels with reward higher than ${maxReward}.`);
   }
 
-  for (const key of rules.forbiddenDeliveryTiles ?? []) {
-    lines.push(`- Never deliver at tile (${key}).`);
+  for (const [key, entry] of rules.penaltyDeliveries ?? []) {
+    lines.push(`- Avoid delivering at tile (${key}) [penalty ${entry.penalty}].`);
   }
 
-  for (const key of rules.preferredDeliveryTiles ?? []) {
-    lines.push(`- Prefer delivering at tile (${key}).`);
+  for (const [key, entry] of rules.preferredDeliveries ?? []) {
+    lines.push(`- Prefer delivering at tile (${key}) [reward ${entry.reward}].`);
   }
 
   for (const [key, multiplier] of rules.deliveryMultipliers ?? []) {
     lines.push(`- Delivery at tile (${key}) gives ${multiplier}x reward.`);
   }
 
-  for (const key of rules.blockedTiles ?? []) {
-    lines.push(`- Navigation: never pass through tile (${key}).`);
+  for (const [key, entry] of rules.penaltyTiles ?? []) {
+    lines.push(`- Navigation: penalize passing through tile (${key}) [penalty ${entry.penalty}].`);
   }
 
   return lines.length > 0 ? lines.join("\n") : "None.";
 }
 
-function refreshPersistentMemory(llmState) {
-  llmState.persistentMemory = formatPersistentRules(llmState.persistentRules);
+function refreshRendered(bs) {
+  bs.rules.rendered = formatPersistentRules(bs.rules);
+  // Single choke point for every rule add/drop: notify any listener (the LLM
+  // agent uses this to sync the ruleset to its BDI-only partner).
+  bs.rules.onChange?.();
 }
 
 // ==========================================
@@ -357,14 +362,27 @@ function refreshPersistentMemory(llmState) {
 
 /*
  * Each tool applies exactly one structured change to
- * llmState.persistentRules (the single source of truth),
- * then regenerates the readable persistentMemory string.
+ * bs.rules (the single source of truth),
+ * then regenerates the readable rendered string.
  * No LLM call involved: the mission LLM already translated
  * natural language into structured fields via the tool schemas.
  */
 
 function tileKey(x, y) {
   return `${x},${y}`;
+}
+
+/*
+ * Resolves an LLM-supplied penalty/reward magnitude: falls back to the
+ * default when omitted, otherwise requires a non-negative finite number.
+ * Returns the numeric magnitude on success, or an error string to surface.
+ */
+function resolveMagnitude(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value !== "number" || !isFinite(value) || value < 0) {
+    return `Error: magnitude must be a non-negative number, received ${value}.`;
+  }
+  return value;
 }
 
 function validateTile(x, y, bs) {
@@ -395,19 +413,19 @@ function validateDeliveryTile(x, y, bs) {
  * forbidden / preferred / multiplier: the newest set wins.
  */
 function clearDeliveryTileRules(rules, key) {
-  rules.forbiddenDeliveryTiles.delete(key);
-  rules.preferredDeliveryTiles.delete(key);
+  rules.penaltyDeliveries.delete(key);
+  rules.preferredDeliveries.delete(key);
   rules.deliveryMultipliers.delete(key);
 }
 
-function applyRuleChange(llmState, outcome) {
-  refreshPersistentMemory(llmState);
-  return `${outcome}\nPersistent memory is now:\n${llmState.persistentMemory}`;
+function applyRuleChange(bs, outcome) {
+  refreshRendered(bs);
+  return `${outcome}\nPersistent memory is now:\n${bs.rules.rendered}`;
 }
 
 // ---------- stack size ----------
 
-export function setStackSize({ mode, count }, bs, llmState) {
+export function setStackSize({ mode, count }, bs) {
   const allowedModes = new Set(["exactly", "at_least", "at_most"]);
 
   if (!allowedModes.has(mode)) {
@@ -418,27 +436,27 @@ export function setStackSize({ mode, count }, bs, llmState) {
     return `Error: count must be a positive integer, received ${count}.`;
   }
 
-  llmState.persistentRules.stackSize = { mode, count };
+  bs.rules.stackSize = { mode, count };
 
   return applyRuleChange(
-    llmState,
+    bs,
     `Stack-size rule set: deliver only when carrying ${mode.replace("_", " ")} ${count} parcel(s).`
   );
 }
 
-export function removeStackSize(params, bs, llmState) {
-  if (!llmState.persistentRules.stackSize) {
+export function removeStackSize(params, bs) {
+  if (!bs.rules.stackSize) {
     return "No stack-size rule was stored.";
   }
 
-  llmState.persistentRules.stackSize = null;
+  bs.rules.stackSize = null;
 
-  return applyRuleChange(llmState, "Stack-size rule removed.");
+  return applyRuleChange(bs, "Stack-size rule removed.");
 }
 
 // ---------- parcel reward filters ----------
 
-export function setParcelFilter({ minReward, maxReward }, bs, llmState) {
+export function setParcelFilter({ minReward, maxReward }, bs) {
   const hasMin = typeof minReward === "number" && isFinite(minReward);
   const hasMax = typeof maxReward === "number" && isFinite(maxReward);
 
@@ -446,19 +464,19 @@ export function setParcelFilter({ minReward, maxReward }, bs, llmState) {
     return "Error: provide at least one of minReward or maxReward as a number.";
   }
 
-  const filters = llmState.persistentRules.parcelFilters;
+  const filters = bs.rules.parcelFilters;
 
   if (hasMin) filters.minReward = minReward;
   if (hasMax) filters.maxReward = maxReward;
 
   return applyRuleChange(
-    llmState,
+    bs,
     `Parcel filter updated: minReward=${filters.minReward ?? "none"}, maxReward=${filters.maxReward ?? "none"}.`
   );
 }
 
-export function removeParcelFilter(params, bs, llmState) {
-  const filters = llmState.persistentRules.parcelFilters;
+export function removeParcelFilter(params, bs) {
+  const filters = bs.rules.parcelFilters;
 
   if (filters.minReward == null && filters.maxReward == null) {
     return "No parcel reward filter was stored.";
@@ -467,38 +485,50 @@ export function removeParcelFilter(params, bs, llmState) {
   filters.minReward = null;
   filters.maxReward = null;
 
-  return applyRuleChange(llmState, "Parcel reward filters removed.");
+  return applyRuleChange(bs, "Parcel reward filters removed.");
 }
 
 // ---------- delivery tile rules ----------
 
-export function forbidDeliveryTile({ x, y }, bs, llmState) {
+export function forbidDeliveryTile({ x, y, penalty }, bs) {
   const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
-  const rules = llmState.persistentRules;
+  const magnitude = resolveMagnitude(penalty, DEFAULT_FORBID_PENALTY);
+  if (typeof magnitude === "string") return magnitude;
+
+  const rules = bs.rules;
   const key = tileKey(x, y);
 
   clearDeliveryTileRules(rules, key);
-  rules.forbiddenDeliveryTiles.add(key);
+  rules.penaltyDeliveries.set(key, { x, y, penalty: magnitude });
 
-  return applyRuleChange(llmState, `Tile (${x}, ${y}) is now a forbidden delivery tile.`);
+  return applyRuleChange(
+    bs,
+    `Tile (${x}, ${y}) is now a penalized delivery tile (penalty ${magnitude}).`
+  );
 }
 
-export function preferDeliveryTile({ x, y }, bs, llmState) {
+export function preferDeliveryTile({ x, y, reward }, bs) {
   const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
-  const rules = llmState.persistentRules;
+  const magnitude = resolveMagnitude(reward, DEFAULT_PREFER_REWARD);
+  if (typeof magnitude === "string") return magnitude;
+
+  const rules = bs.rules;
   const key = tileKey(x, y);
 
   clearDeliveryTileRules(rules, key);
-  rules.preferredDeliveryTiles.add(key);
+  rules.preferredDeliveries.set(key, { x, y, reward: magnitude });
 
-  return applyRuleChange(llmState, `Tile (${x}, ${y}) is now a preferred delivery tile.`);
+  return applyRuleChange(
+    bs,
+    `Tile (${x}, ${y}) is now a preferred delivery tile (reward ${magnitude}).`
+  );
 }
 
-export function setDeliveryMultiplier({ x, y, multiplier }, bs, llmState) {
+export function setDeliveryMultiplier({ x, y, multiplier }, bs) {
   const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
@@ -506,28 +536,28 @@ export function setDeliveryMultiplier({ x, y, multiplier }, bs, llmState) {
     return `Error: multiplier must be a non-negative number, received ${multiplier}.`;
   }
 
-  const rules = llmState.persistentRules;
+  const rules = bs.rules;
   const key = tileKey(x, y);
 
   clearDeliveryTileRules(rules, key);
   rules.deliveryMultipliers.set(key, multiplier);
 
   return applyRuleChange(
-    llmState,
+    bs,
     `Delivery at tile (${x}, ${y}) now gives ${multiplier}x reward.`
   );
 }
 
-export function removeDeliveryTileRule({ x, y }, bs, llmState) {
+export function removeDeliveryTileRule({ x, y }, bs) {
   const error = validateDeliveryTile(x, y, bs);
   if (error) return error;
 
-  const rules = llmState.persistentRules;
+  const rules = bs.rules;
   const key = tileKey(x, y);
 
   const existed =
-    rules.forbiddenDeliveryTiles.has(key) ||
-    rules.preferredDeliveryTiles.has(key) ||
+    rules.penaltyDeliveries.has(key) ||
+    rules.preferredDeliveries.has(key) ||
     rules.deliveryMultipliers.has(key);
 
   if (!existed) {
@@ -536,24 +566,24 @@ export function removeDeliveryTileRule({ x, y }, bs, llmState) {
 
   clearDeliveryTileRules(rules, key);
 
-  return applyRuleChange(llmState, `Removed delivery rule for tile (${x}, ${y}).`);
+  return applyRuleChange(bs, `Removed delivery rule for tile (${x}, ${y}).`);
 }
 
 // ---------- clear all strategy rules ----------
 
-export function clearPersistentRules(params, bs, llmState) {
-  const rules = llmState.persistentRules;
+export function clearPersistentRules(params, bs) {
+  const rules = bs.rules;
 
   rules.stackSize = null;
   rules.parcelFilters.minReward = null;
   rules.parcelFilters.maxReward = null;
-  rules.forbiddenDeliveryTiles.clear();
-  rules.preferredDeliveryTiles.clear();
+  rules.penaltyDeliveries.clear();
+  rules.preferredDeliveries.clear();
   rules.deliveryMultipliers.clear();
 
   return applyRuleChange(
-    llmState,
-    "All persistent strategy rules cleared. Navigation blocks are unchanged: use unblock_tile to remove them."
+    bs,
+    "All persistent strategy rules cleared. Navigation penalties are unchanged: use unblock_tile to remove them."
   );
 }
 
@@ -566,36 +596,39 @@ export function clearPersistentRules(params, bs, llmState) {
  * Useful for imposing dynamic navigation constraints.
  */
 
-export function blockTile({ x, y }, bs, llmState) {
+export function blockTile({ x, y, penalty }, bs) {
   if (!isInsideMap(x, y, bs.map)) {
     return `Error: tile (${x}, ${y}) is outside the map.`;
   }
 
+  const magnitude = resolveMagnitude(penalty, DEFAULT_BLOCK_PENALTY);
+  if (typeof magnitude === "string") return magnitude;
+
   const key = `${x},${y}`;
 
-  if (llmState.persistentRules.blockedTiles.has(key)) {
-    return `Tile (${x}, ${y}) is already blocked for pathfinding.`;
+  if (bs.rules.penaltyTiles.has(key)) {
+    return `Tile (${x}, ${y}) is already penalized for pathfinding.`;
   }
 
-  llmState.persistentRules.blockedTiles.add(key);
-  refreshPersistentMemory(llmState);
+  bs.rules.penaltyTiles.set(key, { x, y, penalty: magnitude });
+  refreshRendered(bs);
 
-  return `Tile (${x}, ${y}) is now blocked for pathfinding.`;
+  return `Tile (${x}, ${y}) is now penalized for pathfinding (penalty ${magnitude}).`;
 }
 
-export function unblockTile({ x, y }, bs, llmState) {
+export function unblockTile({ x, y }, bs) {
   if (!isInsideMap(x, y, bs.map)) {
     return `Error: tile (${x}, ${y}) is outside the map.`;
   }
 
   const key = `${x},${y}`;
 
-  if (!llmState.persistentRules.blockedTiles.has(key)) {
-    return `Tile (${x}, ${y}) was not blocked.`;
+  if (!bs.rules.penaltyTiles.has(key)) {
+    return `Tile (${x}, ${y}) was not penalized.`;
   }
 
-  llmState.persistentRules.blockedTiles.delete(key);
-  refreshPersistentMemory(llmState);
+  bs.rules.penaltyTiles.delete(key);
+  refreshRendered(bs);
 
   return `Tile (${x}, ${y}) is now walkable again for pathfinding.`;
 }

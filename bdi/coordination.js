@@ -1,4 +1,5 @@
 import { isCoordMessage, makeStatus } from "../utils/coordProtocol.js";
+import { applyRulesSnapshot } from "../utils/rulesSync.js";
 
 /*
  * Gives the BDI agent its first message listener: it accepts coordination
@@ -39,6 +40,11 @@ export function setupBdiCoordination(socket, bs, agent) {
     } else if (msg.type === "signal") {
       log(`signal '${msg.signal}'`);
       bs.coordination.waiting = false;
+    } else if (msg.type === "rules") {
+      // The LLM partner added or dropped a rule: mirror its full ruleset into
+      // our own belief state so BDI scoring/pathfinding sees the same rules.
+      applyRulesSnapshot(bs.rules, msg.rules);
+      log(`ruleset updated:\n${bs.rules.rendered}`);
     }
   });
 }

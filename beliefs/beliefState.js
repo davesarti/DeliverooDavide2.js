@@ -68,6 +68,39 @@ export function createBeliefState() {
       lastActivityMs: 0,
     },
 
+    // Durable strategy rules, set by the LLM as it interprets missions and
+    // persisting across them (single source of truth — previously held on the
+    // separate llmState). The BDI agent carries this section too, but only the
+    // LLM agent's tools mutate it. `rendered` is the human/LLM-readable text
+    // derived from the structured fields; keep it in sync via the rule tools.
+    // The tile collections are Maps keyed by "x,y"; each value carries a
+    // magnitude (penalty/reward) supplied by the LLM, defaulted when omitted.
+    // These are soft preferences, NOT hard constraints: penaltyTiles add cost
+    // in A* (they never make a tile impassable), so a rule can never strand
+    // the agent.
+    rules: {
+      stackSize: null,
+
+      parcelFilters: {
+        minReward: null,
+        maxReward: null,
+      },
+
+      penaltyDeliveries: new Map(),   // "x,y" -> { x, y, penalty }
+      preferredDeliveries: new Map(), // "x,y" -> { x, y, reward }
+
+      deliveryMultipliers: new Map(), // "x,y" -> multiplier
+
+      penaltyTiles: new Map(),        // "x,y" -> { x, y, penalty }  (navigation)
+
+      rendered: "None.",
+
+      // Optional hook fired after any rule add/drop (set at runtime by the LLM
+      // agent to push the updated ruleset to its BDI-only partner). Null = no
+      // listener, e.g. on the BDI agent's own belief state.
+      onChange: null,
+    },
+
     // Last place a free parcel was actually seen ({ x, y, ts }). Camp uses it
     // as the anchor to loiter near — i.e. "wait where parcels appear". Null
     // until the first free parcel is observed.

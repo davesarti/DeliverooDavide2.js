@@ -44,7 +44,7 @@ function writeJSON(filePath, data) {
  * All I/O is synchronous and wrapped in try/catch so logging failures
  * never crash or stall the agent.
  */
-export function createSessionLogger({ maxIterations, maxMissionHistory, model } = {}) {
+export function createSessionLogger({ maxIterations, model } = {}) {
   const sessionId = toSessionId();
   const sessionDir = path.join(HISTORY_DIR, sessionId);
 
@@ -80,7 +80,6 @@ export function createSessionLogger({ maxIterations, maxMissionHistory, model } 
   const config = {
     sessionId,
     maxIterations:     maxIterations     ?? null,
-    maxMissionHistory: maxMissionHistory ?? null,
     model:             model             ?? "unknown",
     startedAt:         new Date().toISOString(),
   };

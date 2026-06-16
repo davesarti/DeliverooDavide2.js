@@ -36,6 +36,11 @@ export function astar(start, goal, bs, options = {}) {
     crates: options.ignoreCrates ? new Map() : bs.crates,
     agents: bs.agents,
     blockedTiles,
+    // LLM rule tiles: soft cost, never hard blocks — keyed by "x,y" with a
+    // { penalty } value. They make a route costlier (so A* prefers going
+    // around) but never impassable, so a rule can never make a goal
+    // unreachable and strand the agent.
+    penaltyTiles: bs.rules?.penaltyTiles ?? new Map(),
     start,
     goal,
   });
@@ -55,6 +60,7 @@ export function astarOnState({
   crates = new Map(),
   agents = new Map(),
   blockedTiles = new Set(),
+  penaltyTiles = new Map(),
   start,
   goal,
 }) {
@@ -130,6 +136,13 @@ export function astarOnState({
 
       if (softAgentTiles.has(`${nextX},${nextY}`)) {
         edgeCost += AGENT_SOFT_PENALTY;
+      }
+
+      // LLM rule penalty: entering a penalized tile costs extra, steering the
+      // path around it without ever forbidding it.
+      const penaltyEntry = penaltyTiles.get(`${nextX},${nextY}`);
+      if (penaltyEntry) {
+        edgeCost += penaltyEntry.penalty;
       }
 
       const g = current.g + edgeCost;

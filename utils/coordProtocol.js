@@ -40,3 +40,13 @@ export function makeStatus(cid, ok, detail) {
   if (detail != null) msg.detail = detail;
   return msg;
 }
+
+/*
+ * LLM -> BDI: the full current ruleset (already serialized to a plain object;
+ * see utils/rulesSync.js). Sent whenever the LLM adds or drops a rule so the
+ * BDI-only partner keeps an identical ruleset. Idempotent: it is a whole
+ * snapshot, not a delta, so a missed message self-heals on the next change.
+ */
+export function makeRulesUpdate(rules) {
+  return { proto: COORD_PROTO, type: "rules", rules };
+}

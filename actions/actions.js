@@ -33,7 +33,10 @@ import { executePlan } from "../pddl/planExecutor.js";
  */
 export function createActions(socket, bs, options = {}) {
   function getBlockedTiles() {
-    return options.blockedTiles ?? new Set();
+    // No static hard blocks: LLM rule tiles are soft penalties applied as A*
+    // cost (see astar reading bs.rules.penaltyTiles), never impassable walls.
+    // Transient refused-move tiles still hard-block via options.avoidTiles.
+    return new Set();
   }
 
   /*

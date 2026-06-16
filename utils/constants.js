@@ -131,7 +131,13 @@ export const RUNTIME = {
 
 // Constants used in LLM agent
 export const MAX_ITERATIONS = 100;
-export const MAX_MISSION_HISTORY = 5;
+
+// Default magnitudes for LLM tile rules, used when the executor does not
+// supply an explicit penalty/reward. Arbitrary for now — rule consumption
+// (pathfinding/scoring) is not yet wired, so these are just seed values.
+export const DEFAULT_FORBID_PENALTY = 10;
+export const DEFAULT_PREFER_REWARD = 10;
+export const DEFAULT_BLOCK_PENALTY = 10;
 
 // Constants used for BDI <-> LLM coordination
 // BDI `wait` primitive self-releases after this if no signal arrives (never

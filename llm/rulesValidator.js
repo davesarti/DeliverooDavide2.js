@@ -1,6 +1,5 @@
 import {
   isInsideMap,
-  isBlockedTile,
   isDeliveryTile
 } from "../utils/mapUtils.js";
 
@@ -9,12 +8,12 @@ import {
  * - null if the action is allowed
  * - a string error message if the action must be rejected
  */
-export function validateActionAgainstPersistentRules(action, bs, llmState) {
+export function validateActionAgainstPersistentRules(action, bs) {
   if (!action || !action.name) {
     return "invalid action: missing action name";
   }
 
-  const rules = llmState?.persistentRules;
+  const rules = bs?.rules;
 
   if (!rules) {
     return null;
@@ -48,10 +47,6 @@ function validateGoTo(params, bs, rules) {
   const coordError = validateCoordinates(params.x, params.y, bs, "target");
   if (coordError) return coordError;
 
-  if (isBlockedTile(params.x, params.y, rules.blockedTiles)) {
-    return `target tile (${params.x}, ${params.y}) is blocked by persistent rules`;
-  }
-
   return null;
 }
 
@@ -65,10 +60,6 @@ function validateGoPickUp(params, bs, rules) {
 
   if (!params.parcelId) {
     return "pickup rejected: missing parcel id";
-  }
-
-  if (isBlockedTile(params.x, params.y, rules.blockedTiles)) {
-    return `pickup rejected: tile (${params.x}, ${params.y}) is blocked by persistent rules`;
   }
 
   const parcel = bs.parcels?.get(params.parcelId);
@@ -102,16 +93,8 @@ function validateGoDropOff(params, bs, rules) {
   const coordError = validateCoordinates(params.x, params.y, bs, "delivery");
   if (coordError) return coordError;
 
-  if (isBlockedTile(params.x, params.y, rules.blockedTiles)) {
-    return `delivery rejected: tile (${params.x}, ${params.y}) is blocked by persistent rules`;
-  }
-
   if (!isDeliveryTile(params.x, params.y, bs.map.deliveryTiles)) {
     return `delivery rejected: tile (${params.x}, ${params.y}) is not a delivery tile`;
-  }
-
-  if (isForbiddenDeliveryTile(params.x, params.y, rules)) {
-    return `delivery rejected: delivery tile (${params.x}, ${params.y}) is forbidden by persistent rules`;
   }
 
   const carriedParcels = getCarriedParcels(bs);
@@ -134,7 +117,7 @@ function validateGoDropOff(params, bs, rules) {
 function validateExplore(rules) {
   /*
    * Exploration is normally allowed.
-   * The actual movement path must be handled by pathfinding using rules.blockedTiles.
+   * The actual movement path must be handled by pathfinding using rules.penaltyTiles.
    */
   return null;
 }
@@ -222,33 +205,3 @@ function getCarriedParcels(bs) {
   );
 }
 
-function isForbiddenDeliveryTile(x, y, rules) {
-  return hasTile(rules.forbiddenDeliveryTiles, x, y);
-}
-
-function hasTile(collection, x, y) {
-  if (!collection) return false;
-
-  const key = `${x},${y}`;
-  const spacedKey = `${x}, ${y}`;
-
-  if (collection instanceof Set) {
-    return collection.has(key) || collection.has(spacedKey);
-  }
-
-  if (collection instanceof Map) {
-    return collection.has(key) || collection.has(spacedKey);
-  }
-
-  if (Array.isArray(collection)) {
-    return collection.some((item) => {
-      if (typeof item === "string") {
-        return item === key || item === spacedKey;
-      }
-
-      return item?.x === x && item?.y === y;
-    });
-  }
-
-  return false;
-}

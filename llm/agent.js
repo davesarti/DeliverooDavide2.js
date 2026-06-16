@@ -1,5 +1,5 @@
 import { callLLMTool } from "./client.js";
-import { MAX_ITERATIONS, MAX_MISSION_HISTORY } from "../utils/constants.js";
+import { MAX_ITERATIONS } from "../utils/constants.js";
 import { validateActionAgainstPersistentRules } from "./rulesValidator.js";
 import {
   SYSTEM_VALIDATOR_PROMPT,
@@ -199,60 +199,40 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
       return makeToolResult(get_environment_state(bs, llmState, missionStats));
 
     case "set_stack_size":
-      return makeToolResult(setStackSize(params, bs, llmState));
+      return makeToolResult(setStackSize(params, bs));
 
     case "remove_stack_size":
-      return makeToolResult(removeStackSize(params, bs, llmState));
+      return makeToolResult(removeStackSize(params, bs));
 
     case "set_parcel_filter":
-      return makeToolResult(setParcelFilter(params, bs, llmState));
+      return makeToolResult(setParcelFilter(params, bs));
 
     case "remove_parcel_filter":
-      return makeToolResult(removeParcelFilter(params, bs, llmState));
+      return makeToolResult(removeParcelFilter(params, bs));
 
     case "forbid_delivery_tile":
-      return makeToolResult(forbidDeliveryTile(params, bs, llmState));
+      return makeToolResult(forbidDeliveryTile(params, bs));
 
     case "prefer_delivery_tile":
-      return makeToolResult(preferDeliveryTile(params, bs, llmState));
+      return makeToolResult(preferDeliveryTile(params, bs));
 
     case "set_delivery_multiplier":
-      return makeToolResult(setDeliveryMultiplier(params, bs, llmState));
+      return makeToolResult(setDeliveryMultiplier(params, bs));
 
     case "remove_delivery_tile_rule":
-      return makeToolResult(removeDeliveryTileRule(params, bs, llmState));
+      return makeToolResult(removeDeliveryTileRule(params, bs));
 
     case "clear_persistent_rules":
-      return makeToolResult(clearPersistentRules(params, bs, llmState));
+      return makeToolResult(clearPersistentRules(params, bs));
 
     case "block_tile":
-      return makeToolResult(blockTile(params, bs, llmState));
+      return makeToolResult(blockTile(params, bs));
 
     case "unblock_tile":
-      return makeToolResult(unblockTile(params, bs, llmState));
+      return makeToolResult(unblockTile(params, bs));
 
     default:
       return makeToolResult(`Unknown action: ${name}.`);
-  }
-}
-
-// ==========================================
-// Mission history
-// ==========================================
-
-function saveMissionHistory(llmState, { request, reply }) {
-  if (!Array.isArray(llmState.missionHistory)) {
-    llmState.missionHistory = [];
-  }
-
-  llmState.missionHistory.push({
-    request,
-    reply,
-    completedAt: Date.now(),
-  });
-
-  while (llmState.missionHistory.length > MAX_MISSION_HISTORY) {
-    llmState.missionHistory.shift();
   }
 }
 
@@ -268,7 +248,7 @@ async function validateMission(msg, bs, llmState) {
         role: "user",
         content: buildValidatorUserPrompt(
           msg,
-          llmState.persistentMemory,
+          bs.rules.rendered,
           buildValidatorSnapshot(bs, llmState)
         ),
       },
@@ -307,6 +287,14 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
   const coordinator = createCoordinator(socket, bs, llmState);
 
+  // Whenever the LLM adds or drops a rule, push the full ruleset to the
+  // BDI-only partner so it stays in sync. Fired from refreshRendered (the one
+  // choke point every rule change passes through). Fire-and-forget; no-op
+  // without a partner.
+  bs.rules.onChange = () => {
+    coordinator.syncRules().catch(() => {});
+  };
+
   // By default the LLM-controlled agent behaves as an autonomous BDI: it scores
   // and harvests parcels on its own. An incoming chat message pauses this loop
   // (see onMsg below), the message is interpreted, then the loop resumes. This
@@ -316,7 +304,6 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
   const logger = createSessionLogger({
     maxIterations: MAX_ITERATIONS,
-    maxMissionHistory: MAX_MISSION_HISTORY,
     model: LLM_CONFIG?.model,
   });
 
@@ -366,11 +353,6 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
       if (!validation.accepted) {
         await socket.emitSay(id, validation.reason);
 
-        saveMissionHistory(llmState, {
-          request: msg,
-          reply: validation.reason,
-        });
-
         logger.endMission(missionId, "rejected", validation.reason);
         return;
       }
@@ -381,8 +363,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           role: "user",
           content: buildMissionUserPrompt(
             msg,
-            llmState.persistentMemory,
-            llmState.missionHistory
+            bs.rules.rendered
           ),
         },
       ];
@@ -431,11 +412,6 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           logger.logFinalReply(missionId, finalReply);
           await socket.emitSay(id, finalReply);
 
-          saveMissionHistory(llmState, {
-            request: msg,
-            reply: finalReply,
-          });
-
           logger.endMission(missionId, "completed", finalReply);
           completed = true;
           break;
@@ -443,8 +419,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
         const validationError = validateActionAgainstPersistentRules(
           action,
-          bs,
-          llmState
+          bs
         );
 
         if (validationError) {
@@ -493,11 +468,6 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         finalReply = "Mission failed: maximum number of execution steps reached.";
 
         await socket.emitSay(id, finalReply);
-
-        saveMissionHistory(llmState, {
-          request: msg,
-          reply: finalReply,
-        });
 
         logger.endMission(missionId, "failed", finalReply);
       }
