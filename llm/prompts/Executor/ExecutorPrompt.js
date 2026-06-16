@@ -105,7 +105,11 @@ Movement and parcels:
 Rule tools (durable rules):
 - set_stack_size_rule / remove_stack_size_rule: how many parcels to carry before delivery.
 - set_parcel_reward_filter / remove_parcel_reward_filter: parcel reward limits.
-- forbid_delivery_tile / prefer_delivery_tile / set_delivery_tile_multiplier / remove_delivery_tile_rule: delivery-tile rules.
+- forbid_delivery_tile: penalty for delivering at a tile.
+- prefer_delivery_tile: flat +N pts bonus for delivering at a tile (e.g. "+5 pts every delivery at (0,0)").
+- set_delivery_tile_multiplier: multiply the delivery reward by N (e.g. "5x reward at (9,9)").
+- remove_delivery_tile_rule: remove any delivery-tile rule for a tile.
+  IMPORTANT: use prefer_delivery_tile for flat bonuses (+N pts), set_delivery_tile_multiplier only for explicit multipliers (Nx).
 - block_navigation_tile / unblock_navigation_tile: navigation constraints.
 - clear_durable_rules: remove all durable strategy rules.
 
