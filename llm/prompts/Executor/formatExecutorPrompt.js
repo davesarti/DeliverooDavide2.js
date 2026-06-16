@@ -4,7 +4,7 @@ export function buildMissionUserPrompt(
   snapshot = null
 ) {
   const snapshotSection = snapshot
-    ? `\n\n## Current game state\n${JSON.stringify(snapshot, null, 2)}`
+    ? `\n\n## Current game state\n${JSON.stringify(snapshot)}`
     : "";
 
   return `
