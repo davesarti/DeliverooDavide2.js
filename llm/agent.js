@@ -33,6 +33,24 @@ import { startAutonomousBDI } from "../bdi/bdiAgent.js";
 import { isCoordMessage } from "../utils/coordProtocol.js";
 
 // ==========================================
+// Rule-tool detection (for history logging)
+// ==========================================
+
+const RULE_TOOL_NAMES = new Set([
+  "set_stack_size",
+  "remove_stack_size",
+  "set_parcel_filter",
+  "remove_parcel_filter",
+  "forbid_delivery_tile",
+  "prefer_delivery_tile",
+  "set_delivery_multiplier",
+  "remove_delivery_tile_rule",
+  "clear_persistent_rules",
+  "block_tile",
+  "unblock_tile",
+]);
+
+// ==========================================
 // Logging
 // ==========================================
 
@@ -346,7 +364,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
   // (see onMsg below), the message is interpreted, then the loop resumes. This
   // is the agent's own embedded loop — separate from any partner BDI it directs
   // over the wire in MULTI mode.
-  const bdi = startAutonomousBDI(bs, actions);
+  const bdi = startAutonomousBDI(bs, actions, logger);
 
   const logger = createSessionLogger({
     maxIterations: MAX_ITERATIONS,
@@ -389,7 +407,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
       // issues any movement.
       bdi.pause();
 
-      missionId = logger.startMission(msg);
+      missionId = logger.startMission(msg, bs.rules.rendered ?? "None.");
 
       const messages = [
         { role: "system", content: SYSTEM_EXECUTOR_PROMPT },
@@ -447,7 +465,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           logger.logFinalReply(missionId, finalReply);
           await socket.emitSay(id, finalReply);
 
-          logger.endMission(missionId, "completed", finalReply);
+          logger.endMission(missionId, "completed", finalReply, bs.rules.rendered ?? "None.");
           completed = true;
           break;
         }
@@ -487,6 +505,21 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           } else {
             missionStats.deliveries += toolResult.deliveredCount;
           }
+          logger.logDelivery(
+            missionId,
+            action.params.x,
+            action.params.y,
+            toolResult.deliveredCount
+          );
+        }
+
+        if (RULE_TOOL_NAMES.has(action.name)) {
+          logger.logRuleChange(
+            missionId,
+            action.name,
+            action.params,
+            bs.rules.rendered ?? "None."
+          );
         }
 
         logWithTime(bs.me.name, "Observation:", observation);
@@ -504,7 +537,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
         await socket.emitSay(id, finalReply);
 
-        logger.endMission(missionId, "failed", finalReply);
+        logger.endMission(missionId, "failed", finalReply, bs.rules.rendered ?? "None.");
       }
     } catch (error) {
       const errorMessage = error?.message ?? String(error);
@@ -512,7 +545,7 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
       logWithTime(bs.me.name, "Mission error:", errorMessage);
 
       if (missionId) {
-        logger.endMission(missionId, "failed", errorMessage);
+        logger.endMission(missionId, "failed", errorMessage, bs.rules.rendered ?? "None.");
       }
 
       try {
