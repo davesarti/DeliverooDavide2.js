@@ -93,6 +93,8 @@ function coerceNumericParams(obj) {
     "minReward",
     "maxReward",
     "multiplier",
+    "mult",
+    "delta",
     "penalty",
     "reward",
     "metReward",
