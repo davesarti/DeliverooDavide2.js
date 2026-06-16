@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node test-runner.js)",
+      "Bash(python -c \"import sys,json; [print\\(json.dumps\\(json.loads\\(l\\), indent=2\\)\\) for l in sys.stdin]\")",
+      "Bash(curl -s \"http://localhost:8080/api/agents\")",
+      "Bash(node -e *)",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(node --check llm/tools.js)",
+      "Bash(node --check llm/prompts/Executor/actionMapper.js)",
+      "Bash(node --check llm/prompts/Executor/formatExecutorPrompt.js)",
+      "PowerShell($idx = \\(1..65\\) -join ','; node test-runner.js --only $idx)",
+      "PowerShell(try { $r = Invoke-RestMethod -Uri \"http://localhost:8080/api/agents\" -TimeoutSec 8; $r | Select-Object name,id | Format-Table -AutoSize } catch { \"ERRORE: $\\($_.Exception.Message\\)\" })"
+    ]
+  }
+}
