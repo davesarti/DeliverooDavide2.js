@@ -415,23 +415,21 @@ class IntentionRevision {
   sortQueueByScore() {
     const running = this.#currentIntention;
 
-    const carrying = (this.#bs.carry?.count ?? 0) > 0;
-
     const scored = this.intention_queue.map((intention, index) => ({
       intention,
       index,
       score: this.intentionScore(intention.predicate),
     }));
 
-    // While carrying, the best delivery stays in the queue even at score 0
-    // (carried parcels that would fully decay en route): erasing it would
-    // leave the agent carrying worthless parcels forever with no way to
-    // free itself.
-    const valid = scored.filter(
-      (e) =>
-        e.score > 0 ||
-        (carrying && e.intention.predicate[0] === "go_drop_off" && e.score >= 0)
-    );
+    // Every option — deliveries included — must score strictly > 0 to stay.
+    // This lets a hard block work: a forbidden delivery tile is pinned to 0 by
+    // the floored penalty (adjustDeliveryScore) and is now dropped rather than
+    // kept. The agent can never end up frozen: the idle loop injects `explore`
+    // (a flat EXPLORATION_INCENTIVE > 0) whenever the queue empties, so when no
+    // pickup/delivery/camp is valid it wanders instead of stalling. The cost is
+    // that a delivery zeroed purely by decay is also discarded, so the agent
+    // will hold fully-decayed parcels and explore rather than dump them.
+    const valid = scored.filter((e) => e.score > 0);
     valid.sort((a, b) =>
       b.score !== a.score ? b.score - a.score : a.index - b.index
     );
