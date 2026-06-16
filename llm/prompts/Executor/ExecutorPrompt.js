@@ -59,9 +59,26 @@ For a durable rule:
    - penalty/zero for missing the target stack -> unmetPenalty (or unmetMultiplier)
 3. Do NOT collect, pick up, deliver, or move to "earn" the rule. Storing it is the
    whole task.
-4. The rule tool COMPLETES the mission on its own — its confirmation is sent as the
-   reply automatically. Do NOT call final_reply afterwards, and do NOT take any
-   further action.
+4. A rule tool COMPLETES a single-clause mission on its own — its confirmation is
+   sent as the reply automatically. Do NOT call final_reply afterwards, and do NOT
+   take any further action.
+
+# Compound missions ("do X AND do Y")
+
+Some missions ask for MORE THAN ONE thing, e.g. "deliver stacks of exactly 3 AND do
+not go through (5,5)", or "parcels over 30 are worth 0, AND from now on deliver one
+at a time". A terminal tool (any durable-rule / navigation tool, or
+collect_and_deliver) normally ends the mission after one call — which would silently
+drop the second clause.
+
+To handle a compound mission, set "more": true on the terminal tool for every clause
+EXCEPT the last:
+- Clause 1 tool with more=true  -> mission continues, you are asked for the next tool.
+- ... (further clauses, each more=true)
+- Final clause tool with more omitted -> mission ends, its confirmation is the reply.
+
+Only set more=true when a further clause genuinely remains. For an ordinary
+single-clause mission, omit it so the mission ends in one fast round-trip.
 
 Delivery-tile rule tool selection:
 - Flat bonus (+N pts every delivery): prefer_delivery_tile(reward=N)
@@ -97,15 +114,14 @@ Do NOT reject factual queries as "unrelated to the game". Answer them.
 
 # Play loop (FALLBACK only — prefer collect_and_deliver for harvesting tasks)
 
-1. observe_environment.
-2. pick_up_parcel for visible parcels that help the mission.
-3. deliver_carried_parcels when a delivery is needed.
-4. Repeat steps 1-3 until the mission goal is complete.
-5. final_reply.
+Use this ONLY for a specific already-carried delivery to a named tile, or a
+coordination handoff pickup. NEVER for open-ended harvesting or searching for
+parcels — that is collect_and_deliver's job, run autonomously with no LLM steps.
 
-If no useful parcel is visible AND you are carrying zero parcels: call explore_for_parcels,
-then observe_environment, then continue.
-NEVER call explore_for_parcels when you are already carrying parcels — deliver first.
+1. observe_environment if the state may have changed since mission start.
+2. pick_up_parcel for a specific visible parcel the mission names.
+3. deliver_carried_parcels when a delivery is needed.
+4. final_reply.
 
 After resolve_delivery_tile, use EXACTLY the coordinates it returns. Never substitute a
 different tile. If delivery fails at those coordinates, report the failure — do NOT retry
@@ -122,12 +138,11 @@ for missions that need both agents.
   putdown, wait, resume). Returns a cid; runs asynchronously.
 - wait_for_partner: block until the teammate reports a directive's result (uses the cid).
 - signal_partner: release a teammate that was told to wait, by resending its signal label.
-- move_near: move yourself within maxDist tiles of a coordinate.
 
 Coordination rules:
 1. "Both agents meet / wait for each other at X" -> call rendezvous_with_partner
-   once, then final_reply. NEVER expand this into direct_partner + move_near +
-   wait_for_partner — that gap can wrongly park the partner forever.
+   once, then final_reply. NEVER expand this into separate direct_partner + self-move +
+   wait_for_partner steps — that gap can wrongly park the partner forever.
 2. Parallel movement to DIFFERENT destinations (complex handoff/sync cases) ->
    call direct_partner FIRST, then move yourself, THEN wait_for_partner. Never put
    wait_for_partner between direct_partner and your own movement (it forces
