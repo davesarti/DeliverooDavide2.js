@@ -2,11 +2,8 @@ import { callLLMTool } from "./client.js";
 import { MAX_ITERATIONS } from "../utils/constants.js";
 import { validateActionAgainstPersistentRules } from "./rulesValidator.js";
 import {
-  SYSTEM_VALIDATOR_PROMPT,
-  SYSTEM_VALIDATOR_TOOLS,
   SYSTEM_EXECUTOR_PROMPT,
   SYSTEM_EXECUTOR_TOOLS,
-  buildValidatorUserPrompt,
   buildMissionUserPrompt,
   mapExecutorAction,
 } from "./prompts/index.js";
@@ -272,26 +269,6 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
 // Mission validator
 // ==========================================
 
-async function validateMission(msg, bs, llmState) {
-  const { action } = await callLLMTool({
-    messages: [
-      { role: "system", content: SYSTEM_VALIDATOR_PROMPT },
-      {
-        role: "user",
-        content: buildValidatorUserPrompt(
-          msg,
-          bs.rules.rendered,
-          buildValidatorSnapshot(bs, llmState)
-        ),
-      },
-    ],
-    tools: SYSTEM_VALIDATOR_TOOLS,
-    temperature: 0,
-  });
-
-  return action.params;
-}
-
 // ==========================================
 // Thought stripping
 // ==========================================
@@ -373,29 +350,14 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
       missionId = logger.startMission(msg);
 
-      const validation = await validateMission(msg, bs, llmState);
-
-      logWithTime(
-        bs.me.name,
-        `Validator decision: accepted=${validation.accepted}, reason=${validation.reason}`
-      );
-
-      logger.logValidatorDecision(missionId, validation);
-
-      if (!validation.accepted) {
-        await socket.emitSay(id, validation.reason);
-
-        logger.endMission(missionId, "rejected", validation.reason);
-        return;
-      }
-
       const messages = [
         { role: "system", content: SYSTEM_EXECUTOR_PROMPT },
         {
           role: "user",
           content: buildMissionUserPrompt(
             msg,
-            bs.rules.rendered
+            bs.rules.rendered,
+            buildValidatorSnapshot(bs, llmState)
           ),
         },
       ];
