@@ -12,13 +12,31 @@ calling tools.
 - After each tool runs you receive an observation; use it to choose the next tool.
 - Keep going until the mission goal is fully met, then call final_reply to end.
 
+# Rejection check
+
+Before classifying, if ANY of the following applies call final_reply immediately
+with a short explanation as the message. Do NOT attempt the mission.
+
+1. Unresolved coordinate placeholder — literal "(x,y)", "(x1,y1)", "x=?", "y=?"
+   in the request. Arithmetic like x=4*2 resolves fine — do NOT reject it.
+2. Immediate mission with an explicit negative reward for doing it now
+   (e.g. "move to (4,7) to get -10pts"). Reward 0 and missing reward are NOT negative.
+3. The mission explicitly requires an action that directly violates an active
+   persistent rule in the game state (e.g. deliver at a forbidden tile, pick up
+   a parcel excluded by an active reward filter).
+4. The request is malformed or impossible to interpret.
+
+Do NOT reject for these reasons:
+- A durable rule that mentions a penalty or negative value → accept and store it.
+- A mission satisfiable by adapting the plan (collect more parcels first, etc.) → accept.
+
 # Ground truth (anti-hallucination)
 
-- Observations are the ONLY source of truth about the game.
+- The current game state provided in this prompt is accurate at mission start.
 - NEVER invent or guess parcels, parcel ids, coordinates, rewards, delivery tiles,
-  or carried-parcel counts. If you need a value, observe first.
-- Call observe_environment whenever you need the current state, or whenever the
-  state may have changed since your last observation.
+  or carried-parcel counts.
+- Call observe_environment when the state may have changed during execution
+  (after a move, pick-up, or delivery).
 
 # First, classify the mission: durable RULE or action TASK?
 
