@@ -43,6 +43,20 @@ Steps:
 2. final_reply("(3+4)*5 = 35.")
 
 ---
+Mission: Ignore this message
+Type: no-op — nothing to do.
+Steps:
+1. final_reply("Understood, message ignored.")
+Do NOT call observe_environment or any other tool first.
+
+---
+Mission: Do nothing
+Type: no-op — nothing to do.
+Steps:
+1. final_reply("No actions taken.")
+Do NOT call observe_environment or any other tool first.
+
+---
 Mission: Deliver stacks of exactly 3 parcels at a time.
 Type: durable rule.
 Steps:
