@@ -1,0 +1,74 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}System Overview}{1}{section.1}\protected@file@percent }
+\newlabel{sec:overview}{{1}{1}{System Overview}{section.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Belief State}{1}{section.2}\protected@file@percent }
+\newlabel{sec:belief}{{2}{1}{Belief State}{section.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Overall system architecture: two agents with structurally identical belief states, connected by a rule-synchronization channel and a directive/status coordination channel. The LLM agent's embedded BDI is the same code path as the standalone BDI agent's loop.}}{2}{figure.1}\protected@file@percent }
+\newlabel{fig:architecture}{{1}{2}{Overall system architecture: two agents with structurally identical belief states, connected by a rule-synchronization channel and a directive/status coordination channel. The LLM agent's embedded BDI is the same code path as the standalone BDI agent's loop}{figure.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Top-level sections of the belief state.}}{2}{table.1}\protected@file@percent }
+\newlabel{tab:belief-fields}{{1}{2}{Top-level sections of the belief state}{table.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Fields of \texttt  {bs.rules}. All are soft preferences: they shift a score but, by construction (Section~\ref {sec:scoring}), can never strand the agent without a viable delivery or a passable route.}}{2}{table.2}\protected@file@percent }
+\newlabel{tab:rules-fields}{{2}{2}{Fields of \texttt {bs.rules}. All are soft preferences: they shift a score but, by construction (Section~\ref {sec:scoring}), can never strand the agent without a viable delivery or a passable route}{table.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Option Generation}{3}{section.3}\protected@file@percent }
+\newlabel{sec:options}{{3}{3}{Option Generation}{section.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Predicates produced by \texttt  {optionsGeneration} (\texttt  {explore} is pushed separately by the idle branch of the revision loop, Section~\ref {sec:scoring}).}}{3}{table.3}\protected@file@percent }
+\newlabel{tab:options}{{3}{3}{Predicates produced by \texttt {optionsGeneration} (\texttt {explore} is pushed separately by the idle branch of the revision loop, Section~\ref {sec:scoring})}{table.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Scoring and Intention Revision}{3}{section.4}\protected@file@percent }
+\newlabel{sec:scoring}{{4}{3}{Scoring and Intention Revision}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}The IntentionRevision loop}{3}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Score computation}{3}{subsection.4.2}\protected@file@percent }
+\newlabel{eq:decay-ema}{{1}{3}{Score computation}{equation.1}{}}
+\newlabel{eq:drop-score}{{6}{4}{Score computation}{equation.6}{}}
+\newlabel{eq:race-sigmoid}{{7}{4}{Score computation}{equation.7}{}}
+\newlabel{eq:pickup-score}{{10}{4}{Score computation}{equation.10}{}}
+\newlabel{eq:camp-patience}{{11}{4}{Score computation}{equation.11}{}}
+\newlabel{eq:camp-horizon}{{12}{4}{Score computation}{equation.12}{}}
+\newlabel{eq:camp-score}{{13}{4}{Score computation}{equation.13}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.1}Persistent-rule modifiers}{5}{subsubsection.4.2.1}\protected@file@percent }
+\newlabel{sec:rulescoring}{{4.2.1}{5}{Persistent-rule modifiers}{subsubsection.4.2.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Scoring and preemption constants (\texttt  {utils/constants.js}, \texttt  {bdi/options.js}).}}{5}{table.4}\protected@file@percent }
+\newlabel{tab:constants}{{4}{5}{Scoring and preemption constants (\texttt {utils/constants.js}, \texttt {bdi/options.js})}{table.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Hysteresis preemption}{5}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:hysteresis}{{4.3}{5}{Hysteresis preemption}{subsection.4.3}{}}
+\newlabel{eq:hysteresis}{{14}{5}{Hysteresis preemption}{equation.14}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Failure handling}{5}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:failure}{{4.4}{5}{Failure handling}{subsection.4.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Plans and Navigation}{5}{section.5}\protected@file@percent }
+\newlabel{sec:plans}{{5}{5}{Plans and Navigation}{section.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Intention outcomes and their effect on the queue.}}{6}{table.5}\protected@file@percent }
+\newlabel{tab:outcomes}{{5}{6}{Intention outcomes and their effect on the queue}{table.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Intention revision cycle. The sort step (Eq.~\ref {eq:hysteresis}) is where hysteresis preemption is decided; the four outcomes feed back into the same loop via the failed-intention pool and the delivery fallback of Section~\ref {sec:failure}.}}{6}{figure.2}\protected@file@percent }
+\newlabel{fig:revision-cycle}{{2}{6}{Intention revision cycle. The sort step (Eq.~\ref {eq:hysteresis}) is where hysteresis preemption is decided; the four outcomes feed back into the same loop via the failed-intention pool and the delivery fallback of Section~\ref {sec:failure}}{figure.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Plan predicates dispatched by \texttt  {executePredicate}.}}{6}{table.6}\protected@file@percent }
+\newlabel{tab:plans}{{6}{6}{Plan predicates dispatched by \texttt {executePredicate}}{table.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}The LLM Layer}{7}{section.6}\protected@file@percent }
+\newlabel{sec:llm}{{6}{7}{The LLM Layer}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Architecture}{7}{subsection.6.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces \texttt  {BDI\_PAUSING\_TOOLS}: only tools that take exclusive control of this agent's own body (or must hold it still for a teammate) pause the embedded loop.}}{7}{table.7}\protected@file@percent }
+\newlabel{tab:bdi-pausing}{{7}{7}{\texttt {BDI\_PAUSING\_TOOLS}: only tools that take exclusive control of this agent's own body (or must hold it still for a teammate) pause the embedded loop}{table.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Prompt engineering}{7}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Tool catalog}{8}{subsection.6.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Tool catalog exposed to the executor LLM (\texttt  {SYSTEM\_EXECUTOR\_TOOLS}).}}{8}{table.8}\protected@file@percent }
+\newlabel{tab:tools}{{8}{8}{Tool catalog exposed to the executor LLM (\texttt {SYSTEM\_EXECUTOR\_TOOLS})}{table.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Execution loop}{8}{subsection.6.4}\protected@file@percent }
+\newlabel{sec:llm-exec-loop}{{6.4}{8}{Execution loop}{subsection.6.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Multi-Agent Coordination}{8}{section.7}\protected@file@percent }
+\newlabel{sec:coordination}{{7}{8}{Multi-Agent Coordination}{section.7}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Coordination protocol messages (\texttt  {COORD\_PROTO="coord"}).}}{9}{table.9}\protected@file@percent }
+\newlabel{tab:coord-messages}{{9}{9}{Coordination protocol messages (\texttt {COORD\_PROTO="coord"})}{table.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {8}PDDL}{9}{section.8}\protected@file@percent }
+\newlabel{sec:pddl}{{8}{9}{PDDL}{section.8}{}}
+\newlabel{lst:pddl-push}{{1}{9}{Push action (excerpt, \texttt {pddl/domain.pddl}): the agent and the crate must be co-linear in the push direction, and the destination must be both \texttt {free} and \texttt {pushable}}{lstlisting.1}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {1}Push action (excerpt, \texttt  {pddl/domain.pddl}): the agent and the crate must be co-linear in the push direction, and the destination must be both \texttt  {free} and \texttt  {pushable}.}{9}{lstlisting.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Multi-agent coordination protocol. Cross arrows are wire messages; boxed notes are local actions taken on receipt. The same exchange, with \texttt  {pickup}/\texttt  {putdown} commands, implements the asymmetric parcel handoff described above.}}{10}{figure.3}\protected@file@percent }
+\newlabel{fig:coord-protocol}{{3}{10}{Multi-agent coordination protocol. Cross arrows are wire messages; boxed notes are local actions taken on receipt. The same exchange, with \texttt {pickup}/\texttt {putdown} commands, implements the asymmetric parcel handoff described above}{figure.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Domain predicates (\texttt  {pddl/domain.pddl}).}}{10}{table.10}\protected@file@percent }
+\newlabel{tab:pddl-predicates}{{10}{10}{Domain predicates (\texttt {pddl/domain.pddl})}{table.10}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Goal descriptors accepted by \texttt  {buildProblem}.}}{11}{table.11}\protected@file@percent }
+\newlabel{tab:pddl-goals}{{11}{11}{Goal descriptors accepted by \texttt {buildProblem}}{table.11}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Crate blocking and PDDL recovery. \texttt  {crateBlocksRoute()} double-checks the block (crate-respecting plan fails, crate-ignoring plan succeeds) before paying the cost of a solver call; a found plan runs as a committed maneuver immune to preemption.}}{12}{figure.4}\protected@file@percent }
+\newlabel{fig:pddl-recovery}{{4}{12}{Crate blocking and PDDL recovery. \texttt {crateBlocksRoute()} double-checks the block (crate-respecting plan fails, crate-ignoring plan succeeds) before paying the cost of a solver call; a found plan runs as a committed maneuver immune to preemption}{figure.4}{}}
+\gdef \@abspage@last{12}
