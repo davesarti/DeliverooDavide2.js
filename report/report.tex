@@ -336,15 +336,19 @@ value-band remap, never before: discounting first could push a high-value parcel
 \paragraph{Camp score.} \texttt{camp} is valid only while carrying ($|P|>0$), the harvest hint
 is ``hot'', capacity remains, and no delivery tile is within
 \texttt{CAMP\_NEAR\_DELIVERY\_TILES} = 8 (loitering near a delivery is never worth it: quick
-cycles win). Hotness and patience are spatial, not rate-based:
+cycles win). Patience is primarily spatial, then scaled by the server's declared spawn rate:
 \begin{equation}
-\text{patienceMs} = \operatorname{clamp}\!\big(1000\cdot(1.37^{\,n-3}-1),\,0,\,8000\big),
+\text{patienceMs} = \operatorname{clamp}\!\big(\mu\cdot 1000\cdot(1.37^{\,n-3}-1),\,0,\,\mu\cdot 8000\big),
 \qquad n=\min(n_{\text{adj}},10)
 \label{eq:camp-patience}
 \end{equation}
 forced to 0 when $n_{\text{adj}} < 4$ or the server declares infinite parcel generation, with
 $n_{\text{adj}}$ the number of spawn tiles within Manhattan radius 3 of the harvest anchor (the
-constants are \texttt{MIN\_TILES}=4 and \texttt{SATURATION\_TILES}=10). While hot, the camp loss
+constants are \texttt{CAMP\_PATIENCE\_MIN\_TILES}=4 and \texttt{CAMP\_PATIENCE\_SATURATION\_TILES}=10)
+and $\mu=\min\!\big(\text{CAMP\_SPAWN\_RATE\_MAX\_MULT},\,\max(1,\,\text{CAMP\_SPAWN\_RATE\_NEUTRAL\_MS}/\text{parcelGenerationEvent})\big)$,
+\texttt{CAMP\_SPAWN\_RATE\_MAX\_MULT}=1.3 and \texttt{CAMP\_SPAWN\_RATE\_NEUTRAL\_MS}=2000\,ms, so a
+map that spawns faster than the 2\,s neutral rate stretches both the growth curve and its ceiling,
+making a hot pocket worth camping longer. While hot, the camp loss
 budget bounds how long camping is worth it relative to delivering now:
 \begin{equation}
 \text{horizon} = \frac{\max\big(\text{CAMP\_LOSS\_BUDGET\_FRACTION}\cdot\text{totalReward},\ \text{stackCampGain}\big)}{\text{factor}\cdot|P|}
@@ -540,8 +544,8 @@ coordination layer and the LLM's delegated tools.
   \item \textbf{Soft penalties from rules.} Entering a tile in \texttt{bs.rules.penaltyTiles}
   costs extra (added to \texttt{BASE\_STEP\_COST}=1) but is never refused, so an LLM navigation
   rule can steer the route without ever stranding the agent.
-  \item \textbf{Adaptive timeout.} $\text{timeout} = \max(\text{GO\_TO\_TIMEOUT\_MS},\ |\text{path}|\cdot\text{movementDurationMs}\cdot\text{SAFETY\_FACTOR})$,
-  with \texttt{SAFETY\_FACTOR}=3, so short legs fail fast and long legs are not spuriously timed out.
+  \item \textbf{Adaptive timeout.} $\text{timeout} = \max(\text{GO\_TO\_TIMEOUT\_MS},\ |\text{path}|\cdot\text{movementDurationMs}\cdot\text{GO\_TO\_TIMEOUT\_SAFETY\_FACTOR})$,
+  with \texttt{GO\_TO\_TIMEOUT\_SAFETY\_FACTOR}=3, so short legs fail fast and long legs are not spuriously timed out.
   \item \textbf{\texttt{avoidTiles}.} A tile that just physically refused a move is hard-blocked
   for \texttt{AVOID\_TENURE\_MOVE\_FACTOR}=3 move-durations, forcing the replanner onto a
   genuinely different route instead of greedily re-entering a proven choke; the memory expires
@@ -591,8 +595,9 @@ in which case the next mission turn must relay that signal before resuming.
 \textbf{Pauses the embedded BDI} & \textbf{Does not pause it} \\
 \midrule
 \texttt{collect\_and\_deliver}, \texttt{go\_to}, \texttt{go\_pick\_up}, \texttt{go\_drop\_off},
-\texttt{rendezvous\_with\_partner}, \texttt{wait\_for\_partner} & \texttt{observe\_environment},
-\texttt{calculate}, every rule/navigation store tool, \texttt{direct\_partner}, \texttt{signal\_partner} \\
+\texttt{rendezvous\_with\_partner}, \texttt{handoff\_to\_partner}, \texttt{wait\_for\_partner} &
+\texttt{observe\_environment}, \texttt{calculate}, every rule/navigation store tool,
+\texttt{direct\_partner}, \texttt{signal\_partner} \\
 \bottomrule
 \end{tabular}
 \caption{\texttt{BDI\_PAUSING\_TOOLS}: only tools that take exclusive control of this agent's
@@ -641,7 +646,7 @@ procedure, not free-form instructions:
 \midrule
 Self-action & \texttt{move\_to}, \texttt{pick\_up\_parcel}, \texttt{deliver\_carried\_parcels}, \texttt{collect\_and\_deliver} (delegates to the embedded BDI, Section~\ref{sec:llm-exec-loop}) \\
 Query & \texttt{observe\_environment}, \texttt{calculate}, \texttt{resolve\_delivery\_tile} \\
-Coordination & \texttt{rendezvous\_with\_partner}, \texttt{direct\_partner}, \texttt{signal\_partner}, \texttt{wait\_for\_partner} \\
+Coordination & \texttt{rendezvous\_with\_partner}, \texttt{handoff\_to\_partner}, \texttt{direct\_partner}, \texttt{signal\_partner}, \texttt{wait\_for\_partner} \\
 Persistent rules & \texttt{set\_stack\_size\_rule}, \texttt{remove\_stack\_size\_rule}, \texttt{set\_parcel\_value\_rule}, \texttt{remove\_parcel\_value\_rule}, \texttt{forbid\_delivery\_tile}, \texttt{prefer\_delivery\_tile}, \texttt{set\_delivery\_tile\_multiplier}, \texttt{remove\_delivery\_tile\_rule}, \texttt{clear\_durable\_rules}, \texttt{block\_navigation\_tile}, \texttt{unblock\_navigation\_tile}, \texttt{clear\_navigation\_rules} \\
 \bottomrule
 \end{tabular}
@@ -726,13 +731,25 @@ partner can physically occupy the just-vacated tile to collect the handoff parce
 loop; an idle TTL (\texttt{COORD\_RESUME\_IDLE\_TTL\_MS}=15\,s) auto-resumes defensively if the
 LLM partner disappears mid-directive.
 
-\paragraph{Handoff protocol.} The LLM agent has no put-down primitive away from a delivery tile,
-so in a cross-delivery handoff the \emph{partner} is always the picker: \texttt{direct\_partner(pickup)}
-with no coordinates lets the BDI self-select via \texttt{\#selectBestPickup()} (reusing
-\texttt{intentionScore} so it never diverges from normal play); a \texttt{status(ok,picked)}
-reply lets the LLM follow up with \texttt{direct\_partner(putdown, x, y)}, which drops the parcel
-at an agreed tile and steps the BDI aside (\texttt{vacateAfterDrop()}) before its own
-\texttt{status(ok)}; the LLM agent then collects and delivers it.
+\paragraph{Handoff protocol.} A cross-delivery handoff is driven end-to-end by a single tool,
+\texttt{handoff\_to\_partner}, rather than by the model manually sequencing
+\texttt{direct\_partner}/\texttt{wait\_for\_partner} calls: that manual choreography repeatedly
+deadlocked on the drop tile (a putdown aimed at the LLM agent's own cell, or at a tile the BDI
+could not reach), so the prompt now forbids it explicitly. The tool: (1) repeatedly issues
+\texttt{direct\_partner(pickup)} with no coordinates so the BDI self-selects via
+\texttt{\#selectBestPickup()} (reusing \texttt{intentionScore}, so it never diverges from normal
+play), stacking up to an optional target count or a safety cap (\texttt{HANDOFF\_MAX\_PICKUPS});
+(2) sends \texttt{direct\_partner(go\_near)} to bring the loaded BDI adjacent to the LLM agent
+before dropping, so the hand-off lands within trivial reach; (3) issues
+\texttt{direct\_partner(putdown)} at the BDI's own (now-adjacent) cell --- a \emph{drop-at-feet}
+tile that is always reachable by the carrier and never the LLM agent's own cell --- and waits for
+\texttt{status(ok)}, sent only after \texttt{vacateAfterDrop()} has stepped the BDI off the tile;
+(4) walks the LLM agent onto the vacated tile and retries the pickup a few times, detecting
+success from the carried-count delta rather than the pickup call's return value (since
+\texttt{opportunisticActions()} may already have auto-grabbed the parcels on arrival); (5) by
+default delivers the collected load to the nearest delivery tile and reports the parcels
+actually banked. Each step degrades to a clear terminal failure message (unreachable teammate,
+nothing to hand off, drop failed, load not collected) rather than leaving the mission to stall.
 
 \paragraph{Rendezvous / barrier synchronization.} \texttt{rendezvous\_with\_partner} sends
 \texttt{go\_near} to the partner, moves the LLM agent itself in parallel, then waits for both
