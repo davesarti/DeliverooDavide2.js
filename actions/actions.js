@@ -3,7 +3,6 @@ import { AGENT_CONFIG, } from "../config.js";
 import {
   RUNTIME,
   CAMP_PATROL_RADIUS,
-  COORD_WAIT_DEFAULT_TIMEOUT_MS,
 } from "../utils/constants.js";
 import { yieldControl, wait, waitUntil } from "../utils/asyncUtils.js";
 import {
@@ -548,14 +547,14 @@ export function createActions(socket, bs, options = {}) {
 
   /*
    * Freezes in place until an out-of-band signal flips bs.coordination.waiting
-   * false (set by setupBdiCoordination on a `signal` message), or until the
-   * timeout elapses. Reuses waitUntil. A timeout throws so the caller reports
-   * ok:false; a clean stop throws the standard ["stopped"].
+   * false (set by setupBdiCoordination on a `signal` message). By default the
+   * wait is INDEFINITE — a "red light / green light" park must hold until the
+   * operator's signal arrives, however long that takes. A finite timeoutMs may
+   * still be passed for a bounded wait; then a timeout throws so the caller
+   * reports ok:false. A clean stop (resume/preemption) throws ["stopped"].
    */
   async function waitForSignal(signal, timeoutMs, { shouldStop = () => false } = {}) {
-    const limit = Number.isFinite(timeoutMs)
-      ? timeoutMs
-      : COORD_WAIT_DEFAULT_TIMEOUT_MS;
+    const hasLimit = Number.isFinite(timeoutMs);
 
     bs.coordination.waiting = true;
     const startedAt = Date.now();
@@ -564,14 +563,14 @@ export function createActions(socket, bs, options = {}) {
       () =>
         !bs.coordination.waiting ||
         shouldStop() ||
-        Date.now() - startedAt > limit
+        (hasLimit && Date.now() - startedAt > timeoutMs)
     );
 
     const released = !bs.coordination.waiting;
     bs.coordination.waiting = false;
 
     if (shouldStop()) throw ["stopped"];
-    if (!released) throw `wait('${signal}') timed out after ${limit}ms`;
+    if (hasLimit && !released) throw `wait('${signal}') timed out after ${timeoutMs}ms`;
     return true;
   }
 

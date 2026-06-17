@@ -637,8 +637,14 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
         } catch {}
       }
 
-      // Resume this agent's own autonomous BDI loop.
-      bdi.resume();
+      // Resume this agent's own autonomous BDI loop — UNLESS we are parked on an
+      // external signal (red light / green light). Then THIS agent must also stay
+      // frozen, not wander off, until the operator's signal arrives: a later
+      // "green" mission clears partnerParkedOn and resumes it. The message router
+      // still delivers that mission while the BDI loop is paused.
+      if (!llmState.coordination.partnerParkedOn) {
+        bdi.resume();
+      }
     }
 
     }); // end missionQueue.enqueue

@@ -207,6 +207,23 @@ where a stray direct_partner(command="wait", signal="X") would park the partner 
 on a signal that never comes. rendezvous_with_partner closes the barrier atomically.
 
 ---
+Mission: If a parcel is initially picked up by one agent and later delivered by the other agent, you will receive a 200 points bonus.
+Type: cross-delivery HANDOFF task (NOT a durable rule). The "if ... +200" wording
+describes a coordination achievement to perform now, not a scoring rule — never
+store it as a stack-size rule. The PARTNER is the picker — you have no put-down
+primitive, so you only collect at the handoff tile and deliver. Do NOT give the
+pickup coordinates: you cannot see parcels near the partner, so let it self-select.
+Steps:
+1. direct_partner(command="pickup") — no x/y; the teammate picks a parcel IT can see. Note the cid.
+2. wait_for_partner(cid).
+3. direct_partner(command="putdown", x=<handoff>, y=<handoff>) — a tile you can both reach. Note the cid.
+4. wait_for_partner(cid).
+5. observe_environment, then pick_up_parcel at the handoff tile using the id you now see there.
+6. deliver_carried_parcels at a delivery tile.
+7. direct_partner(command="resume").
+8. final_reply.
+
+---
 Mission: One of you picks up parcel p1 at (2,2); the other delivers it.
 Type: handoff (parallel, different roles).
 Steps:

@@ -643,9 +643,33 @@ class IntentionRevision {
     let ok = true;
     let detail;
     try {
-      await this.#executePredicate(coordToPredicate(directive), {
-        shouldStop: () => false,
-      });
+      if (directive.command === "pickup" && directive.args?.x == null) {
+        // Self-directed pickup: the LLM gave no target because it cannot see
+        // the parcels near the partner (it only senses around itself). The
+        // partner chooses the best parcel from its OWN sensing, using the same
+        // pickup scoring as normal play. If none is reachable but it already
+        // carries something, the pickup is a no-op — the upcoming putdown still
+        // hands off the carried parcel.
+        const predicate = this.#selectBestPickup();
+        if (predicate) {
+          await this.#executePredicate(predicate, { shouldStop: () => false });
+          detail = `picked up parcel at (${predicate[1]},${predicate[2]})`;
+        } else if ((this.#bs.carry?.count ?? 0) === 0) {
+          throw "no reachable parcel in sight to pick up";
+        }
+      } else {
+        await this.#executePredicate(coordToPredicate(directive), {
+          shouldStop: () => false,
+        });
+        // A putdown drops the parcel on the partner's own cell and leaves it
+        // standing there. For a cross-delivery handoff the collector must enter
+        // that exact cell, but two agents can't share one — so vacate to a free
+        // neighbour before reporting done, otherwise the handoff deadlocks with
+        // "path not found" to the dropped parcel.
+        if (directive.command === "putdown") {
+          await this.#vacateAfterDrop();
+        }
+      }
     } catch (error) {
       ok = false;
       detail =
@@ -655,6 +679,60 @@ class IntentionRevision {
 
     c.current = null;
     c.sendStatus?.({ cid: directive.cid, ok, detail });
+  }
+
+  /*
+   * Step one tile off the current cell to a walkable neighbour, used after a
+   * handoff drop so the partner can reach the parcel just released here. go_to
+   * validates the real move (slide/crate/agent rules) and retries; if a
+   * neighbour turns out unusable, the next one is tried. Best-effort: failing to
+   * step aside must never fail the directive itself.
+   */
+  /*
+   * Chooses the best parcel for the partner to fetch for a self-directed handoff
+   * pickup (LLM issues `pickup` with no coordinates). Reuses the agent's own
+   * pickup scoring (intentionScore already folds in reachability, competition and
+   * decay), so it never diverges from normal play. Returns a ["go_pick_up", ...]
+   * predicate, or null when nothing reachable is in sight.
+   */
+  #selectBestPickup() {
+    let best = null;
+    let bestScore = 0;
+    for (const parcel of this.#bs.parcels.values()) {
+      if (parcel.carriedBy) continue;
+      const predicate = ["go_pick_up", parcel.x, parcel.y, parcel.id];
+      const score = this.intentionScore(predicate);
+      if (score > bestScore) {
+        bestScore = score;
+        best = predicate;
+      }
+    }
+    return best;
+  }
+
+  async #vacateAfterDrop() {
+    const grid = this.#bs.map?.grid;
+    const me = this.#bs.me;
+    if (!grid || !me) return;
+    const cx = Math.round(me.x);
+    const cy = Math.round(me.y);
+    const neighbours = [
+      [cx + 1, cy],
+      [cx - 1, cy],
+      [cx, cy + 1],
+      [cx, cy - 1],
+    ];
+    for (const [nx, ny] of neighbours) {
+      if (Number(grid[ny]?.[nx] ?? 0) === 0) continue; // wall / off-map
+      try {
+        await this.#executePredicate(["go_to", nx, ny], {
+          shouldStop: () => false,
+        });
+        return;
+      } catch {
+        // neighbour blocked (another agent, slide tile) — try the next.
+      }
+    }
   }
 
   /*

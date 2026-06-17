@@ -158,11 +158,10 @@ export const BDI_DELEGATION_DEFAULT_MS = 30000;
 export const DEFAULT_RULE_MAGNITUDE = 1000;
 
 // Constants used for BDI <-> LLM coordination
-// BDI `wait` primitive self-releases after this if no signal arrives (never
-// frozen forever). Kept short so an accidental `wait` directive (e.g. the LLM
-// mistakenly parking the partner instead of using wait_for_partner) recovers
-// quickly rather than blocking for a full minute.
-export const COORD_WAIT_DEFAULT_TIMEOUT_MS = 12000;
+// The BDI `wait` primitive now blocks INDEFINITELY by default until an operator
+// signal arrives (red light / green light), releasing only on that signal or a
+// clean stop. A bounded wait is still possible by passing an explicit timeoutMs
+// to the `wait` directive.
 // LLM `wait_for_partner` gives up after this so the executor loop never hangs.
 export const COORD_LLM_WAIT_TIMEOUT_MS = 60000;
 // BDI auto-resumes (exits directive mode) if it sits active with an empty queue

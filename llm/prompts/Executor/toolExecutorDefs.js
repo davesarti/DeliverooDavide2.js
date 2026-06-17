@@ -326,7 +326,8 @@ export const SYSTEM_EXECUTOR_TOOLS = [
   def(
     "direct_partner",
     "Send ONE command to your BDI teammate and get back a correlation id (cid). " +
-      "Commands: go_to (needs x,y), go_near (needs x,y,maxDist), pickup (needs x,y,parcelId), " +
+      "Commands: go_to (needs x,y), go_near (needs x,y,maxDist), pickup (omit x,y so the " +
+      "teammate picks the best parcel IT can see — you cannot see parcels near the teammate), " +
       "putdown (needs x,y), wait (needs signal; optional timeoutMs), resume (no args). " +
       "The teammate runs it asynchronously and later reports the result; read that result with " +
       "wait_for_partner(cid). Always send resume when the coordinated task is finished.",
@@ -340,7 +341,7 @@ export const SYSTEM_EXECUTOR_TOOLS = [
       x: intParam("Target x (go_to, go_near, pickup, putdown)."),
       y: intParam("Target y (go_to, go_near, pickup, putdown)."),
       maxDist: intParam("Max Manhattan distance from the target (go_near)."),
-      parcelId: param("Parcel id to pick up (pickup)."),
+      parcelId: param("Optional parcel id (pickup); omit to let the teammate self-select."),
       signal: param("Label the teammate should wait for (wait)."),
       timeoutMs: intParam("Optional max wait in milliseconds (wait)."),
     },
