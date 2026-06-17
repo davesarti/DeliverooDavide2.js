@@ -28,6 +28,7 @@ const ACTION_NAME_MAP = {
   // Navigation constraints
   block_navigation_tile: "block_tile",
   unblock_navigation_tile: "unblock_tile",
+  clear_navigation_rules: "clear_navigation_rules",
 
   // Team coordination
   direct_partner: "direct_partner",
