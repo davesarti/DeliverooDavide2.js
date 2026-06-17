@@ -1,38 +1,10 @@
 import "dotenv/config";
 
-/*
- * Resolves the active LLM endpoint from LLM_PROVIDER (default: openrouter).
- * The returned shape (baseURL / apiKey / model) stays stable across providers
- * so the client and downstream callers never need to know which one is active.
- *   - openrouter: OpenAI-compatible API at openrouter.ai, optional ranking headers.
- *   - litellm:    the local / self-hosted LiteLLM gateway.
- */
-function buildLlmConfig(provider) {
-  if (provider === "openrouter") {
-    const headers = {};
-    if (process.env.OPENROUTER_SITE_URL) headers["HTTP-Referer"] = process.env.OPENROUTER_SITE_URL;
-    if (process.env.OPENROUTER_APP_NAME) headers["X-Title"] = process.env.OPENROUTER_APP_NAME;
-
-    return {
-      provider,
-      baseURL: process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1",
-      apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct",
-      apiKeyVar: "OPENROUTER_API_KEY",
-      headers: Object.keys(headers).length ? headers : undefined,
-    };
-  }
-
-  return {
-    provider: "litellm",
-    baseURL: process.env.LITELLM_BASE_URL || "https://llm.bears.disi.unitn.it/v1",
-    apiKey: process.env.LITELLM_API_KEY,
-    model: process.env.LOCAL_MODEL || "llama-3.3-70b-lmstudio",
-    apiKeyVar: "LITELLM_API_KEY",
-  };
-}
-
-export const LLM_CONFIG = buildLlmConfig((process.env.LLM_PROVIDER || "openrouter").toLowerCase());
+export const LLM_CONFIG = {
+  baseURL: process.env.LITELLM_BASE_URL || "https://llm.bears.disi.unitn.it/v1",
+  apiKey: process.env.LITELLM_API_KEY,
+  model: process.env.LOCAL_MODEL || "llama-3.3-70b-lmstudio",
+};
 
 export const DELIVEROO_CONFIG = {
   host: process.env.HOST,
@@ -151,8 +123,6 @@ export function validateConfig() {
   }
 
   if (INSTANCES.some((i) => i.mode !== "BDI") && !LLM_CONFIG.apiKey) {
-    throw new Error(
-      `Missing ${LLM_CONFIG.apiKeyVar} (required when AGENT_MODE uses LLM, provider=${LLM_CONFIG.provider})`
-    );
+    throw new Error("Missing LITELLM_API_KEY (required when AGENT_MODE uses LLM)");
   }
 }
