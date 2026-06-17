@@ -55,33 +55,16 @@
 }
 
 \title{\textbf{A BDI--LLM Hybrid Multi-Agent System for DeliverooJS}}
-\author{Davide Senette \\ \small Universit\`a di Cagliari --- Corso di Autonomous Software Agents}
-\date{17 June 2026}
+\author{Davide Senette\\email: davide.senette@studenti.unitn.it, mat: 267070 \\\\Davide Sarti\\email: davide.sarti@studenti.unitn.it, mat: 267894}
+\date{Autonomous Software Agents Course\\17 June 2026}
 
 \begin{document}
 
 \maketitle
 
-\begin{abstract}
-This report describes the architecture of a two-agent cooperative system for DeliverooJS,
-a grid-world delivery game in which parcel rewards decay over time. The system pairs a
-classical BDI agent, built on an explicit belief--desire--intention cycle with continuous
-score-based intention revision, with an LLM-controlled agent that interprets natural-language
-missions and drives the same BDI machinery through an internal tool-call loop. Both agents
-share a structurally identical belief state and a persistent, LLM-synchronized rule set that
-biases option scoring without ever making goals unreachable. Coordination between agents is
-implemented as an asynchronous directive/status/signal protocol layered on top of the BDI's
-ordinary intention queue, supporting handoffs, rendezvous and barrier synchronization. When
-classical pathfinding cannot make progress because a crate obstructs the only route, the agent
-falls back to a PDDL STRIPS planner that can push crates aside, executing the resulting plan as
-a non-preemptable committed maneuver.
-\end{abstract}
-
 % ============================================================
 \section{System Overview}
 \label{sec:overview}
-
-Two cooperative agents share one DeliverooJS session.
 
 \begin{description}
   \item[Agent A --- the LLM agent.] Runs an \emph{embedded} autonomous BDI loop
@@ -127,8 +110,8 @@ Figure~\ref{fig:architecture} shows the resulting data and control flow.
 \node[subbox] (ebdi) at (1.3,3.3) {Embedded BDI\\ (pause/resume)};
 \node[box,fill=gray!5] (bsA) at (1.3,2.3) {Belief state $bs_A$};
 
-\node[subbox] (bdiloop) at (7.3,5.1) {IntentionRevision loop};
-\node[subbox] (coordlisten) at (7.3,4.2) {Coordination listener};
+\node[subbox] (bdiloop) at (7.3,4.8) {IntentionRevision loop};
+\node[subbox] (coordlisten) at (7.3,3.5) {Coordination listener};
 \node[box,fill=gray!5] (bsB) at (7.3,2.3) {Belief state $bs_B$};
 
 \draw[arr] (env.south west) -- (agentA.north) node[midway,left,font=\tiny]{sense / act};
@@ -224,9 +207,7 @@ sensing range.
 into a set of candidate predicates and inserts them into the intention queue in one batched
 call. It is purely generative: it decides what is \emph{reachable}, never what is
 \emph{worth doing} --- valuation is the exclusive responsibility of \texttt{intentionScore}
-(Section~\ref{sec:scoring}), so a candidate generated here can never diverge from what scoring
-would accept.
-
+(Section~\ref{sec:scoring}).
 \begin{table}[htbp]
 \centering
 \footnotesize
@@ -244,10 +225,6 @@ would accept.
 separately by the idle branch of the revision loop, Section~\ref{sec:scoring}).}
 \label{tab:options}
 \end{table}
-
-A crate-pushing maneuver (\texttt{pushBatch}-inserted via the same batched path) is not a
-distinct predicate: it is a recovery strategy invoked from inside \texttt{go\_to} when A*
-detects that a crate is the sole obstacle, and is described in Section~\ref{sec:pddl}.
 
 \texttt{agent.pushBatch(options)} filters out predicates already in the failed-intention
 cooldown pool or already queued, inserts the rest, and re-sorts the queue exactly \emph{once}
@@ -283,8 +260,7 @@ always transient congestion). Each pass of \texttt{loop()}:
 \subsection{Score computation}
 
 \texttt{intentionScore(predicate)} is the single authority on a predicate's worth; every number
-below is computed fresh from \texttt{bs} at scoring time, never cached across ticks beyond the
-EMA in \texttt{distanceFactor}.
+below is computed fresh from \texttt{bs} at scoring time. The quantity represents the potential optimistic score gain from an action.
 
 \paragraph{Decay factor.} Reward loss is priced through one quantity, the EMA-estimated reward
 lost per carried parcel per tile traveled:
@@ -345,7 +321,7 @@ cycles win). Patience is primarily spatial, then scaled by the server's declared
 forced to 0 when $n_{\text{adj}} < 4$ or the server declares infinite parcel generation, with
 $n_{\text{adj}}$ the number of spawn tiles within Manhattan radius 3 of the harvest anchor (the
 constants are \texttt{CAMP\_PATIENCE\_MIN\_TILES}=4 and \texttt{CAMP\_PATIENCE\_SATURATION\_TILES}=10)
-and $\mu=\min\!\big(\text{CAMP\_SPAWN\_RATE\_MAX\_MULT},\,\max(1,\,\text{CAMP\_SPAWN\_RATE\_NEUTRAL\_MS}/\text{parcelGenerationEvent})\big)$,
+and $\mu=\min\!\big(\text{CAMP\_SPAWN\_RATE\_MAX\_MULT},\,\max$\\$(1,\,\text{CAMP\_SPAWN\_RATE\_NEUTRAL\_MS}/\text{parcelGenerationEvent})\big)$,
 \texttt{CAMP\_SPAWN\_RATE\_MAX\_MULT}=1.3 and \texttt{CAMP\_SPAWN\_RATE\_NEUTRAL\_MS}=2000\,ms, so a
 map that spawns faster than the 2\,s neutral rate stretches both the growth curve and its ceiling,
 making a hot pocket worth camping longer. While hot, the camp loss
@@ -467,12 +443,12 @@ Figure~\ref{fig:revision-cycle} summarizes the full cycle.
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[font=\footnotesize]
-\node[box,text width=3.0cm] (belief) at (4,7.6) {Belief update};
-\node[box,text width=3.0cm] (optgen) at (4,6.75) {Option generation};
-\node[box,text width=3.0cm] (score) at (4,5.9) {Score computation};
-\node[box,text width=3.0cm] (sort) at (4,5.05) {Sort intentions (hysteresis check)};
-\node[box,text width=3.0cm] (best) at (4,4.2) {Best intention selected};
-\node[box,text width=3.0cm] (exec) at (4,3.35) {Execute intention};
+\node[box,text width=3.0cm] (belief) at (4,8.1) {Belief update};
+\node[box,text width=3.0cm] (optgen) at (4,6.85) {Option generation};
+\node[box,text width=3.0cm] (score) at (4,6) {Score computation};
+\node[box,text width=3.0cm] (sort) at (4,5.15) {Sort intentions};
+\node[box,text width=3.0cm] (best) at (4,4.3) {Best intention};
+\node[box,text width=3.0cm] (exec) at (4,3.45) {Execute intention};
 \node[decision,text width=1.7cm] (outcome) at (4,2.3) {Outcome?};
 
 \node[subbox,text width=2.1cm] (completed) at (0.4,1.0) {completed: remove};
@@ -538,7 +514,7 @@ coordination layer and the LLM's delegated tools.
 \paragraph{Navigation principles.}
 \begin{itemize}
   \item \textbf{A* with mixed hard/soft obstacles.} Walls and crates are hard; other agents are
-  hard only within \texttt{SOFT\_OBSTACLE\_HARD\_RADIUS}=2 tiles of the start (they are
+  hard only within \texttt{SOFT\_OBSTACLE\_HARD\_RADIUS}=1 tiles of the start (they are
   genuinely in the way \emph{now}), and merely add \texttt{AGENT\_SOFT\_PENALTY}=7.5 to the edge
   cost otherwise (they will likely have moved by the time the agent arrives).
   \item \textbf{Soft penalties from rules.} Entering a tile in \texttt{bs.rules.penaltyTiles}
@@ -559,7 +535,7 @@ coordination layer and the LLM's delegated tools.
   used throughout scoring (Eqs.~\ref{eq:drop-score}--\ref{eq:pickup-score}) are $O(1)$ instead of
   re-running BFS/A* on every score evaluation.
   \item \textbf{Crate detection.} \texttt{crateBlocksRoute()} plans twice --- once respecting
-  crates, once with \texttt{ignoreCrates:true} --- and concludes a crate is the blocker only when
+  crates, once with \\ \texttt{ignoreCrates:true} --- and concludes a crate is the blocker only when
   the first fails and the second succeeds, avoiding false positives from an agent merely
   orbiting a temporarily occupied choke.
   \item \textbf{PDDL invocation.} On a confirmed crate block, \texttt{pddlReach} sets
@@ -576,7 +552,7 @@ coordination layer and the LLM's delegated tools.
 \texttt{startLLMAgent(socket, bs, llmState, actions)} wires three independent pieces onto one
 agent: an embedded autonomous BDI (\texttt{startAutonomousBDI}, identical code path to Agent B),
 a \texttt{createCoordinator} for talking to the partner, and a chat listener. Incoming chat
-messages are pushed through \texttt{createMissionQueue}, which serializes mission handling so
+messages are pushed through \\ \texttt{createMissionQueue}, which serializes mission handling so
 two rapid messages never race over the same pause/resume state or the same parcels.
 
 Pausing is \emph{lazy}: the embedded BDI keeps harvesting while the LLM reasons about a message,
@@ -673,7 +649,7 @@ snapshot of the current game state. The loop (capped at \texttt{MAX\_ITERATIONS}
   \item If the action is in \texttt{BDI\_PAUSING\_TOOLS}, pause the embedded BDI (once).
   \item Execute the tool, append its observation as a \texttt{tool} message.
   \item \textbf{Terminal tools} (every persistent-rule/navigation store, plus
-  \texttt{collect\_and\_deliver} via \texttt{toolResult.terminal}) end the mission immediately
+  \texttt{collect\_and\_deliver} via \\ \texttt{toolResult.terminal}) end the mission immediately
   on success, using the tool's own confirmation text as the chat reply --- saving the extra
   round-trip a separate \texttt{final\_reply} would cost --- \emph{unless} the tool errored or
   \texttt{more:true} was set for a remaining compound clause.
@@ -720,11 +696,9 @@ copy of \texttt{bs.rules} never drifts from the LLM's.
 
 \paragraph{BDI side (\texttt{bdi/coordination.js}).} \texttt{setupBdiCoordination} attaches a
 message listener that pushes directives into \texttt{bs.coordination.queue}, flips
-\texttt{active}, and calls \texttt{agent.preemptForCoordination()}. \texttt{\#runCoordination()}
+\texttt{active}, and calls \texttt{agent.preemptForCoordination()}. \\ \texttt{\#runCoordination()}
 then drains the queue one directive at a time: \texttt{coordToPredicate} maps the wire command
-onto the same predicates Table~\ref{tab:plans} describes (\texttt{go\_to}, \texttt{go\_near},
-\texttt{pickup}$\to$\texttt{go\_pick\_up}, \texttt{putdown}$\to$\texttt{go\_drop\_off},
-\texttt{wait}), so directive execution reuses the ordinary plan layer verbatim.
+onto the same predicates Table~\ref{tab:plans} describes so directive execution reuses the ordinary plan layer verbatim.
 \texttt{vacateAfterDrop()} steps the agent one tile off its cell after a \texttt{putdown} so the
 partner can physically occupy the just-vacated tile to collect the handoff parcel. A
 \texttt{resume} directive clears \texttt{coordination.active}, returning control to the scored
@@ -733,23 +707,17 @@ LLM partner disappears mid-directive.
 
 \paragraph{Handoff protocol.} A cross-delivery handoff is driven end-to-end by a single tool,
 \texttt{handoff\_to\_partner}, rather than by the model manually sequencing
-\texttt{direct\_partner}/\texttt{wait\_for\_partner} calls: that manual choreography repeatedly
-deadlocked on the drop tile (a putdown aimed at the LLM agent's own cell, or at a tile the BDI
-could not reach), so the prompt now forbids it explicitly. The tool: (1) repeatedly issues
+\texttt{direct\_partner}/\texttt{wait\_for\_partner} calls. The tool: (1) repeatedly issues
 \texttt{direct\_partner(pickup)} with no coordinates so the BDI self-selects via
 \texttt{\#selectBestPickup()} (reusing \texttt{intentionScore}, so it never diverges from normal
 play), stacking up to an optional target count or a safety cap (\texttt{HANDOFF\_MAX\_PICKUPS});
 (2) sends \texttt{direct\_partner(go\_near)} to bring the loaded BDI adjacent to the LLM agent
 before dropping, so the hand-off lands within trivial reach; (3) issues
-\texttt{direct\_partner(putdown)} at the BDI's own (now-adjacent) cell --- a \emph{drop-at-feet}
-tile that is always reachable by the carrier and never the LLM agent's own cell --- and waits for
+\texttt{direct\_partner(putdown)} at the BDI's own (now-adjacent) cell and waits for
 \texttt{status(ok)}, sent only after \texttt{vacateAfterDrop()} has stepped the BDI off the tile;
-(4) walks the LLM agent onto the vacated tile and retries the pickup a few times, detecting
-success from the carried-count delta rather than the pickup call's return value (since
-\texttt{opportunisticActions()} may already have auto-grabbed the parcels on arrival); (5) by
+(4) walks the LLM agent onto the vacated tile and retries the pickup a few times. (5) By
 default delivers the collected load to the nearest delivery tile and reports the parcels
-actually banked. Each step degrades to a clear terminal failure message (unreachable teammate,
-nothing to hand off, drop failed, load not collected) rather than leaving the mission to stall.
+actually banked.
 
 \paragraph{Rendezvous / barrier synchronization.} \texttt{rendezvous\_with\_partner} sends
 \texttt{go\_near} to the partner, moves the LLM agent itself in parallel, then waits for both
@@ -767,7 +735,7 @@ avoids the race window a manual direct/move/wait sequence would leave open.
 \draw[arr] (2,6.2) -- (9,6.2) node[midway,above,font=\scriptsize]{directive(cid,command,args)};
 \node[note,text width=4.0cm,font=\scriptsize] at (9,5.3) {preemptForCoordination() then \#runCoordination() executes via executePredicate};
 \draw[arr] (9,3.9) -- (2,3.9) node[midway,above,font=\scriptsize]{status(cid, ok, detail)};
-\node[note,text width=4.0cm,font=\scriptsize] at (2,3.0) {wait\_for\_partner(cid) resolves (or a buffered status is consumed)};
+\node[note,text width=4.0cm,font=\scriptsize] at (2,3.0) {wait\_for\_partner(cid) resolves};
 \draw[arr] (2,1.9) -- (9,1.9) node[midway,above,font=\scriptsize]{signal(signal) then directive(resume)};
 \node[note,text width=4.0cm,font=\scriptsize] at (9,1.0) {coordination.active=false; scored loop resumes};
 \end{tikzpicture}
@@ -869,11 +837,11 @@ loop to abandon it mid-push.
 \begin{tikzpicture}[font=\footnotesize]
 \node[box] (target) at (4.3,6.6) {Target selected};
 \node[box] (astar) at (4.3,5.6) {A* search};
-\node[decision,text width=2.0cm] (blocked) at (4.3,4.5) {Crate blocks path?};
+\node[decision,text width=2.0cm] (blocked) at (4.3,4) {Crate blocks path?};
 \node[box,text width=2.5cm] (continue) at (1.1,3.2) {No: execute A* path normally};
-\node[box,text width=2.9cm] (genpddl) at (7.3,3.2) {Yes: generate PDDL problem};
-\node[box,text width=2.5cm] (planner) at (7.3,2.1) {Online planner (5\,s deadline)};
-\node[decision,text width=1.9cm] (found) at (7.3,1.0) {Plan found?};
+\node[box,text width=2.9cm] (genpddl) at (7.5,3.2) {Yes: generate PDDL problem};
+\node[box,text width=2.5cm] (planner) at (7.5,2.1) {Online planner};
+\node[decision,text width=1.9cm] (found) at (7.5,0.8) {Plan found?};
 \node[box,text width=2.7cm] (fallback) at (4.3,-0.3) {No: fall back to A*};
 \node[box,text width=2.5cm] (pushseq) at (10.3,-0.3) {Yes: execute push sequence};
 \node[box,text width=2.7cm] (committed) at (10.3,-1.8) {Committed maneuver: preemption disabled};
@@ -897,13 +865,5 @@ loop to abandon it mid-push.
 call; a found plan runs as a committed maneuver immune to preemption.}
 \label{fig:pddl-recovery}
 \end{figure}
-
-\paragraph{End-to-end example.} ``Bring me five parcels but avoid the rightmost delivery tile''
-exercises every layer at once: a RULE clause (\texttt{forbid\_delivery\_tile}, \texttt{more=true})
-followed by a TASK clause (\texttt{collect\_and\_deliver(parcels=5)}, Section~\ref{sec:llm}).
-Option generation still proposes the forbidden tile (Section~\ref{sec:options}); it loses purely
-because Eq.~\ref{eq:drop-score} floors its score to 0, so the embedded pickup/camp/deliver cycle
-(Sections~\ref{sec:scoring}--\ref{sec:plans}) banks all five parcels elsewhere without the
-constraint ever being special-cased outside the scoring formula.
 
 \end{document}
