@@ -240,10 +240,9 @@ export function createActions(socket, bs, options = {}) {
       if (shouldStop()) throw ["stopped"];
 
       if (timeoutMs != null && Date.now() - startedAt > timeoutMs) {
-        // Leg took too long (congestion / a slow contested route). Transient
-        // and re-probed after the flat retry cooldown — throw a plain string so
-        // the loop's failure logger prints one clean notice, not a stack trace.
-        throw "go_to timeout — will retry";
+        // Leg took too long (congestion / a slow contested route). Throw as
+        // movementBlocked so withMovementRetry in the LLM executor can retry.
+        throw { movementBlocked: true, message: "go_to timeout — will retry" };
       }
 
       for (let attempt = 0; ; attempt++) {
@@ -397,10 +396,10 @@ export function createActions(socket, bs, options = {}) {
       if (!result || !Array.isArray(result.path)) {
         // No route to the target. If a crate is the blocker, signal it so the
         // caller can fall back to PDDL; otherwise it's walls or agents — usually
-        // a transient block that clears on its own — so throw a plain string,
-        // not an Error, so the loop's failure logger prints one clean notice.
+        // a transient block that clears on its own. Throw as movementBlocked so
+        // withMovementRetry in the LLM executor can retry.
         if (crateBlocksRoute()) throw crateBlockError();
-        throw `Path not found to (${x}, ${y}) — will retry`;
+        throw { movementBlocked: true, message: `Path not found to (${x}, ${y}) — will retry` };
       }
 
       const effectiveTimeoutMs =

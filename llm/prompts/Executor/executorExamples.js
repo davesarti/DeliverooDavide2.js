@@ -25,6 +25,14 @@ Steps:
 1. final_reply("Mission rejected: explicit negative reward for immediate execution.")
 
 ---
+Mission: Move to (4,7) to get +10pts
+Type: action task — movement with positive reward. Reward is the motivation, not a reason to reject.
+Steps:
+1. move_to(x=4, y=7)
+2. final_reply("Arrived at (4,7).")
+A positive "+N pts" is NOT a negative reward — do NOT reject it. Proceed to move_to.
+
+---
 Mission: What is the capital of Italy?
 Type: factual query — general knowledge, no game action needed.
 Steps:
