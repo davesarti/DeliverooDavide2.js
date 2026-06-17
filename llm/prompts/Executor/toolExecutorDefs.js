@@ -114,11 +114,14 @@ export const SYSTEM_EXECUTOR_TOOLS = [
 
   def(
     "deliver_carried_parcels",
-    "Move to a delivery tile and deliver all currently carried parcels.",
+    "Put down all carried parcels at a tile. On a delivery tile this banks/scores " +
+      "them (a normal delivery); on any other in-map tile it leaves them on the " +
+      "ground for a teammate to collect (a Level-3 handoff drop). Use a real " +
+      "delivery tile whenever the goal is to score the parcels.",
     {
       thought,
-      x: intParam("Delivery tile x coordinate."),
-      y: intParam("Delivery tile y coordinate."),
+      x: intParam("Target tile x coordinate (a delivery tile to score, or a handoff tile)."),
+      y: intParam("Target tile y coordinate (a delivery tile to score, or a handoff tile)."),
     },
     ["thought", "x", "y"]
   ),
