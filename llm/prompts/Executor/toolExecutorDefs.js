@@ -319,6 +319,12 @@ export const SYSTEM_EXECUTOR_TOOLS = [
     ["thought", "x", "y"]
   ),
 
+  def(
+    "clear_navigation_rules",
+    "Remove every blocked-tile navigation constraint in one call.",
+    { thought, more }
+  ),
+
   // ==========================================
   // Team coordination (BDI teammate)
   // ==========================================
