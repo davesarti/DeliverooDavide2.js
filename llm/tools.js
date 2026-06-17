@@ -446,11 +446,23 @@ export function setStackSize(
   // mission from landing an effect on the wrong side — e.g. "0 points under 2"
   // is unmetMultiplier 0, "double for 3+" is metMultiplier 2, "under 3 costs
   // 10" is unmetPenalty 10, "+20 for a full stack" is metReward 20.
-  // On-target (met) is neutral by default; off-target (unmet) defaults to a hard
-  // penalty of DEFAULT_RULE_MAGNITUDE so a stack rule given no explicit penalty
-  // still strongly discourages delivering off the target stack (acts as a block).
+  // On-target (met) and off-target (unmet) are both neutral (identity) by
+  // default. The hard DEFAULT_RULE_MAGNITUDE penalty is injected on the unmet
+  // side ONLY for a bare constraint — a rule with no incentive on either side
+  // ("deliver stacks of exactly 3") — so it still discourages delivering off the
+  // target stack (acts as a block) instead of being inert. When the mission
+  // frames only an upside ("2x for met", "+50 for at least 4"), the unmet side
+  // stays neutral: a met reward/multiplier must NOT silently become a hard
+  // -DEFAULT_RULE_MAGNITUDE unmet penalty the mission never asked for.
   const met = { mult: 1, delta: 0 };
-  const unmet = { mult: 1, delta: -DEFAULT_RULE_MAGNITUDE };
+  const unmet = { mult: 1, delta: 0 };
+
+  const hasMetIncentive =
+    (typeof metReward === "number" && isFinite(metReward)) ||
+    (typeof metMultiplier === "number" && isFinite(metMultiplier));
+  const hasUnmetSpec =
+    (typeof unmetPenalty === "number" && isFinite(unmetPenalty)) ||
+    (typeof unmetMultiplier === "number" && isFinite(unmetMultiplier));
 
   if (typeof metReward === "number" && isFinite(metReward)) {
     met.delta = metReward;
@@ -463,6 +475,12 @@ export function setStackSize(
   }
   if (typeof unmetMultiplier === "number" && isFinite(unmetMultiplier)) {
     unmet.mult = unmetMultiplier;
+  }
+
+  // Bare constraint: no incentive specified anywhere -> fall back to the hard
+  // off-target penalty so the rule is not inert.
+  if (!hasMetIncentive && !hasUnmetSpec) {
+    unmet.delta = -DEFAULT_RULE_MAGNITUDE;
   }
 
   const newRule = { mode, count, met, unmet };
