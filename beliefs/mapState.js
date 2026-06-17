@@ -1,4 +1,4 @@
-import { canEnterTile, DIRECTIONS } from "../utils/mapUtils.js";
+import { canEnterTile, DIRECTIONS, REVERSE_MOVE } from "../utils/mapUtils.js";
 
 /*
  * Builds for each cell the distance to all delivery tiles.
@@ -103,7 +103,14 @@ export function buildSpawnDistanceMap(width, height, tiles, spawnTiles) {
 
                 if (!insideMap) continue;
                 if (visited[nextY][nextX]) continue;
-                if (!canEnterTile(tileMap[nextY][nextX], move)) continue;
+
+                // The BFS expands OUT from the spawn tile, but the agent travels
+                // the other way — from `next` TOWARD the spawn — so the real edge
+                // is next -> current, moving REVERSE_MOVE[move] and ENTERING
+                // `current`. Honor the arrow on `current` for that reverse move,
+                // and require `next` to be a real (non-wall) tile to stand on.
+                if (Number(tileMap[nextY][nextX]) === 0) continue;
+                if (!canEnterTile(tileMap[current.y][current.x], REVERSE_MOVE[move])) continue;
 
                 visited[nextY][nextX] = true;
                 spawnTileMap[nextY][nextX][i].distance = current.distance + 1;

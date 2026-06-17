@@ -65,6 +65,26 @@ const RULE_TOOL_NAMES = new Set([
 // set; collect_and_deliver signals terminality per-call via toolResult.terminal.
 const TERMINAL_TOOL_NAMES = RULE_TOOL_NAMES;
 
+// Tools that take exclusive control of THIS agent so the autonomous BDI loop is
+// paused (once, lazily) the first time one is about to execute: the "direct
+// mission" self-task tools (movement / collect_and_deliver), rendezvous (which
+// walks self via goNear), and wait_for_partner — the agent must hold still
+// awaiting the teammate, not wander off mid-coordination. Everything else keeps
+// the loop harvesting while the LLM elaborates: rule/query tools only read state
+// or store a rule, and direct_partner / signal_partner only command or signal
+// the TEAMMATE without committing this agent. The one remaining freeze case — a
+// red-light `wait` directive that parks the partner — is handled separately, off
+// partnerParkedOn, below. Names are the mapped (post-mapExecutorAction) tool
+// names the executor switch dispatches on.
+const BDI_PAUSING_TOOLS = new Set([
+  "collect_and_deliver",
+  "go_to",
+  "go_pick_up",
+  "go_drop_off",
+  "rendezvous_with_partner",
+  "wait_for_partner",
+]);
+
 // ==========================================
 // Logging
 // ==========================================
@@ -440,13 +460,23 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
 
     let missionId = null;
 
-    try {
-      // Stop autonomous BDI behavior so it does not drive the agent while the
-      // message is interpreted; resumed in finally. pause() preempts the
-      // running intention (re-queued, not failed) well before the executor
-      // issues any movement.
+    // The autonomous BDI loop keeps harvesting while the LLM interprets the
+    // message. It is paused lazily — only the first time a body-driving /
+    // coordination tool is about to run (see BDI_PAUSING_TOOLS) — so a pure
+    // rule/query mission never interrupts play. Resumed in finally; pause() and
+    // resume() are idempotent, so a no-op resume after a non-pausing mission is
+    // harmless. pausedForMission also guards the up-front pause from firing
+    // twice within one mission.
+    let pausedForMission = false;
+    const pauseBdiForMission = () => {
+      if (pausedForMission) return;
+      // pause() preempts the running intention (re-queued, not failed) before
+      // the executor issues any movement of its own.
       bdi.pause();
+      pausedForMission = true;
+    };
 
+    try {
       missionId = logger.startMission(msg, bs.rules.rendered ?? "None.");
 
       const messages = [
@@ -535,6 +565,14 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           continue;
         }
 
+        // A self-moving tool is about to take exclusive control of the agent's
+        // body: stop the autonomous loop now (once) so it does not fight the
+        // task. Rule/query and teammate-only coordination tools fall through and
+        // the loop keeps harvesting.
+        if (BDI_PAUSING_TOOLS.has(action.name)) {
+          pauseBdiForMission();
+        }
+
         const toolResult = await executeTool(
           action,
           bs,
@@ -545,6 +583,15 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           bdi
         );
         const observation = toolResult.observation;
+
+        // Red light: a directive that just parked the partner on an external
+        // signal (direct_partner "wait") freezes this agent too — the whole team
+        // stops until a later green-light mission clears the park (the finally
+        // then resumes). Pause now so this agent stops harvesting the moment it
+        // calls the red light, not only when the mission ends.
+        if (llmState.coordination.partnerParkedOn) {
+          pauseBdiForMission();
+        }
 
         if (toolResult.deliverySucceeded) {
           if (missionStats === null) {

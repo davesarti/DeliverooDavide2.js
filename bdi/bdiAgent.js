@@ -399,12 +399,20 @@ class IntentionRevision {
     }
 
     if (action === "camp") {
-      // Camp is viable only while the pocket is still "hot" — a parcel was
-      // picked up within the pocket's adaptive patience window (longer for dense
-      // spawn clusters, near-zero for isolated tiles / non-spawning maps). Once
-      // it goes cold the score drops to invalid, so a distinct `explore`
-      // intention (empty-handed) or delivery (carrying) takes over. Camp never
-      // performs exploration itself.
+      const carriedCount = myParcels.length;
+
+      // Camp only ever runs while carrying — it exists to gather a fuller load
+      // before delivering. Empty-handed there is nothing to camp for, so camp is
+      // invalid and the idle loop explores instead.
+      if (carriedCount === 0) {
+        if (out) { out.carriedCount = 0; out.reason = "not_carrying"; out.finalScore = -1; }
+        return -1;
+      }
+
+      // Carrying: camp is viable only while the pocket is still "hot" — a parcel
+      // was picked up within the pocket's adaptive patience window (longer for
+      // dense spawn clusters, near-zero for isolated tiles / non-spawning maps).
+      // Once it goes cold the score drops to invalid and delivery takes over.
       const hint = this.#bs.lastParcelHint;
       if (!hint) {
         if (out) { out.reason = "no_hint"; out.finalScore = -1; }
@@ -416,14 +424,6 @@ class IntentionRevision {
       if (!hot) {
         if (out) { out.patienceMs = patienceMs; out.elapsedMs = elapsedMs; out.hot = false; out.reason = "pocket_cold"; out.finalScore = -1; }
         return -1;
-      }
-
-      const carriedCount = myParcels.length;
-
-      // Idle camp: a tiny incentive, just above exploration.
-      if (carriedCount === 0) {
-        if (out) { out.patienceMs = patienceMs; out.elapsedMs = elapsedMs; out.hot = true; out.carriedCount = 0; out.reason = "idle_camp"; out.finalScore = CAMP_INCENTIVE; }
-        return CAMP_INCENTIVE;
       }
 
       // Carrying: camping for more is only worth it under capacity and while

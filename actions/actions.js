@@ -13,8 +13,13 @@ import {
   distance,
   DIRECTIONS,
 } from "../utils/mapUtils.js";
-import { spawnMapDistance } from "../utils/stateUtils.js";
+import { nearestSpawnTile } from "../utils/stateUtils.js";
 import { effectiveCapacity } from "../bdi/options.js";
+import {
+  applyParcelValueBand,
+  stackPickupOvershoots,
+  allStackRulesSatisfied,
+} from "../bdi/ruleScoring.js";
 import {
   recordStepDecaySample,
   movementDurationMs,
@@ -120,13 +125,45 @@ export function createActions(socket, bs, options = {}) {
    * are always worth doing regardless of the current intention.
    */
   async function opportunisticActions() {
-    // Opportunistic auto-grab/auto-deliver is disabled: it acts on STEP cost
-    // alone (zero detour) but bypasses the scored BDI loop, so it ignores the
-    // persistent rules that price the ACT itself (reward filter, stack-size,
-    // delivery-tile penalties) and can trigger strong penalties. Until it
-    // properly consults the scoring authority, every pickup/delivery goes
-    // through the scored loop only. No-op for now.
-    return;
+    // While a coordination directive is active, the agent does exactly what the
+    // LLM told it — no auto-grab/auto-deliver, which would e.g. deliver a parcel
+    // meant for a handoff before it reaches the drop tile.
+    if (bs.coordination?.active) return;
+
+    const x = Math.round(bs.me.x);
+    const y = Math.round(bs.me.y);
+
+    // Auto-grab a free parcel lying on this tile (zero detour), but consult the
+    // persistent rules first so it never does what the scored loop would refuse:
+    // skip a parcel the value rules price at <= 0 (reward filter), and skip one
+    // that would overshoot an exactly/at_most stack cap.
+    if (carriedCount() < effectiveCapacity(bs)) {
+      for (const parcel of bs.parcels.values()) {
+        if (parcel.carriedBy) continue;
+        if (Math.round(parcel.x) !== x || Math.round(parcel.y) !== y) continue;
+        if (applyParcelValueBand(parcel.reward, bs.rules) <= 0) continue;
+        if (stackPickupOvershoots(carriedCount() + 1, bs.rules)) continue;
+        await pickup();
+        break;
+      }
+    }
+
+    // Auto-bank the carried parcels when standing on a delivery tile (zero
+    // detour), unless a rule says otherwise: skip a forbidden/penalised delivery
+    // tile, and skip while a stack-size rule is still unmet so an incomplete
+    // stack is not dumped (forfeiting the bonus the scored loop is gathering for).
+    if (
+      carriedCount() > 0 &&
+      isDeliveryTile(x, y, bs.map.deliveryTiles ?? [])
+    ) {
+      const penalised = bs.rules?.penaltyDeliveries?.has(`${x},${y}`);
+      if (!penalised && allStackRulesSatisfied(carriedCount(), bs.rules)) {
+        await putdown();
+        // Forget the harvest pocket on delivery (see goDropOff): a fresh carry
+        // episode should anchor camp on its own harvest, not the delivered one.
+        bs.lastParcelHint = null;
+      }
+    }
   }
 
   /*
@@ -450,6 +487,11 @@ export function createActions(socket, bs, options = {}) {
     if (deliveredNow > 0) {
       bs.metrics ??= { deliveredParcels: 0 };
       bs.metrics.deliveredParcels += deliveredNow;
+      // Forget the harvest pocket on delivery: the next carry episode should
+      // anchor camp on its own harvest. Clearing here also avoids re-anchoring on
+      // the just-delivered pocket during the tick where carry.count is still
+      // stale right after delivery.
+      bs.lastParcelHint = null;
     }
     return result;
   }
@@ -587,57 +629,54 @@ export function createActions(socket, bs, options = {}) {
       : CAMP_PATROL_RADIUS;
   }
 
-  function pickCampAnchor() {
-    const me = bs.me;
-    // Camp only runs once the scorer has judged the pocket hot, so a recent
-    // hint exists; the spawn-tile search is a defensive fallback only.
-    const hint = bs.lastParcelHint;
-    if (hint) {
-      // Center the camp on the local spawn cluster rather than the exact tile a
-      // parcel was last picked up on — on a big green zone that tile is often an
-      // edge, leaving the agent camping a corner. Take the centroid of the spawn
-      // tiles within the view radius of the hint and snap it to the nearest spawn
-      // tile, so the agent sits where it can watch the most of the pocket.
-      const radius = campRadius();
-      const near = (bs.map.spawnTiles ?? []).filter(
-        (t) => Math.abs(t.x - hint.x) + Math.abs(t.y - hint.y) <= radius
-      );
-      if (near.length === 0) return { x: hint.x, y: hint.y };
+  /*
+   * Snaps a seed point to the centre of its local spawn cluster: take the
+   * centroid of the spawn tiles within the view radius of the seed and return
+   * the spawn tile closest to it. On a big green zone the seed (the agent's
+   * entry tile, or the tile a parcel was last picked up on) is usually an edge,
+   * which would leave the agent camping a corner; centring on the cluster makes
+   * it sit where it can watch the most of the pocket.
+   */
+  function clusterCenter(seed) {
+    const radius = campRadius();
+    const near = (bs.map.spawnTiles ?? []).filter(
+      (t) => Math.abs(t.x - seed.x) + Math.abs(t.y - seed.y) <= radius
+    );
+    if (near.length === 0) return { x: seed.x, y: seed.y };
 
-      let sumX = 0;
-      let sumY = 0;
-      for (const t of near) {
-        sumX += t.x;
-        sumY += t.y;
-      }
-      const cx = sumX / near.length;
-      const cy = sumY / near.length;
-
-      let best = null;
-      let bestDist = Infinity;
-      for (const t of near) {
-        const d = Math.abs(t.x - cx) + Math.abs(t.y - cy);
-        if (d < bestDist) {
-          bestDist = d;
-          best = t;
-        }
-      }
-      return best ? { x: best.x, y: best.y } : { x: hint.x, y: hint.y };
+    let sumX = 0;
+    let sumY = 0;
+    for (const t of near) {
+      sumX += t.x;
+      sumY += t.y;
     }
+    const cx = sumX / near.length;
+    const cy = sumY / near.length;
 
     let best = null;
     let bestDist = Infinity;
-    for (const tile of bs.map.spawnTiles ?? []) {
-      const d =
-        spawnMapDistance(bs.map.spawnDistanceMap, me, tile) ??
-        Math.abs(tile.x - Math.round(me.x)) +
-          Math.abs(tile.y - Math.round(me.y));
+    for (const t of near) {
+      const d = Math.abs(t.x - cx) + Math.abs(t.y - cy);
       if (d < bestDist) {
         bestDist = d;
-        best = tile;
+        best = t;
       }
     }
-    return best ? { x: best.x, y: best.y } : null;
+    return best ? { x: best.x, y: best.y } : { x: seed.x, y: seed.y };
+  }
+
+  function pickCampAnchor() {
+    // Camp only runs while carrying (the scorer makes it invalid empty-handed),
+    // so anchor near where parcels were actually harvested (the hint): the agent
+    // gathers a fuller load before delivering. Centre the anchor on the local
+    // spawn cluster so a big zone is watched from its middle rather than the
+    // edge the parcel was picked up on.
+    const hint = bs.lastParcelHint;
+    if (hint) return clusterCenter(hint);
+
+    // No hint (carrying but nothing harvested yet this episode): fall back to
+    // the nearest green tile.
+    return nearestSpawnTile(bs, bs.me);
   }
 
   /*
@@ -652,20 +691,61 @@ export function createActions(socket, bs, options = {}) {
     const near = (bs.map.spawnTiles ?? []).filter(
       (t) => Math.abs(t.x - anchor.x) + Math.abs(t.y - anchor.y) <= radius
     );
-    return near.length > 0 ? near : [anchor];
+    if (near.length === 0) return [anchor];
+
+    // Shortest-loop patrol. Two cheap passes turn the raw tile list (which comes
+    // in arbitrary map order, so the agent zig-zags) into a short cyclic route:
+    //
+    //  1. Drop interior tiles — a spawn tile whose four orthogonal neighbours are
+    //     all spawn tiles too. The agent passes within view of them while walking
+    //     the perimeter, so stepping on them only adds travel without revealing
+    //     anything new. Pure lines/edges keep every tile (nothing is interior).
+    //  2. Greedy nearest-neighbour ordering from the anchor, so the patrol flows
+    //     around the pocket instead of jumping between distant cells. The while
+    //     loop in camp() repeats this order, closing it into a loop.
+    const key = (x, y) => `${x},${y}`;
+    const present = new Set(near.map((t) => key(t.x, t.y)));
+    const perimeter = near.filter(
+      (t) =>
+        !(
+          present.has(key(t.x + 1, t.y)) &&
+          present.has(key(t.x - 1, t.y)) &&
+          present.has(key(t.x, t.y + 1)) &&
+          present.has(key(t.x, t.y - 1))
+        )
+    );
+
+    const remaining = perimeter.length > 0 ? perimeter : near;
+    const ordered = [];
+    let from = anchor;
+    while (remaining.length > 0) {
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < remaining.length; i++) {
+        const d =
+          Math.abs(remaining[i].x - from.x) + Math.abs(remaining[i].y - from.y);
+        if (d < bestDist) {
+          bestDist = d;
+          bestIdx = i;
+        }
+      }
+      from = remaining.splice(bestIdx, 1)[0];
+      ordered.push(from);
+    }
+    return ordered;
   }
 
   /*
-   * Camps a productive parcel pocket: loiter near where parcels appear and
-   * patrol the local cluster so new spawns are grabbed at once, instead of
-   * wandering off the moment the view is empty.
+   * Camps a productive parcel pocket WHILE CARRYING: loiter near where parcels
+   * were harvested and patrol the local cluster to gather a fuller load before
+   * delivering, instead of wandering off the moment the view is empty.
    *
    * Camp does one thing only — patrol the pocket — and runs until preempted.
-   * It never explores or delivers itself: when the pocket goes cold (or the
-   * carry loss budget runs out), intentionScore makes camp invalid and the
-   * scorer hands off to a distinct `explore` intention (empty-handed) or to
-   * delivery (carrying). The patrol charges the carry loss budget so the
-   * scorer can enforce it.
+   * It never explores or delivers itself: when the pocket goes cold, the load is
+   * full, or the carry loss budget runs out, intentionScore makes camp invalid
+   * and the scorer hands off to delivery. (Empty-handed, camp is always invalid,
+   * so the agent explores instead.) The patrol charges the carry loss budget so
+   * the scorer can enforce it.
    */
   async function camp({ shouldStop = () => false } = {}) {
     const anchor = pickCampAnchor();

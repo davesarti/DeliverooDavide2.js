@@ -12,6 +12,19 @@ export const DIRECTIONS = [
 ];
 
 /*
+ * Opposite of each move. A distance map built by BFS expanding OUT from a target
+ * tile must be read in the agent's real travel direction — toward the target,
+ * the reverse of the expansion — so arrow tiles are honored for the direction
+ * the agent actually moves.
+ */
+export const REVERSE_MOVE = {
+  right: "left",
+  left: "right",
+  up: "down",
+  down: "up",
+};
+
+/*
  * Checks whether a cell can be entered with a given move.
  * Handles walls and directional tiles.
  */

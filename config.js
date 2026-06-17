@@ -18,10 +18,12 @@ export const AGENT_CONFIG = {
     algorithm: "astar",
   },
   behavior: {
-    // Camp dense parcel pockets instead of roaming when idle. On by default;
-    // disable with CAMP=false. The adaptive patience already makes camping
-    // self-limiting on sparse maps (a lone spawn tile gets 0 patience and
-    // falls straight back to exploring), so it is safe as the default.
+    // While CARRYING, camp the harvest pocket to gather a fuller load before
+    // delivering, instead of leaving the moment the view is empty. On by
+    // default; disable with CAMP=false. Empty-handed the agent always explores
+    // (idle camping was removed). The adaptive patience keeps carry-camping
+    // self-limiting on sparse maps (a lone spawn tile gets 0 patience and the
+    // agent delivers straight away), so it is safe as the default.
     camp: !/^(false|0|no|off)$/i.test(process.env.CAMP ?? ""),
   },
 };

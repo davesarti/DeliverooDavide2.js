@@ -105,6 +105,31 @@ function stackRuleSatisfied(rule, carriedCount) {
 }
 
 /*
+ * True when carrying `resultingCount` after a pickup would overshoot an
+ * exactly/at_most cap on any active stack rule. Mirrors the overshoot test in
+ * stackPickupModifier, but as a plain predicate: opportunistic (zero-detour)
+ * pickup uses it to decline a free parcel that would break the stack the rule
+ * asks the agent to keep.
+ */
+export function stackPickupOvershoots(resultingCount, rules) {
+  return stackRulesOf(rules).some(
+    (r) =>
+      (r.mode === "exactly" || r.mode === "at_most") &&
+      resultingCount > r.count
+  );
+}
+
+/*
+ * True when `carriedCount` satisfies EVERY active stack rule. Opportunistic
+ * dropoff uses it to avoid banking an incomplete stack (e.g. delivering 1 while
+ * an "exactly 3" rule is active), which would forfeit the stack bonus the scored
+ * loop is gathering toward. No rules -> trivially true.
+ */
+export function allStackRulesSatisfied(carriedCount, rules) {
+  return stackRulesOf(rules).every((r) => stackRuleSatisfied(r, carriedCount));
+}
+
+/*
  * The inclusive carried-count range in which a rule's stack is "met".
  * at_least N -> [N, ∞); at_most N -> [1, N]; exactly N -> [N, N].
  */

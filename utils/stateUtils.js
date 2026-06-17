@@ -50,6 +50,29 @@ export function deliveryMapDistance(deliveryDistanceMap, from, target) {
 }
 
 /*
+ * Nearest reachable spawn ("green") tile to a position. Uses the precomputed
+ * spawnDistanceMap when available, falling back to Manhattan distance for tiles
+ * the map has no entry for. Returns { x, y } or null when there are no spawn
+ * tiles. Shared by camp anchor selection (actions) and the idle-camp scoring
+ * gate (bdiAgent) so both judge the same pocket.
+ */
+export function nearestSpawnTile(bs, from) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const tile of bs.map.spawnTiles ?? []) {
+    const d =
+      spawnMapDistance(bs.map.spawnDistanceMap, from, tile) ??
+      Math.abs(tile.x - Math.round(from.x)) +
+        Math.abs(tile.y - Math.round(from.y));
+    if (d < bestDist) {
+      bestDist = d;
+      best = tile;
+    }
+  }
+  return best ? { x: best.x, y: best.y } : null;
+}
+
+/*
  * Reads from the spawnDistanceMap the distance between a position
  * and a specific spawn tile.
  */
