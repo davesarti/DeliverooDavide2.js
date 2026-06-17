@@ -197,6 +197,25 @@ Steps:
 3. final_reply.
 
 ---
+Mission: Drop a package at the leftmost delivery tile to get 5pt.
+Observation: carried.count = 0, visibleParcels = [].
+Type: action task — a specific delivery to a resolved tile (NOT harvesting), but you are
+not carrying anything yet and none is visible right now.
+Steps:
+1. resolve_delivery_tile(query="leftmost").
+2. observe_environment — re-check; a parcel can appear or come into view.
+3. If still none visible: move_to a few tiles toward the middle of the map (or toward
+   wherever parcels were last seen) and observe_environment again. Repeat a few times.
+4. As soon as one parcel is visible: pick_up_parcel at its coordinates.
+5. deliver_carried_parcels at the tile resolved in step 1.
+6. final_reply.
+Do NOT conclude "no package to drop" after a single empty check — the rejection
+whitelist does not include "nothing visible right now", and observe_environment /
+move_to cost nothing to retry. Do NOT call collect_and_deliver instead: it picks its
+own delivery tile and may bank far more than "a package", so it would not satisfy
+"at the leftmost tile" even though it reports success.
+
+---
 Mission: Both of you move to within 3 tiles of (10,4) and wait for each other.
 Type: rendezvous.
 Steps:
