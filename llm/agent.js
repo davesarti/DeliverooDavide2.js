@@ -31,6 +31,7 @@ import {
   clearPersistentRules,
   blockTile,
   unblockTile,
+  clearNavigationRules,
   buildValidatorSnapshot,
 } from "./tools.js";
 import { createCoordinator } from "./coordinator.js";
@@ -53,6 +54,7 @@ const RULE_TOOL_NAMES = new Set([
   "clear_persistent_rules",
   "block_tile",
   "unblock_tile",
+  "clear_navigation_rules",
 ]);
 
 // Tools that, on success, fully complete a mission on their own — storing a
@@ -336,6 +338,9 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
 
     case "unblock_tile":
       return makeToolResult(unblockTile(params, bs));
+
+    case "clear_navigation_rules":
+      return makeToolResult(clearNavigationRules(params, bs));
 
     default:
       return makeToolResult(`Unknown action: ${name}.`);
