@@ -46,6 +46,10 @@ export function findDeliveryTile({ query }, bs) {
     return "Error: no delivery tiles available.";
   }
 
+  if (typeof query !== "string" || query.trim() === "") {
+    return "Error: query must be one of leftmost, rightmost, topmost, bottommost, nearest.";
+  }
+
   const normalized = query.trim().toLowerCase();
 
   let tile = null;
@@ -370,7 +374,7 @@ function resolveMagnitude(value, fallback) {
   return value;
 }
 
-function validateTile(x, y, bs) {
+export function validateTile(x, y, bs) {
   if (!Number.isInteger(x) || !Number.isInteger(y)) {
     return `Error: concrete integer coordinates required, received (${x}, ${y}).`;
   }
@@ -382,7 +386,7 @@ function validateTile(x, y, bs) {
   return null;
 }
 
-function validateDeliveryTile(x, y, bs) {
+export function validateDeliveryTile(x, y, bs) {
   const tileError = validateTile(x, y, bs);
   if (tileError) return tileError;
 
