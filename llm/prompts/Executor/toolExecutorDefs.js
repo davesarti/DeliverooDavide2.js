@@ -101,6 +101,32 @@ export const SYSTEM_EXECUTOR_TOOLS = [
   ),
 
   def(
+    "handoff_to_partner",
+    "Run a complete cross-delivery HANDOFF in one atomic step: the BDI teammate " +
+      "picks up parcel(s) it can reach, drops the whole load on its own tile, then " +
+      "YOU walk over, collect it, and (by default) deliver it. Use this for any " +
+      "mission like 'one agent takes a parcel, drops it, the other picks it up and " +
+      "delivers', 'hand a parcel from one of you to the other', or 'if one picks up " +
+      "and the other delivers you get a bonus'. Handles an arbitrary number of " +
+      "parcels. Do NOT drive a handoff manually with direct_partner + putdown + " +
+      "pick_up_parcel — that repeatedly deadlocked on the drop tile; this tool " +
+      "chooses a reachable drop tile and sequences both agents itself.",
+    {
+      thought,
+      more,
+      parcels: intParam(
+        "Optional target number of parcels for the teammate to collect before handing off. Omit to hand off whatever it can reach."
+      ),
+      deliver: {
+        type: "boolean",
+        description:
+          "Whether you should deliver the collected parcels after picking them up. Defaults to true; set false to only collect the handoff and keep carrying.",
+      },
+    },
+    ["thought"]
+  ),
+
+  def(
     "pick_up_parcel",
     "Move to a visible parcel and pick it up.",
     {
@@ -134,9 +160,12 @@ export const SYSTEM_EXECUTOR_TOOLS = [
       "'deliver parcels', 'gather and deliver', 'fill up and deliver'. " +
       "It honours all active durable rules (stack size, delivery-tile and parcel-value rules). " +
       "Prefer this over manual observe_environment + pick_up_parcel + deliver_carried_parcels " +
-      "loops: it is far faster and ends the mission by itself. Do NOT use it for a single " +
-      "explicit move to a coordinate (use move_to) or for delivering a specific already-carried " +
-      "parcel to a named tile (use deliver_carried_parcels).",
+      "loops: it is far faster and ends the mission by itself. This is a SOLO tool — one agent " +
+      "harvests for itself. Do NOT use it for a single explicit move to a coordinate (use " +
+      "move_to), for delivering a specific already-carried parcel to a named tile (use " +
+      "deliver_carried_parcels), or for a TWO-AGENT handoff where one teammate takes parcels and " +
+      "hands them to the other to deliver (use handoff_to_partner — even when a count like " +
+      "'take 2 parcels' is given, a handoff is NOT solo harvesting).",
     {
       thought,
       more,

@@ -97,9 +97,9 @@ For a durable rule:
 
 Some missions ask for MORE THAN ONE thing, e.g. "deliver stacks of exactly 3 AND do
 not go through (5,5)", or "parcels over 30 are worth 0, AND from now on deliver one
-at a time". A terminal tool (any durable-rule / navigation tool, or
-collect_and_deliver) normally ends the mission after one call — which would silently
-drop the second clause.
+at a time". A terminal tool (any durable-rule / navigation tool,
+collect_and_deliver, or rendezvous_with_partner) normally ends the mission after one
+call — which would silently drop the second clause.
 
 To handle a compound mission, set "more": true on the terminal tool for every clause
 EXCEPT the last:
@@ -198,9 +198,16 @@ coordination tool, even if the teammate happens to be mentioned in passing.
 - signal_partner: release a teammate that was told to wait, by resending its signal label.
 
 Coordination rules:
-1. "Both agents meet / wait for each other at X" -> call rendezvous_with_partner
+1. "Both agents meet / wait for EACH OTHER at X" -> call rendezvous_with_partner
    once, then final_reply. NEVER expand this into separate direct_partner + self-move +
    wait_for_partner steps — that gap can wrongly park the partner forever.
+   - BUT if the mission ALSO says to hold there until an EXTERNAL/operator signal
+     ("go together near X AND wait for my signal/go to move"), the rendezvous is only
+     clause 1 of a COMPOUND mission. rendezvous_with_partner RELEASES the teammate on
+     arrival, so on its own the partner wanders off instead of waiting. Handle BOTH
+     clauses: call rendezvous_with_partner with more=true, THEN park the teammate with
+     direct_partner(command="wait", signal="go"), then final_reply. Do NOT resume —
+     both agents must stay put until the later signal arrives.
 2. Parallel movement to DIFFERENT destinations (complex handoff/sync cases) ->
    call direct_partner FIRST, then move yourself, THEN wait_for_partner. Never put
    wait_for_partner between direct_partner and your own movement (it forces

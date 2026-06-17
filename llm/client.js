@@ -4,6 +4,7 @@ import { LLM_CONFIG } from "../config.js";
 const client = new OpenAI({
   baseURL: LLM_CONFIG.baseURL,
   apiKey: LLM_CONFIG.apiKey,
+  ...(LLM_CONFIG.headers ? { defaultHeaders: LLM_CONFIG.headers } : {}),
 });
 
 /*

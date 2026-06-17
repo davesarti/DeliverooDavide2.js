@@ -5,8 +5,12 @@ import {
   BDI_DELEGATION_PER_PARCEL_MS,
   BDI_DELEGATION_DEFAULT_MS,
   BDI_DELEGATION_MAX_MS,
+  RENDEZVOUS_SELF_ATTEMPTS,
+  RENDEZVOUS_SELF_RETRY_DELAY_MS,
+  HANDOFF_MAX_PICKUPS,
 } from "../utils/constants.js";
-import { waitUntil } from "../utils/asyncUtils.js";
+import { waitUntil, wait } from "../utils/asyncUtils.js";
+import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
 import { validateActionAgainstPersistentRules } from "./rulesValidator.js";
 import {
   SYSTEM_EXECUTOR_PROMPT,
@@ -87,6 +91,7 @@ const BDI_PAUSING_TOOLS = new Set([
   "go_pick_up",
   "go_drop_off",
   "rendezvous_with_partner",
+  "handoff_to_partner",
   "wait_for_partner",
 ]);
 
@@ -117,7 +122,7 @@ function makeToolResult(observation, extra = {}) {
 // Tool execution
 // ==========================================
 
-async function executeTool(action, bs, llmState, actions, missionStats, coordinator, bdi) {
+async function executeTool(action, bs, llmState, actions, missionStats, coordinator, bdi, moreToDo = false) {
   const { name, params } = action;
 
   switch (name) {
@@ -184,9 +189,17 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
           `Error: unknown partner command "${command}". Allowed: go_to, go_near, pickup, putdown, wait, resume.`
         );
       }
+      // A pickup with no coordinates is the self-directed handoff form: the
+      // teammate grabs the nearest parcel IT can sense (the LLM can't see the
+      // partner's surroundings). This matches the BDI's args.x == null branch in
+      // #runCoordination, the tool schema, and the executor prompt. Targeted
+      // pickup (x, y + parcelId) is still validated below.
+      const selfDirectedPickup =
+        command === "pickup" && x == null && y == null;
+
       const needsCoords =
         command === "go_to" || command === "go_near" ||
-        command === "pickup" || command === "putdown";
+        (command === "pickup" && !selfDirectedPickup) || command === "putdown";
       if (needsCoords) {
         const tileError = validateTile(x, y, bs);
         if (tileError) {
@@ -198,8 +211,8 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
           `Error: 'go_near' needs a non-negative integer maxDist, received ${maxDist}.`
         );
       }
-      if (command === "pickup" && (parcelId == null || parcelId === "")) {
-        return makeToolResult("Error: 'pickup' needs a parcelId.");
+      if (command === "pickup" && !selfDirectedPickup && (parcelId == null || parcelId === "")) {
+        return makeToolResult("Error: targeted 'pickup' needs a parcelId (or omit x,y to let the teammate self-select).");
       }
       if (command === "wait" && (typeof signal !== "string" || signal.trim() === "")) {
         return makeToolResult("Error: 'wait' needs a signal label.");
@@ -214,9 +227,13 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
         args.y = y;
         args.maxDist = maxDist;
       } else if (command === "pickup") {
-        args.x = x;
-        args.y = y;
-        args.parcelId = parcelId;
+        // Self-directed pickup leaves args empty so the BDI partner self-selects
+        // (args.x == null branch). Targeted pickup carries the tile + parcel id.
+        if (!selfDirectedPickup) {
+          args.x = x;
+          args.y = y;
+          args.parcelId = parcelId;
+        }
       } else if (command === "putdown") {
         args.x = x;
         args.y = y;
@@ -253,33 +270,248 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
 
     case "rendezvous_with_partner": {
       // FENT-style single barrier: send go_near to partner, move self in
-      // parallel, wait for both arrivals, release partner. One atomic tool
-      // call eliminates the multi-step confusion that caused the LLM to add
-      // a spurious direct_partner("wait") after the barrier.
+      // parallel, wait for both arrivals, then release the partner (unless
+      // more=true, in which case the next directive is issued first to prevent
+      // the partner drifting away before the wait lands).
       const { cid, delivered } = await coordinator.directPartner("go_near", {
         x: params.x,
         y: params.y,
         maxDist: params.maxDist,
       });
 
-      let selfMsg;
-      try {
-        await actions.goNear(params.x, params.y, params.maxDist);
-        selfMsg = "self arrived";
-      } catch (err) {
-        selfMsg = `self could not reach: ${err?.message ?? err}`;
+      // Move self in parallel. The first sweep can fail when the partner is
+      // still crossing the small target neighbourhood and transiently blocks the
+      // only reachable tile; retry, since the partner parks on arrival and the
+      // contested tile then clears.
+      let selfArrived = false;
+      let selfMsg = "self could not reach";
+      for (let attempt = 0; attempt < RENDEZVOUS_SELF_ATTEMPTS; attempt++) {
+        try {
+          await actions.goNear(params.x, params.y, params.maxDist);
+          selfArrived = true;
+          selfMsg = "self arrived";
+          break;
+        } catch (err) {
+          selfMsg = `self could not reach: ${err?.message ?? err}`;
+          if (attempt < RENDEZVOUS_SELF_ATTEMPTS - 1) {
+            await wait(RENDEZVOUS_SELF_RETRY_DELAY_MS);
+          }
+        }
       }
 
       const partnerStatus = delivered
         ? await coordinator.waitForPartner(cid)
         : { cid, ok: false, detail: "teammate not reachable" };
 
+      // Only release the partner now if no further directive follows immediately.
+      // When more=true the LLM will issue the next command (e.g. direct_partner
+      // "wait") before handing back control, so keep the partner in coordination
+      // mode (empty queue, active=true) to close the gap that let it drift away.
+      if (!moreToDo) {
+        try { await coordinator.directPartner("resume"); } catch {}
+      }
+
+      // The barrier is met only when BOTH agents actually arrived. Keying the
+      // verdict on the partner alone wrongly reported "complete" while self was
+      // still stranded — a false success the LLM then relayed to the operator.
+      //
+      // Terminal: rendezvous is one atomic action that fully accomplishes "make
+      // both agents meet", so the observation IS the chat reply. Ending here
+      // (unless the model flags a further clause with more=true) skips a second
+      // full LLM round-trip just to emit final_reply — the long idle the operator
+      // sees after the agents have already met. Same pattern as collect_and_deliver.
+      if (selfArrived && partnerStatus.ok) {
+        return makeToolResult(
+          `Rendezvous complete: both agents within ${params.maxDist} tiles of (${params.x},${params.y}).`,
+          { terminal: true }
+        );
+      }
+      const partnerMsg = partnerStatus.ok
+        ? "teammate arrived"
+        : `teammate: ${partnerStatus.detail ?? "failed"}`;
+      return makeToolResult(
+        `Rendezvous incomplete — ${selfMsg}; ${partnerMsg}.`,
+        { terminal: true }
+      );
+    }
+
+    case "handoff_to_partner": {
+      // Atomic Level-3 handoff: the BDI teammate collects parcel(s) from its OWN
+      // surroundings, drops the whole load on its OWN tile, vacates, then this
+      // agent walks onto that tile, grabs everything, and (by default) delivers.
+      // One tool call replaces the error-prone direct_partner + putdown + pick_up
+      // + deliver choreography the model kept fumbling: drop-at-feet guarantees a
+      // tile the carrier can reach and that is NEVER this agent's own cell (the
+      // collision that produced "path not found" in the manual flow). Supports an
+      // arbitrary number of parcels — the teammate stacks repeated self-directed
+      // pickups and a single putdown drops the whole stack at once.
+      const target =
+        Number.isInteger(params.parcels) && params.parcels > 0
+          ? Math.min(params.parcels, HANDOFF_MAX_PICKUPS)
+          : null;
+      const shouldDeliver = params.deliver !== false;
+
+      // 1) Teammate harvests. Self-directed pickups stack on its carry; stop when
+      // the target is met, nothing more is reachable, or the safety cap is hit.
+      let collected = 0;
+      let partnerHasLoad = false;
+      let partnerReachable = true;
+      const cap = target ?? HANDOFF_MAX_PICKUPS;
+      for (let i = 0; i < cap; i++) {
+        const { cid, delivered } = await coordinator.directPartner("pickup", {});
+        if (!delivered) {
+          partnerReachable = false;
+          break;
+        }
+        const status = await coordinator.waitForPartner(cid);
+        if (status.ok && /picked up parcel/i.test(status.detail ?? "")) {
+          collected++;
+          partnerHasLoad = true;
+          if (target != null && collected >= target) break;
+          continue;
+        }
+        // ok with no pickup detail = nothing more reachable but the teammate is
+        // already carrying a load to hand off; not-ok = it has nothing at all.
+        if (status.ok) partnerHasLoad = true;
+        break;
+      }
+
+      if (!partnerReachable) {
+        try { await coordinator.directPartner("resume"); } catch {}
+        return makeToolResult(
+          "Handoff failed: could not reach the teammate to start the pickup.",
+          { terminal: true }
+        );
+      }
+      if (!partnerHasLoad) {
+        try { await coordinator.directPartner("resume"); } catch {}
+        return makeToolResult(
+          "Handoff failed: the teammate found no parcel it could reach to hand off.",
+          { terminal: true }
+        );
+      }
+
+      // 2) Bring the load to the collector before dropping. With exploration (or
+      // a far self-selected pickup) the teammate can finish picking up anywhere on
+      // the map; dropping at its feet there would strand the parcels somewhere THIS
+      // agent then fails to reach within its few short collect retries — the bug
+      // behind "teammate dropped the load but you could not collect it". Walk the
+      // teammate to within one tile of this agent first, so the drop lands right
+      // next to the collector and step 4 is a trivial, reliable pickup. Best-effort:
+      // if the approach can't be sent, fall through and drop wherever it is.
+      if (bs.me?.x != null && bs.me?.y != null) {
+        const approach = await coordinator.directPartner("go_near", {
+          x: bs.me.x,
+          y: bs.me.y,
+          maxDist: 1,
+        });
+        if (approach.delivered) await coordinator.waitForPartner(approach.cid);
+        // Let sensing refresh the teammate's new (now-adjacent) position before it
+        // is read as the drop tile, so the upcoming putdown is not aimed back at
+        // the teammate's old far cell.
+        await wait(RENDEZVOUS_SELF_RETRY_DELAY_MS);
+      }
+
+      // 3) Drop tile = the teammate's own current cell (drop-at-feet): reachable
+      // by it with zero detour, never this agent's cell, and now next to this one.
+      const dropTile =
+        bs.partner && bs.partner.x != null && bs.partner.y != null
+          ? { x: bs.partner.x, y: bs.partner.y }
+          : null;
+      if (dropTile == null) {
+        try { await coordinator.directPartner("resume"); } catch {}
+        return makeToolResult(
+          "Handoff failed: the teammate's position is unknown, so no drop tile could be chosen.",
+          { terminal: true }
+        );
+      }
+
+      // 4) Teammate drops the whole stack here and vacates. The putdown status is
+      // only sent after the BDI has stepped off the tile (see #vacateAfterDrop),
+      // so the cell is guaranteed free by the time this resolves.
+      const drop = await coordinator.directPartner("putdown", {
+        x: dropTile.x,
+        y: dropTile.y,
+      });
+      const dropStatus = drop.delivered
+        ? await coordinator.waitForPartner(drop.cid)
+        : { ok: false, detail: "teammate not reachable" };
+      if (!dropStatus.ok) {
+        try { await coordinator.directPartner("resume"); } catch {}
+        return makeToolResult(
+          `Handoff failed: teammate could not drop at (${dropTile.x},${dropTile.y}): ${dropStatus.detail ?? "unknown reason"}.`,
+          { terminal: true }
+        );
+      }
+
+      // 5) Collect the dropped stack. Retry: a first sweep can transiently fail
+      // while the teammate is still clearing the neighbour it vacated to.
+      //
+      // Detect success by THIS agent's carried-count delta, NOT by emitPickup's
+      // return value: stepping onto the drop tile fires opportunisticActions,
+      // which auto-grabs the free parcels lying there before goPickUp's own
+      // emitPickup runs — so the explicit pickup returns [] even though the load
+      // WAS collected. Counting the carry delta covers both the auto-grab and the
+      // explicit pickup, ending the false "you could not collect it" report.
+      const carriedBefore = bs.carry?.count ?? 0;
+      let explicitlyPicked = 0;
+      for (let attempt = 0; attempt < RENDEZVOUS_SELF_ATTEMPTS; attempt++) {
+        try {
+          const got = await actions.goPickUp(dropTile.x, dropTile.y);
+          if (Array.isArray(got)) explicitlyPicked += got.length;
+        } catch {
+          // fall through to retry
+        }
+        // Either the explicit pickup returned parcels, or the auto-grab on arrival
+        // already raised the carried count — both mean the load was collected.
+        if (explicitlyPicked > 0 || (bs.carry?.count ?? 0) > carriedBefore) break;
+        if (attempt < RENDEZVOUS_SELF_ATTEMPTS - 1) {
+          await wait(RENDEZVOUS_SELF_RETRY_DELAY_MS);
+        }
+      }
+
+      const pickedCount = Math.max(
+        explicitlyPicked,
+        (bs.carry?.count ?? 0) - carriedBefore
+      );
+
+      if (pickedCount === 0) {
+        try { await coordinator.directPartner("resume"); } catch {}
+        return makeToolResult(
+          `Handoff incomplete: teammate dropped the load at (${dropTile.x},${dropTile.y}) but you could not collect it.`,
+          { terminal: true }
+        );
+      }
+
+      // 6) Deliver the collected load (default). goDropOff banks into the shared
+      // deliveredParcels counter only on a real delivery tile, so the before/after
+      // delta is the count actually scored — reported in the reply the same way
+      // collect_and_deliver does (a terminal tool whose result IS the reply).
+      let deliveredNow = 0;
+      let deliverNote = "";
+      if (shouldDeliver) {
+        const before = bs.metrics?.deliveredParcels ?? 0;
+        const dest = nearestDeliveryTileAt(bs.me, bs.map.deliveryDistanceMap);
+        if (dest) {
+          try {
+            await actions.goDropOff(dest.tile.x, dest.tile.y);
+          } catch (error) {
+            deliverNote = ` (delivery failed: ${error?.message ?? error})`;
+          }
+        } else {
+          deliverNote = " (no reachable delivery tile)";
+        }
+        deliveredNow = (bs.metrics?.deliveredParcels ?? 0) - before;
+      }
+
       try { await coordinator.directPartner("resume"); } catch {}
 
+      const tail = shouldDeliver
+        ? ` and delivered ${deliveredNow}${deliverNote}.`
+        : " (left carried; no delivery requested).";
       return makeToolResult(
-        partnerStatus.ok
-          ? `Rendezvous complete: both agents within ${params.maxDist} tiles of (${params.x},${params.y}) (${selfMsg}).`
-          : `Rendezvous incomplete — teammate: ${partnerStatus.detail ?? "failed"}; ${selfMsg}.`
+        `Handoff complete: teammate handed off ${pickedCount} parcel(s) at (${dropTile.x},${dropTile.y}); you collected ${pickedCount}${tail}`,
+        { terminal: true }
       );
     }
 
@@ -646,7 +878,8 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           actions,
           missionStats,
           coordinator,
-          bdi
+          bdi,
+          moreToDo
         );
         const observation = toolResult.observation;
 

@@ -35,6 +35,7 @@ import {
   CAMP_LOSS_BUDGET_FRACTION,
   CAMP_NEAR_DELIVERY_TILES,
   COORD_RESUME_IDLE_TTL_MS,
+  COORD_PICKUP_EXPLORE_ATTEMPTS,
 } from "../utils/constants.js";
 import { waitUntil } from "../utils/asyncUtils.js";
 import { setupBdiCoordination } from "./coordination.js";
@@ -646,16 +647,42 @@ class IntentionRevision {
       if (directive.command === "pickup" && directive.args?.x == null) {
         // Self-directed pickup: the LLM gave no target because it cannot see
         // the parcels near the partner (it only senses around itself). The
-        // partner chooses the best parcel from its OWN sensing, using the same
-        // pickup scoring as normal play. If none is reachable but it already
-        // carries something, the pickup is a no-op — the upcoming putdown still
-        // hands off the carried parcel.
-        const predicate = this.#selectBestPickup();
+        // partner picks the nearest reachable parcel from its OWN sensing and
+        // grabs it — stacking on top of anything it already carries, since a
+        // commanded handoff pickup is an order, not a scored play option. Only
+        // when nothing is reachable does it fall back: a no-op if it already
+        // carries something (the upcoming putdown still hands that off), else a
+        // failure so the LLM knows the pickup found nothing.
+        let predicate = this.#selectBestPickup();
+        // Nothing in sensing range and not yet carrying: coordination mode keeps
+        // the autonomous explore loop off, so the teammate would abort the whole
+        // handoff just because it started far from any parcel. Explore toward
+        // spawn tiles a bounded number of times, re-scanning after each leg,
+        // before giving up. (If it already carries something, skip the search —
+        // the upcoming putdown hands that load off; roaming for more would only
+        // wander the map.)
+        if (!predicate && (this.#bs.carry?.count ?? 0) === 0) {
+          for (
+            let attempt = 0;
+            !predicate && attempt < COORD_PICKUP_EXPLORE_ATTEMPTS;
+            attempt++
+          ) {
+            try {
+              await this.#executePredicate(["explore"], {
+                shouldStop: () => false,
+              });
+            } catch {
+              // Boxed in / no spawn tile this pass — re-scan and retry anyway;
+              // the congestion that blocked exploration usually clears.
+            }
+            predicate = this.#selectBestPickup();
+          }
+        }
         if (predicate) {
           await this.#executePredicate(predicate, { shouldStop: () => false });
           detail = `picked up parcel at (${predicate[1]},${predicate[2]})`;
         } else if ((this.#bs.carry?.count ?? 0) === 0) {
-          throw "no reachable parcel in sight to pick up";
+          throw "no reachable parcel found to pick up (explored and found none)";
         }
       } else {
         await this.#executePredicate(coordToPredicate(directive), {
@@ -689,22 +716,27 @@ class IntentionRevision {
    * step aside must never fail the directive itself.
    */
   /*
-   * Chooses the best parcel for the partner to fetch for a self-directed handoff
-   * pickup (LLM issues `pickup` with no coordinates). Reuses the agent's own
-   * pickup scoring (intentionScore already folds in reachability, competition and
-   * decay), so it never diverges from normal play. Returns a ["go_pick_up", ...]
-   * predicate, or null when nothing reachable is in sight.
+   * Chooses the parcel for the partner to fetch for a self-directed handoff
+   * pickup (LLM issues `pickup` with no coordinates). A handoff is a direct
+   * order, so this deliberately does NOT use intentionScore: the play scorer
+   * gates pickups by self-interest (returns <=0 at capacity, for a contested or
+   * low-value parcel, or when a stack rule makes one more "overshoot"), which
+   * would make the partner refuse to fetch a parcel it was explicitly told to.
+   * Instead it takes the nearest reachable free parcel, so it grabs one even
+   * while already carrying (stacking it on top). Returns a ["go_pick_up", ...]
+   * predicate, or null when no free parcel is reachable.
    */
   #selectBestPickup() {
+    const me = this.#bs.me;
     let best = null;
-    let bestScore = 0;
+    let bestDist = Infinity;
     for (const parcel of this.#bs.parcels.values()) {
       if (parcel.carriedBy) continue;
-      const predicate = ["go_pick_up", parcel.x, parcel.y, parcel.id];
-      const score = this.intentionScore(predicate);
-      if (score > bestScore) {
-        bestScore = score;
-        best = predicate;
+      const dist = pickupRouteDistance(parcel, me, this.#bs);
+      if (dist == null) continue; // no reachable delivery for it
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = ["go_pick_up", parcel.x, parcel.y, parcel.id];
       }
     }
     return best;

@@ -200,40 +200,51 @@ Steps:
 Mission: Both of you move to within 3 tiles of (10,4) and wait for each other.
 Type: rendezvous.
 Steps:
-1. rendezvous_with_partner(x=10, y=4, maxDist=3).
-2. final_reply (when it returns, both agents have arrived).
+1. rendezvous_with_partner(x=10, y=4, maxDist=3)   ← terminal; STOP here
+Do NOT add a final_reply: rendezvous_with_partner is terminal and its own result is
+the reply. Emitting a separate final_reply only costs an extra round-trip after the
+agents have already met. (Only continue if the mission has a further clause — then set
+more=true on this call.)
 Why not direct_partner + self-move + wait_for_partner? Those separate calls leave a gap
 where a stray direct_partner(command="wait", signal="X") would park the partner forever
 on a signal that never comes. rendezvous_with_partner closes the barrier atomically.
 
 ---
+Mission: Go together in the neighborhood of (2,2) and wait for my signal to move.
+Type: COMPOUND coordination — rendezvous (clause 1) THEN hold for an external/operator
+signal (clause 2). "wait for MY signal" is an external signal, distinct from a plain
+"wait for each other" rendezvous. rendezvous_with_partner RELEASES the teammate on
+arrival, so it must NOT be the last step here.
+Steps:
+1. rendezvous_with_partner(x=2, y=2, maxDist=1, more=true)   ← more=true: a wait clause follows
+2. direct_partner(command="wait", signal="go")   ← park the teammate until the signal
+3. final_reply stating both are near (2,2) and waiting for the signal to move.
+Do NOT call resume — the teammate must stay parked. A later "go"/"green" mission relays
+the signal (see the signal-relay example). Dropping step 2 (calling only
+rendezvous_with_partner and stopping) is the bug to avoid: the partner then wanders off
+after the rendezvous instead of waiting.
+
+---
 Mission: If a parcel is initially picked up by one agent and later delivered by the other agent, you will receive a 200 points bonus.
 Type: cross-delivery HANDOFF task (NOT a durable rule). The "if ... +200" wording
 describes a coordination achievement to perform now, not a scoring rule — never
-store it as a stack-size rule. The PARTNER is the picker — you have no put-down
-primitive, so you only collect at the handoff tile and deliver. Do NOT give the
-pickup coordinates: you cannot see parcels near the partner, so let it self-select.
+store it as a stack-size rule.
 Steps:
-1. direct_partner(command="pickup") — no x/y; the teammate picks a parcel IT can see. Note the cid.
-2. wait_for_partner(cid).
-3. direct_partner(command="putdown", x=<handoff>, y=<handoff>) — a tile you can both reach. Note the cid.
-4. wait_for_partner(cid).
-5. observe_environment, then pick_up_parcel at the handoff tile using the id you now see there.
-6. deliver_carried_parcels at a delivery tile.
-7. direct_partner(command="resume").
-8. final_reply.
+1. handoff_to_partner()   ← terminal; STOP here
+The teammate self-selects a parcel it can reach, drops it, and you collect and
+deliver it — all in one atomic step. Do NOT drive it manually with direct_partner
++ putdown + pick_up_parcel: the manual drop tile kept colliding with your own
+position and deadlocking. Only continue (set more=true) if the mission has a
+further clause.
 
 ---
-Mission: One of you picks up parcel p1 at (2,2); the other delivers it.
-Type: handoff (parallel, different roles).
+Mission: Make one agent take 2 parcels, drop them, and let the other one pick it up and deliver.
+Type: handoff with a count — still a TWO-AGENT handoff, NOT solo harvesting, so it is
+handoff_to_partner (NOT collect_and_deliver).
 Steps:
-1. direct_partner(command="pickup", x=2, y=2, parcelId="p1") — note the cid.
-2. wait_for_partner(cid).
-3. direct_partner(command="putdown", x=<handoff>, y=<handoff>) — note the cid.
-4. wait_for_partner(cid).
-5. pick_up_parcel at the handoff tile, then deliver_carried_parcels at a delivery tile.
-6. direct_partner(command="resume").
-7. final_reply.
+1. handoff_to_partner(parcels=2)   ← terminal; STOP here
+The count goes in parcels=N; omit it to hand off whatever the teammate can reach, or
+set deliver=false to collect without delivering.
 
 ---
 Mission: Let's play red light green light: go to an odd row and wait for my go.

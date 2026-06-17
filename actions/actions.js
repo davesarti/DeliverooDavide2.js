@@ -105,9 +105,52 @@ export function createActions(socket, bs, options = {}) {
 
   /*
    * Releases the carried parcel on the current cell.
+   *
+   * Optimistically reconciles beliefs the moment the drop is acked, instead of
+   * waiting for the next sensing snapshot. Without this, bs.carry.count and the
+   * carriedBy flags in bs.parcels stay stale for a cycle, so the scorer/options
+   * loop still believes the load is in hand right after delivering (see the
+   * "carry.count is still stale" notes in goDropOff/opportunisticActions) — it
+   * would keep heading for a delivery tile it just emptied onto. emitPutdown
+   * resolves to the parcels actually dropped, so we use that as ground truth.
    */
   async function putdown() {
-    return await socket.emitPutdown();
+    const dropped = await socket.emitPutdown();
+    if (!Array.isArray(dropped)) return dropped;
+
+    const x = Math.round(bs.me.x);
+    const y = Math.round(bs.me.y);
+    const onDelivery = isDeliveryTile(x, y, bs.map.deliveryTiles ?? []);
+
+    for (const { id } of dropped) {
+      if (onDelivery) {
+        // Banked and scored: gone from the game.
+        bs.parcels.delete(id);
+      } else {
+        // Left on the current tile (e.g. a handoff): no longer ours, now lying
+        // here for the partner to grab.
+        const parcel = bs.parcels.get(id);
+        if (parcel) {
+          parcel.carriedBy = null;
+          parcel.x = x;
+          parcel.y = y;
+        }
+      }
+    }
+
+    // Recompute the cached carry count from bs.parcels, exactly as the sensing
+    // update does, so every consumer sees a consistent state (a no-id drop or
+    // a partial putdown leaves the rest correctly marked as still carried).
+    if (bs.carry) {
+      let carriedNow = 0;
+      for (const parcel of bs.parcels.values()) {
+        if (parcel.carriedBy === bs.me.id) carriedNow++;
+      }
+      bs.carry.count = carriedNow;
+      if (carriedNow === 0) bs.carry.campSteps = 0;
+    }
+
+    return dropped;
   }
 
   /*
@@ -552,13 +595,16 @@ export function createActions(socket, bs, options = {}) {
    * tile — "wait where I last collected a parcel, else where parcels are born".
    */
   /*
-   * Moves to within Manhattan distance `maxDist` of (x,y): the nearest reachable
-   * tile inside that diamond, chosen to minimize travel. Reuses goTo (and its
-   * crate/PDDL/replan machinery) once a reachable tile is found.
+   * Moves to within Manhattan distance `maxDist` of (x,y). Tries the tile
+   * closest to the target first so rendezvous agents converge to the center,
+   * not the boundary. Already-within-distance calls are no-ops.
    */
   async function goNear(x, y, maxDist, { shouldStop = () => false } = {}) {
     const target = { x: Math.round(x), y: Math.round(y) };
     const md = Math.max(0, Math.round(maxDist ?? 0));
+
+    // Already close enough — no movement needed.
+    if (distance(bs.me, target) <= md) return true;
 
     const candidates = [];
     for (let dx = -md; dx <= md; dx++) {
@@ -569,7 +615,14 @@ export function createActions(socket, bs, options = {}) {
         if (isInsideMap(cx, cy, bs.map)) candidates.push({ x: cx, y: cy });
       }
     }
-    candidates.sort((a, b) => distance(bs.me, a) - distance(bs.me, b));
+    // Sort by distance to the target first so both agents converge toward the
+    // meeting point (not the boundary of the diamond). Break ties by distance
+    // to the agent to keep travel efficient.
+    candidates.sort((a, b) => {
+      const dt = distance(target, a) - distance(target, b);
+      if (dt !== 0) return dt;
+      return distance(bs.me, a) - distance(bs.me, b);
+    });
 
     for (const cell of candidates) {
       if (shouldStop()) throw ["stopped"];

@@ -61,13 +61,14 @@ export const CAMP_NEAR_DELIVERY_TILES = 8;
 // dense one earns a long (capped) wait. Below CAMP_PATIENCE_MIN_TILES the
 // pocket is too sparse to camp at all (patience 0); from there the curve
 // climbs exponentially and SATURATES at CAMP_PATIENCE_SATURATION_TILES, where
-// it reaches the MAX cap (counts above that add nothing). The spawn *rate* is
-// deliberately NOT used as the base — tying patience to it is backwards, since
-// a sporadic (slow) map would then camp longest. Generation 'infinite' (no
+// it reaches the MAX cap (counts above that add nothing). The density curve is
+// then scaled by a spawn-RATE multiplier (see below): a fast map refills a hot
+// pocket quickly, so camping it pays off more. Generation 'infinite' (no
 // respawns) is still honoured as a yes/no gate (camping disabled).
 //   n = clamp(adjacentSpawnTiles, MIN_TILES, SATURATION_TILES)
-//   patience = clamp(BASE_MS × (GROWTH^(n − (MIN_TILES − 1)) − 1), MIN, MAX)
-//             (and 0 when adjacentSpawnTiles < MIN_TILES)
+//   mult = spawn-rate multiplier (1 on a slow map, up to MAX_MULT on a fast one)
+//   patience = clamp(mult × BASE_MS × (GROWTH^(n − (MIN_TILES − 1)) − 1),
+//                    MIN, mult × MAX)            (and 0 when n < MIN_TILES)
 export const CAMP_PATIENCE_BASE_MS = 1000;
 // Below this many adjacent spawn tiles the pocket is not worth camping.
 export const CAMP_PATIENCE_MIN_TILES = 4;
@@ -79,6 +80,19 @@ export const CAMP_PATIENCE_GROWTH = 1.37;
 export const CAMP_ADJACENCY_RADIUS = 3;
 export const CAMP_PATIENCE_MIN_MS = 0;
 export const CAMP_PATIENCE_MAX_MS = 8000;
+
+// Spawn-rate multiplier for camp patience. The density curve above answers
+// "is this pocket dense enough to camp"; this answers "and does the map refill
+// it fast enough to be worth the wait". It scales both the patience and its MAX
+// ceiling by clamp(NEUTRAL_MS / generationIntervalMs, 1, MAX_MULT):
+//   - at/above NEUTRAL_MS (a slow map) the multiplier is 1 — no change, so a
+//     slow map never camps LESS than the pure-density model would;
+//   - faster generation raises it, SATURATING at MAX_MULT (a slightly higher
+//     value) so a very fast map cannot blow patience arbitrarily high.
+// 'infinite' generation is gated to patience 0 upstream, so it never reaches
+// this multiplier.
+export const CAMP_SPAWN_RATE_NEUTRAL_MS = 2000;
+export const CAMP_SPAWN_RATE_MAX_MULT = 1.3;
 
 // Spawn-tile exploration: weight of staleness vs distance in findCellsToExplore.
 export const STALENESS_WEIGHT = 0.7;
@@ -172,3 +186,21 @@ export const COORD_LLM_WAIT_TIMEOUT_MS = 60000;
 // and no coordination traffic this long — defends against an LLM that crashed
 // mid-mission without sending `resume`.
 export const COORD_RESUME_IDLE_TTL_MS = 15000;
+// Rendezvous self-move retries: a first sweep can fail when the partner is still
+// crossing the small target neighbourhood and transiently blocks the only
+// reachable tile. The partner parks once it arrives, so retrying clears the
+// contested tile. Total attempts (including the first) and the pause between.
+export const RENDEZVOUS_SELF_ATTEMPTS = 3;
+export const RENDEZVOUS_SELF_RETRY_DELAY_MS = 600;
+// Safety cap on how many self-directed pickups handoff_to_partner issues to the
+// teammate before dropping the stack. Bounds the worst-case time of one atomic
+// handoff (each pickup waits up to COORD_LLM_WAIT_TIMEOUT_MS) regardless of an
+// untrusted/omitted `parcels` count, so a single handoff can never strand the
+// agents for the whole match.
+export const HANDOFF_MAX_PICKUPS = 10;
+// When a self-directed handoff pickup finds no parcel in the teammate's sensing
+// range, it explores toward spawn tiles up to this many times (re-scanning after
+// each leg) before giving up. Coordination mode disables the autonomous explore
+// loop, so without this a handoff aborts whenever the teammate simply started far
+// from any parcel. Bounded so a fruitless search can't roam the whole match.
+export const COORD_PICKUP_EXPLORE_ATTEMPTS = 6;

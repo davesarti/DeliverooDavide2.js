@@ -1,4 +1,8 @@
-import { nearestDeliveryTileAt, spawnMapDistance } from "../utils/stateUtils.js";
+import {
+  nearestDeliveryTileAt,
+  spawnMapDistance,
+  parseDurationMs,
+} from "../utils/stateUtils.js";
 import { distance } from "../utils/mapUtils.js";
 import { getDecayPerStep } from "../utils/decayModel.js";
 import {
@@ -11,6 +15,8 @@ import {
   CAMP_ADJACENCY_RADIUS,
   CAMP_PATIENCE_MIN_MS,
   CAMP_PATIENCE_MAX_MS,
+  CAMP_SPAWN_RATE_NEUTRAL_MS,
+  CAMP_SPAWN_RATE_MAX_MULT,
 } from "../utils/constants.js";
 import { AGENT_CONFIG } from "../config.js";
 
@@ -32,14 +38,30 @@ function countAdjacentSpawnTiles(bs, anchor) {
 }
 
 /*
+ * Spawn-rate multiplier for camp patience. The density curve says whether a
+ * pocket is dense enough to camp; this says whether the map refills it fast
+ * enough to be worth the wait. 1 on a slow map (so patience is never reduced
+ * below the pure-density value) and rises as generation gets faster, saturating
+ * at CAMP_SPAWN_RATE_MAX_MULT. 'infinite' generation is gated to 0 upstream and
+ * an unknown/unparseable rate falls back to the neutral multiplier of 1.
+ */
+function spawnRateMultiplier(bs) {
+  const intervalMs = parseDurationMs(bs.config.parcelGenerationEvent);
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) return 1; // unknown ⇒ neutral
+  const raw = CAMP_SPAWN_RATE_NEUTRAL_MS / intervalMs;
+  return Math.min(CAMP_SPAWN_RATE_MAX_MULT, Math.max(1, raw));
+}
+
+/*
  * How long camping a pocket is worth waiting at.
  *
- * Driven purely by spatial spawn-cluster density. Below CAMP_PATIENCE_MIN_TILES
- * adjacent green tiles the pocket is too sparse to camp (patience 0); from there
- * the curve climbs exponentially per extra clustered spawn tile and saturates at
- * CAMP_PATIENCE_SATURATION_TILES, where it reaches the MAX cap. The spawn rate is
- * not used as the base, only as a yes/no gate: returns 0 ("never camp") when the
- * server generates no new parcels.
+ * Driven by spatial spawn-cluster density, then scaled by the spawn RATE. Below
+ * CAMP_PATIENCE_MIN_TILES adjacent green tiles the pocket is too sparse to camp
+ * (patience 0); from there the curve climbs exponentially per extra clustered
+ * spawn tile and saturates at CAMP_PATIENCE_SATURATION_TILES. The spawn rate is
+ * both a yes/no gate (returns 0 when the server generates no new parcels) and a
+ * multiplier on the result: a faster map makes a hot pocket worth camping
+ * longer, with the saturated ceiling lifted to a slightly higher value.
  */
 export function campPatienceMs(bs, anchor) {
   if (bs.config.parcelGenerationEvent === "infinite") return 0; // no respawns
@@ -47,12 +69,17 @@ export function campPatienceMs(bs, anchor) {
   const adjacent = countAdjacentSpawnTiles(bs, anchor);
   if (adjacent < CAMP_PATIENCE_MIN_TILES) return 0; // too sparse to camp
 
+  const mult = spawnRateMultiplier(bs);
   const n = Math.min(adjacent, CAMP_PATIENCE_SATURATION_TILES);
   const patience =
+    mult *
     CAMP_PATIENCE_BASE_MS *
     (Math.pow(CAMP_PATIENCE_GROWTH, n - (CAMP_PATIENCE_MIN_TILES - 1)) - 1);
 
-  return Math.min(CAMP_PATIENCE_MAX_MS, Math.max(CAMP_PATIENCE_MIN_MS, patience));
+  return Math.min(
+    mult * CAMP_PATIENCE_MAX_MS,
+    Math.max(CAMP_PATIENCE_MIN_MS, patience)
+  );
 }
 
 export const EXPLORATION_INCENTIVE = 0.01;
