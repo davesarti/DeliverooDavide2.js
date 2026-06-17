@@ -150,6 +150,10 @@ export const BDI_DELEGATION_POLL_MS = 200;
 export const BDI_DELEGATION_PER_PARCEL_MS = 12000;
 // Time budget for an open-ended "go collect parcels" with no explicit count.
 export const BDI_DELEGATION_DEFAULT_MS = 30000;
+// Hard ceiling on the delegation window, applied even when the LLM passes an
+// explicit timeoutMs: an untrusted oversized value must never strand the agent
+// on a single mission for the whole match.
+export const BDI_DELEGATION_MAX_MS = 120000;
 
 // Single default magnitude for every LLM tile rule (forbid/prefer/block),
 // used when the executor does not supply an explicit penalty/reward. Set high
