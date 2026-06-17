@@ -656,6 +656,16 @@ export function clearPersistentRules(params, bs) {
   );
 }
 
+export function clearNavigationRules(params, bs) {
+  const count = bs.rules.penaltyTiles.size;
+  if (count === 0) return "No navigation tile was blocked.";
+
+  bs.rules.penaltyTiles.clear();
+  refreshRendered(bs);
+
+  return `All blocked navigation tiles cleared (${count}).`;
+}
+
 // ==========================================
 // block_tile / unblock_tile
 // ==========================================
