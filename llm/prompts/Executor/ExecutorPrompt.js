@@ -37,12 +37,16 @@ doubt, do NOT reject.
 
 1. Unresolved coordinate placeholder — literal "(x,y)", "(x1,y1)", "x=?", "y=?"
    in the request. Arithmetic like x=4*2 resolves fine — do NOT reject it.
+   A generic UNNAMED target ("a parcel", "a/the delivery tile") is NOT a
+   placeholder: it is resolved at runtime, so accept it (see below). Reject only
+   an explicit coordinate that can never be resolved.
 2. Immediate mission with an explicit negative reward for doing it now
    (e.g. "move to (4,7) to get -10pts"). Reward 0 and missing reward are NOT negative.
 3. The mission explicitly requires an action that directly violates an active
    persistent rule in the game state (e.g. deliver at a forbidden tile).
    NOTE: parcel value rules affect delivery worth only — they never make a
-   pickup inadmissible, so never reject a pickup because of a value rule.
+   pickup OR a delivery inadmissible, so never reject a pickup or a delivery
+   because of a value rule.
 4. The request is genuinely garbled / nonsensical text (random characters,
    self-contradictory nonsense). Merely passive, unspecific, or future-tense phrasing
    is NOT garbled — a conditional reward ("if <achievement> happens, +N pts") is an
@@ -51,6 +55,8 @@ doubt, do NOT reject.
 Do NOT reject for these reasons:
 - A durable rule that mentions a penalty or negative value → accept and store it.
 - A mission satisfiable by adapting the plan (collect more parcels first, etc.) → accept.
+- A mission that merely seems impossible or a map that looks empty → NOT a rejection
+  ground. observe_environment first, then attempt it and report any genuine failure.
 - No specific parcel id or delivery tile is named → accept. Generic targets ("a parcel",
   any delivery tile) are DISCOVERED at runtime via observe_environment / resolve_delivery_tile,
   exactly like "collect parcels" or a generic handoff. Missing specifics are never a rejection.
