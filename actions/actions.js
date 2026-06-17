@@ -483,8 +483,15 @@ export function createActions(socket, bs, options = {}) {
     // LLM go_drop_off handler reports deliveredCount). A delivery tile banks all
     // carried parcels at once.
     const deliveredNow = carriedCount();
+    // putdown drops the carried parcels on the current tile regardless of its
+    // type: on a delivery tile they are banked/scored, on any other tile they
+    // are simply left on the ground (this is exactly what a Level-3 handoff
+    // needs). Only a real delivery-tile drop counts as a delivery — never credit
+    // the metric (which collect_and_deliver polls) for a handoff drop.
+    const banked =
+      isDeliveryTile(Math.round(x), Math.round(y), bs.map.deliveryTiles);
     const result = await putdown();
-    if (deliveredNow > 0) {
+    if (deliveredNow > 0 && banked) {
       bs.metrics ??= { deliveredParcels: 0 };
       bs.metrics.deliveredParcels += deliveredNow;
       // Forget the harvest pocket on delivery: the next carry episode should
