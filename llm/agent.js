@@ -323,34 +323,43 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
     }
 
     case "go_drop_off": {
-      const tileError = validateDeliveryTile(params.x, params.y, bs);
+      // Must be a real in-map tile, but NOT necessarily a delivery tile: a
+      // Level-3 handoff legitimately drops parcels on a plain tile for the
+      // partner to collect. validateTile guards the out-of-map / non-integer
+      // garbage the model could emit; the delivery-tile distinction below only
+      // decides whether this counts as a scored delivery.
+      const tileError = validateTile(params.x, params.y, bs);
       if (tileError) {
         return makeToolResult(tileError, {
           deliverySucceeded: false,
           deliveredCount: 0,
         });
       }
+      const isDeliveryDrop =
+        validateDeliveryTile(params.x, params.y, bs) === null;
       try {
-        const deliveredCount = [...bs.parcels.values()].filter(
+        const carried = [...bs.parcels.values()].filter(
           (parcel) => parcel.carriedBy === bs.me.id
         ).length;
 
         await actions.goDropOff(params.x, params.y);
 
+        if (isDeliveryDrop) {
+          return makeToolResult(
+            `Delivered ${carried} parcel(s) at (${params.x}, ${params.y}).`,
+            { deliverySucceeded: true, deliveredCount: carried }
+          );
+        }
+        // Handoff drop on a non-delivery tile: report honestly — no reward is
+        // banked here, so it is NOT a delivery.
         return makeToolResult(
-          `Delivered ${deliveredCount} parcel(s) at (${params.x}, ${params.y}).`,
-          {
-            deliverySucceeded: true,
-            deliveredCount,
-          }
+          `Dropped ${carried} parcel(s) at (${params.x}, ${params.y}) for handoff (not a delivery tile — no reward banked).`,
+          { deliverySucceeded: false, deliveredCount: 0 }
         );
       } catch (error) {
         return makeToolResult(
-          `Could not deliver at (${params.x}, ${params.y}): ${error?.message ?? error}.`,
-          {
-            deliverySucceeded: false,
-            deliveredCount: 0,
-          }
+          `Could not drop at (${params.x}, ${params.y}): ${error?.message ?? error}.`,
+          { deliverySucceeded: false, deliveredCount: 0 }
         );
       }
     }
