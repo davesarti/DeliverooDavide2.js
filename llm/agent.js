@@ -4,6 +4,7 @@ import {
   BDI_DELEGATION_POLL_MS,
   BDI_DELEGATION_PER_PARCEL_MS,
   BDI_DELEGATION_DEFAULT_MS,
+  BDI_DELEGATION_MAX_MS,
 } from "../utils/constants.js";
 import { waitUntil } from "../utils/asyncUtils.js";
 import { validateActionAgainstPersistentRules } from "./rulesValidator.js";
@@ -33,6 +34,8 @@ import {
   unblockTile,
   clearNavigationRules,
   buildValidatorSnapshot,
+  validateTile,
+  validateDeliveryTile,
 } from "./tools.js";
 import { createCoordinator } from "./coordinator.js";
 import { startAutonomousBDI } from "../bdi/bdiAgent.js";
@@ -129,12 +132,15 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
         Number.isInteger(params.parcels) && params.parcels > 0
           ? params.parcels
           : null;
-      const timeoutMs =
+      const requestedTimeoutMs =
         Number.isInteger(params.timeoutMs) && params.timeoutMs > 0
           ? params.timeoutMs
           : target
             ? target * BDI_DELEGATION_PER_PARCEL_MS
             : BDI_DELEGATION_DEFAULT_MS;
+      // Never trust an LLM-supplied (or count-derived) budget to be sane: cap it
+      // so one mission can never strand the agent for the whole match.
+      const timeoutMs = Math.min(requestedTimeoutMs, BDI_DELEGATION_MAX_MS);
 
       const start = bs.metrics?.deliveredParcels ?? 0;
       const startedAt = Date.now();
@@ -169,6 +175,36 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
 
     case "direct_partner": {
       const { command, x, y, maxDist, parcelId, signal, timeoutMs } = params;
+
+      const ALLOWED_COMMANDS = new Set([
+        "go_to", "go_near", "pickup", "putdown", "wait", "resume",
+      ]);
+      if (!ALLOWED_COMMANDS.has(command)) {
+        return makeToolResult(
+          `Error: unknown partner command "${command}". Allowed: go_to, go_near, pickup, putdown, wait, resume.`
+        );
+      }
+      const needsCoords =
+        command === "go_to" || command === "go_near" ||
+        command === "pickup" || command === "putdown";
+      if (needsCoords) {
+        const tileError = validateTile(x, y, bs);
+        if (tileError) {
+          return makeToolResult(`Error: '${command}' needs valid map coordinates — ${tileError}`);
+        }
+      }
+      if (command === "go_near" && !(Number.isInteger(maxDist) && maxDist >= 0)) {
+        return makeToolResult(
+          `Error: 'go_near' needs a non-negative integer maxDist, received ${maxDist}.`
+        );
+      }
+      if (command === "pickup" && (parcelId == null || parcelId === "")) {
+        return makeToolResult("Error: 'pickup' needs a parcelId.");
+      }
+      if (command === "wait" && (typeof signal !== "string" || signal.trim() === "")) {
+        return makeToolResult("Error: 'wait' needs a signal label.");
+      }
+
       const args = {};
       if (command === "go_to") {
         args.x = x;
@@ -254,6 +290,8 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
       return makeToolResult(findDeliveryTile(params, bs));
 
     case "go_to": {
+      const tileError = validateTile(params.x, params.y, bs);
+      if (tileError) return makeToolResult(tileError);
       try {
         await actions.goTo(params.x, params.y);
         return makeToolResult(`Arrived at (${params.x}, ${params.y}).`);
@@ -265,10 +303,17 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
     }
 
     case "go_pick_up": {
+      const tileError = validateTile(params.x, params.y, bs);
+      if (tileError) return makeToolResult(tileError);
       try {
-        await actions.goPickUp(params.x, params.y, params.parcelId);
+        const picked = await actions.goPickUp(params.x, params.y, params.parcelId);
+        if (!Array.isArray(picked) || picked.length === 0) {
+          return makeToolResult(
+            `No parcel was picked up at (${params.x}, ${params.y}) — none is there.`
+          );
+        }
         return makeToolResult(
-          `Picked up parcel ${params.parcelId} at (${params.x}, ${params.y}).`
+          `Picked up ${picked.length} parcel(s) at (${params.x}, ${params.y}).`
         );
       } catch (error) {
         return makeToolResult(
@@ -278,6 +323,13 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
     }
 
     case "go_drop_off": {
+      const tileError = validateDeliveryTile(params.x, params.y, bs);
+      if (tileError) {
+        return makeToolResult(tileError, {
+          deliverySucceeded: false,
+          deliveredCount: 0,
+        });
+      }
       try {
         const deliveredCount = [...bs.parcels.values()].filter(
           (parcel) => parcel.carriedBy === bs.me.id
