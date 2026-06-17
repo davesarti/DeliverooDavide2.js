@@ -42,6 +42,8 @@ doubt, do NOT reject.
    an explicit coordinate that can never be resolved.
 2. Immediate mission with an explicit negative reward for doing it now
    (e.g. "move to (4,7) to get -10pts"). Reward 0 and missing reward are NOT negative.
+   A multiplier between 0 and 1 (e.g. "0.3x reward", "0.5 of the normal reward") is a
+   REDUCED but still positive reward — NOT negative. Do NOT reject it.
 3. The mission explicitly requires an action that directly violates an active
    persistent rule in the game state (e.g. deliver at a forbidden tile).
    NOTE: parcel value rules affect delivery worth only — they never make a

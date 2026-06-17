@@ -95,6 +95,13 @@ Steps:
 Do NOT start collecting parcels.
 
 ---
+Mission: Deliver stacks of exactly 5 parcels at a time to get 0.3 of the standard reward.
+Type: durable rule — sub-1x met multiplier. "0.3 of the standard reward" means metMultiplier=0.3.
+A sub-1x multiplier is a REDUCTION, not a negative reward — do NOT reject it.
+Steps:
+1. set_stack_size_rule(mode="exactly", count=5, metMultiplier=0.3)   ← terminal; STOP here
+
+---
 Mission: From now on, parcels worth over 10 points are worth 0 when delivered.
 Type: durable rule. "over N" targets the HIGH parcels -> minReward.
 Steps:
@@ -119,6 +126,14 @@ Type: durable rule — reward multiplier.
 Steps:
 1. set_delivery_tile_multiplier(x=2, y=4, multiplier=5)   ← terminal; STOP here
 Use set_delivery_tile_multiplier only when the mission explicitly says "Nx" or "N times". Do NOT use it for flat bonuses.
+
+---
+Mission: Deliveries at (9,0) are worth 0.5x the normal reward.
+Type: durable rule — sub-1x multiplier. A multiplier between 0 and 1 is a REDUCTION,
+not a negative reward. Accept and store it; do NOT reject.
+Steps:
+1. set_delivery_tile_multiplier(x=9, y=0, multiplier=0.5)   ← terminal; STOP here
+"0.5x" → multiplier=0.5; "0.3 of the standard reward" → multiplier=0.3; "worth nothing" → multiplier=0.
 
 ---
 Mission: Delivering at (9,0) gives a 50% bonus.
@@ -239,9 +254,10 @@ on a signal that never comes. rendezvous_with_partner closes the barrier atomica
 ---
 Mission: Go together in the neighborhood of (2,2) and wait for my signal to move.
 Type: COMPOUND coordination — rendezvous (clause 1) THEN hold for an external/operator
-signal (clause 2). "wait for MY signal" is an external signal, distinct from a plain
-"wait for each other" rendezvous. rendezvous_with_partner RELEASES the teammate on
-arrival, so it must NOT be the last step here.
+signal (clause 2). "wait for MY signal" / "wait for my message" / "freeze until I say go"
+are all the same: park the partner on a named signal after the rendezvous.
+rendezvous_with_partner RELEASES the teammate on arrival, so it must NOT be the last
+step here.
 Steps:
 1. rendezvous_with_partner(x=2, y=2, maxDist=1, more=true)   ← more=true: a wait clause follows
 2. direct_partner(command="wait", signal="go")   ← park the teammate until the signal
@@ -275,7 +291,9 @@ set deliver=false to collect without delivering.
 
 ---
 Mission: Let's play red light green light: go to an odd row and wait for my go.
-Type: external-signal scenario.
+Type: external-signal scenario. "wait for my go" / "wait for my message" / "wait for my
+signal" / "freeze until our signal" / "hold until I say X" all mean the same thing: park
+the partner on a named signal so it stays frozen until the operator sends that word.
 Steps:
 1. direct_partner(command="go_to", to an odd-row tile for the teammate) — note the cid.
 2. wait_for_partner(cid).
@@ -285,11 +303,31 @@ Steps:
 Do NOT call resume here — the partner is intentionally parked on signal "go-1".
 
 ---
+Mission: Tell your partner to hold position until I say start.
+Type: external-signal scenario — same pattern as red light/green light.
+"hold until I say start" / "wait for my message" / "freeze until I send the word" are
+all equivalent: park the partner on a signal the operator will send later.
+Steps:
+1. direct_partner(command="wait", signal="start").
+2. final_reply stating the partner is holding and will resume on "start".
+Do NOT call resume — the partner must stay parked until the operator sends "start".
+
+---
 Mission: green
 Context: active coordination shows partnerParkedOn = "go-1".
-Type: signal relay.
+Type: signal relay. The operator's message IS the signal — relay it.
+"green" / "go" / "start" / any word matching the parked signal — all are signal relays.
 Steps:
 1. signal_partner(signal="go-1") — releases the teammate's wait.
+2. direct_partner(command="resume").
+3. final_reply.
+
+---
+Mission: start
+Context: active coordination shows partnerParkedOn = "start".
+Type: signal relay — same as above, operator word matches the parked signal.
+Steps:
+1. signal_partner(signal="start").
 2. direct_partner(command="resume").
 3. final_reply.
 `.trim();
