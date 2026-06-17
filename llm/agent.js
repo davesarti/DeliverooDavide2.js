@@ -8,6 +8,7 @@ import {
   RENDEZVOUS_SELF_ATTEMPTS,
   RENDEZVOUS_SELF_RETRY_DELAY_MS,
   HANDOFF_MAX_PICKUPS,
+  LLM_MOVE_RETRY_DELAY_MS,
 } from "../utils/constants.js";
 import { waitUntil, wait } from "../utils/asyncUtils.js";
 import { nearestDeliveryTileAt } from "../utils/stateUtils.js";
@@ -90,6 +91,14 @@ const BDI_PAUSING_TOOLS = new Set([
   "go_to",
   "go_pick_up",
   "go_drop_off",
+  // Resolving a named tile ("leftmost"/"nearest"/...) is only ever used as the
+  // precursor to a self-driven go_drop_off (see executorExamples.js — it never
+  // appears in a pure rule-storage mission, which always takes literal
+  // coordinates from the request). Pausing here too closes the gap where the
+  // background BDI loop could pick up and auto-deliver the very parcel this
+  // mission means to carry to the resolved tile, between the tile lookup and
+  // the delivery call.
+  "find_delivery_tile",
   "rendezvous_with_partner",
   "handoff_to_partner",
   "wait_for_partner",
@@ -118,15 +127,62 @@ function makeToolResult(observation, extra = {}) {
   };
 }
 
+// A movementBlocked error means actions.js's own goTo already exhausted its
+// internal replan budget (RUNTIME.MAX_REPLANS) before throwing — nothing will
+// retry on its own from here, even though the bubbled-up message still says
+// "will retry" (that wording describes the transient in-place yield one layer
+// down, not this terminal case). Most such blocks are a crossing partner that
+// clears within a second, so the LLM's own direct-movement tools (go_to,
+// go_pick_up, go_drop_off) get exactly one extra attempt, after a short pause,
+// before reporting failure back to the model.
+async function withMovementRetry(fn) {
+  try {
+    return await fn();
+  } catch (error) {
+    if (!error?.movementBlocked) throw error;
+    await wait(LLM_MOVE_RETRY_DELAY_MS);
+    return await fn();
+  }
+}
+
+// Strips the now-false "— will retry" promise before a movement failure
+// reaches the model: an LLM reading "will retry" tends to wait for the system
+// to handle it instead of retrying the tool itself, which is exactly the bug
+// this fixes (see withMovementRetry). For a block that survived even the
+// extra retry above, add an explicit hint that retrying the tool call again
+// (or picking a different target) is the model's own move now.
+function describeMovementFailure(error) {
+  const message = String(error?.message ?? error).replace(/\s*—\s*will retry\.?$/i, ".");
+  return error?.movementBlocked
+    ? `${message} (already retried automatically; if the blocker is still there, try again or pick a different target)`
+    : message;
+}
+
 // ==========================================
 // Tool execution
 // ==========================================
 
-async function executeTool(action, bs, llmState, actions, missionStats, coordinator, bdi, moreToDo = false) {
+async function executeTool(action, bs, llmState, actions, missionStats, coordinator, bdi, moreToDo = false, missionMemory = null) {
   const { name, params } = action;
 
   switch (name) {
     case "collect_and_deliver": {
+      // This tool hands off to the autonomous engine, which picks its OWN
+      // delivery tile(s) — it has no notion of a specific target. A mission
+      // that already resolved one (resolve_delivery_tile, e.g. "drop a package
+      // at the leftmost tile") wants that exact tile, so delegating here would
+      // silently ignore it (and likely over-deliver — see toolExecutorDefs.js's
+      // own guidance to use deliver_carried_parcels for a named-tile drop).
+      // Redirect instead of executing the wrong thing.
+      if (missionMemory?.resolvedDeliveryTile) {
+        const { x, y } = missionMemory.resolvedDeliveryTile;
+        return makeToolResult(
+          `collect_and_deliver is not valid here: this mission already resolved a specific ` +
+            `delivery tile (${x}, ${y}) and ignoring it would not satisfy the mission. If you ` +
+            `are not carrying a parcel yet, find one (observe_environment / move_to to scout, ` +
+            `then go_pick_up) and then call deliver_carried_parcels at (${x}, ${y}).`
+        );
+      }
       // Hand the whole pick-up/deliver play loop to the embedded autonomous BDI
       // instead of micro-driving it one LLM round-trip per move. The BDI already
       // scores and harvests parcels locally with zero model calls; here we just
@@ -518,18 +574,34 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
     case "calculate":
       return makeToolResult(calculate(params));
 
-    case "find_delivery_tile":
-      return makeToolResult(findDeliveryTile(params, bs));
+    case "find_delivery_tile": {
+      const resolved = findDeliveryTile(params, bs);
+      // findDeliveryTile returns a JSON string ("{"x":..,"y":..}") on success or
+      // an "Error: ..." string on failure. Remember the resolved tile for this
+      // mission so a later collect_and_deliver call (which ignores any specific
+      // tile) can be redirected instead of silently delivering wherever the
+      // autonomous engine prefers — see its case above. The observation
+      // returned to the model is unchanged either way.
+      if (missionMemory && typeof resolved === "string" && !resolved.startsWith("Error:")) {
+        try {
+          const parsed = JSON.parse(resolved);
+          if (Number.isInteger(parsed?.x) && Number.isInteger(parsed?.y)) {
+            missionMemory.resolvedDeliveryTile = parsed;
+          }
+        } catch {}
+      }
+      return makeToolResult(resolved);
+    }
 
     case "go_to": {
       const tileError = validateTile(params.x, params.y, bs);
       if (tileError) return makeToolResult(tileError);
       try {
-        await actions.goTo(params.x, params.y);
+        await withMovementRetry(() => actions.goTo(params.x, params.y));
         return makeToolResult(`Arrived at (${params.x}, ${params.y}).`);
       } catch (error) {
         return makeToolResult(
-          `Could not reach (${params.x}, ${params.y}): ${error?.message ?? error}.`
+          `Could not reach (${params.x}, ${params.y}): ${describeMovementFailure(error)}`
         );
       }
     }
@@ -538,7 +610,9 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
       const tileError = validateTile(params.x, params.y, bs);
       if (tileError) return makeToolResult(tileError);
       try {
-        const picked = await actions.goPickUp(params.x, params.y, params.parcelId);
+        const picked = await withMovementRetry(() =>
+          actions.goPickUp(params.x, params.y, params.parcelId)
+        );
         if (!Array.isArray(picked) || picked.length === 0) {
           return makeToolResult(
             `No parcel was picked up at (${params.x}, ${params.y}) — none is there.`
@@ -549,7 +623,7 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
         );
       } catch (error) {
         return makeToolResult(
-          `Could not pick up at (${params.x}, ${params.y}): ${error?.message ?? error}.`
+          `Could not pick up at (${params.x}, ${params.y}): ${describeMovementFailure(error)}`
         );
       }
     }
@@ -574,7 +648,7 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
           (parcel) => parcel.carriedBy === bs.me.id
         ).length;
 
-        await actions.goDropOff(params.x, params.y);
+        await withMovementRetry(() => actions.goDropOff(params.x, params.y));
 
         if (isDeliveryDrop) {
           return makeToolResult(
@@ -590,7 +664,7 @@ async function executeTool(action, bs, llmState, actions, missionStats, coordina
         );
       } catch (error) {
         return makeToolResult(
-          `Could not drop at (${params.x}, ${params.y}): ${error?.message ?? error}.`,
+          `Could not drop at (${params.x}, ${params.y}): ${describeMovementFailure(error)}`,
           { deliverySucceeded: false, deliveredCount: 0 }
         );
       }
@@ -792,6 +866,11 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
       let completed = false;
       let finalReply = null;
       let missionStats = null;
+      // Cross-step memory for this mission only (cleared with everything else
+      // when the mission ends) — currently just the tile resolved by
+      // find_delivery_tile, so a later collect_and_deliver call can be caught
+      // and redirected instead of silently ignoring it (see executeTool).
+      const missionMemory = { resolvedDeliveryTile: null };
 
       for (let i = 0; i < MAX_ITERATIONS; i++) {
         const { action: rawAction, toolCall } = await callLLMTool({
@@ -879,7 +958,8 @@ export async function startLLMAgent(socket, bs, llmState, actions) {
           missionStats,
           coordinator,
           bdi,
-          moreToDo
+          moreToDo,
+          missionMemory
         );
         const observation = toolResult.observation;
 

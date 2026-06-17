@@ -38,205 +38,225 @@ const BETWEEN_MS = 2_000;
 // Atomic missions: move, drop, factual query, arithmetic query.
 
 const ALL_MISSIONS = [
-  // ── 1A: Move with POSITIVE reward → accept ──────────────────────────────
+
+  // LEVEL 1 — ATOMIC (10)
+
   {
-    label: "L1-01: Move +reward (explicit coords)",
+    label: "L1-01 Move +reward",
     type: "TASK",
     expected: "accepted",
-    msg: "Move to (4,7) and you get +10pts",
-  },
-  {
-    label: "L1-02: Move +reward (variant phrasing)",
-    type: "TASK",
-    expected: "accepted",
-    msg: "Move to (2,3) to get +20 pts",
-  },
-  {
-    label: "L1-03: Move +reward (go-to phrasing)",
-    type: "TASK",
-    expected: "accepted",
-    msg: "Go to position (0,5) for +5 pts",
-  },
-  {
-    label: "L1-04: Move +reward ('collect' phrasing)",
-    type: "TASK",
-    expected: "accepted",
-    msg: "Move to (6,2) to collect a +8 pts reward",
+    msg: "Move to (4,4) and you gain +10 pts"
   },
 
-  // ── 1B: Move with NEGATIVE reward → reject ──────────────────────────────
   {
-    label: "L1-05: Move -reward (exact PDF example)",
-    type: "REJECT",
-    expected: "rejected",
-    msg: "Move to (4,7) to get -10pts",
-  },
-  {
-    label: "L1-06: Move -reward ('lose' phrasing)",
-    type: "REJECT",
-    expected: "rejected",
-    msg: "Move to (2,3) and lose 5 pts",
-  },
-  {
-    label: "L1-07: Move -reward ('penalty' phrasing)",
-    type: "REJECT",
-    expected: "rejected",
-    msg: "Go to (0,0) for a -20 pts penalty",
-  },
-  {
-    label: "L1-08: Move -reward (large penalty)",
-    type: "REJECT",
-    expected: "rejected",
-    msg: "Move to (5,5) and receive -30 pts",
-  },
-
-  // ── 1C: Arithmetic coordinates, positive reward → accept ────────────────
-  {
-    label: "L1-09: Move arithmetic coords (one side)",
+    label: "L1-02 Arithmetic coordinates",
     type: "TASK",
     expected: "accepted",
-    msg: "Move to x=4*2 y=3 to get +15 pts",
-  },
-  {
-    label: "L1-10: Move arithmetic coords (both sides)",
-    type: "TASK",
-    expected: "accepted",
-    msg: "Move to x=(2+1) y=(1+3)*2 for +10 pts",
+    msg: "Move to x=2*3 y=1+4 to get +12 pts"
   },
 
-  // ── 1D: Arithmetic coordinates, negative reward → reject ────────────────
   {
-    label: "L1-11: Move arithmetic coords + negative reward (PDF example)",
+    label: "L1-03 Negative reward",
     type: "REJECT",
     expected: "rejected",
-    msg: "Move to x=4*2 y=(1+3)*3 to get -10pts",
+    msg: "Move to (4,4) to get -10 pts"
   },
 
-  // ── 1E: Placeholder coordinates → reject ────────────────────────────────
   {
-    label: "L1-12: Move placeholder (x,y) (PDF example)",
+    label: "L1-04 Placeholder coordinates",
     type: "REJECT",
     expected: "rejected",
-    msg: "Move to (x,y) to get +10pts",
+    msg: "Move to (x,y) and get +10 pts"
   },
+
   {
-    label: "L1-13: Move placeholder (x1,y1) phrasing",
+    label: "L1-05 Out of map",
     type: "REJECT",
     expected: "rejected",
-    msg: "Go to position (x1,y1) for +20 pts",
+    msg: "Move to (10,4) for +10 pts"
   },
+
   {
-    label: "L1-14: Move placeholder with question mark",
+    label: "L1-06 Delivery tile",
+    type: "TASK",
+    expected: "accepted",
+    msg: "Move to the delivery tile at (0,0) for +5 pts"
+  },
+
+  {
+    label: "L1-07 Drop nearest delivery",
+    type: "TASK",
+    expected: "accepted",
+    msg: "Drop a parcel at the nearest delivery tile for 6 pts"
+  },
+
+  {
+    label: "L1-08 Drop negative reward",
     type: "REJECT",
     expected: "rejected",
-    msg: "Move to x=? y=4 for +5 pts",
+    msg: "Drop a package at the nearest delivery tile to lose 10 pts"
   },
 
-  // ── 1F: Drop package at spatial delivery tile, positive reward → accept ─
   {
-    label: "L1-15: Drop at leftmost tile +reward (PDF example)",
-    type: "TASK",
+    label: "L1-09 Query",
+    type: "QUERY",
     expected: "accepted",
-    msg: "Drop a package at the leftmost delivery tile to get 5pt",
-  },
-  {
-    label: "L1-16: Drop at rightmost tile +reward",
-    type: "TASK",
-    expected: "accepted",
-    msg: "Drop a package at the rightmost delivery tile to get +10 pts",
-  },
-  {
-    label: "L1-17: Drop at topmost tile +reward",
-    type: "TASK",
-    expected: "accepted",
-    msg: "Drop a package at the topmost delivery tile to get +8 pts",
-  },
-  {
-    label: "L1-18: Drop at nearest tile, no explicit reward",
-    type: "TASK",
-    expected: "accepted",
-    msg: "Drop a package at the nearest delivery tile",
+    msg: "What is the capital of Spain?"
   },
 
-  // ── 1G: Drop with negative reward → reject ───────────────────────────────
   {
-    label: "L1-19: Drop at leftmost tile -reward (PDF example)",
+    label: "L1-10 Arithmetic",
+    type: "QUERY",
+    expected: "accepted",
+    msg: "Calculate 13*7"
+  },
+
+
+  // LEVEL 2 — PERSISTENT RULES (10)
+
+  {
+    label: "L2-01 Stack exactly 2",
+    type: "RULE",
+    expected: "accepted",
+    msg: "Deliver batches of exactly 2 parcels to double the reward"
+  },
+
+  {
+    label: "L2-02 Stack exactly 5",
+    type: "RULE",
+    expected: "accepted",
+    msg: "From now on, deliver exactly 5 parcels at a time"
+  },
+
+  {
+    label: "L2-03 Tile multiplier corner",
+    type: "RULE",
+    expected: "accepted",
+    msg: "Every delivery at (0,0) gives 5x the reward"
+  },
+
+  {
+    label: "L2-04 Tile zero reward",
+    type: "RULE",
+    expected: "accepted",
+    msg: "Deliveries at the delivery tile (9,9) are worth nothing"
+  },
+
+  {
+    label: "L2-05 Value rule",
+    type: "RULE",
+    expected: "accepted",
+    msg: "Parcels worth more than 30 bank nothing on delivery"
+  },
+
+  {
+    label: "L2-06 Navigation block",
+    type: "RULE",
+    expected: "accepted",
+    msg: "Do not pass through (4,4) or you lose 40 pts"
+  },
+
+  {
+    label: "L2-07 Clear navigation rules",
+    type: "RULE",
+    expected: "accepted",
+    msg: "Remove every navigation restriction you have"
+  },
+
+  {
+    label: "L2-08 Compound rule",
+    type: "RULE",
+    expected: "accepted",
+    msg: "From now on deliver exactly 3 at a time AND avoid tile (5,5)"
+  },
+
+  {
+    label: "L2-09 Invalid stack",
+    type: "RULE",
+    expected: "rejected",
+    msg: "Deliver exactly 0 parcels for a bonus"
+  },
+
+  {
+    label: "L2-10 Non-delivery multiplier",
+    type: "RULE",
+    expected: "rejected",
+    msg: "Every delivery at (4,4) gives 5x the reward"
+  },
+
+
+  // LEVEL 3 — COORDINATION (10)
+
+  {
+    label: "L3-01 Rendezvous",
+    type: "COORD",
+    expected: "accepted",
+    msg: "Both agents meet near (4,4) within 2 tiles and wait for each other"
+  },
+
+  {
+    label: "L3-02 Rendezvous corner",
+    type: "COORD",
+    expected: "accepted",
+    msg: "Regroup with your teammate around (5,5), max distance 3"
+  },
+
+  {
+    label: "L3-03 Handoff",
+    type: "COORD",
+    expected: "accepted",
+    msg: "One agent picks up a parcel, the other delivers it, for 200 pts"
+  },
+
+  {
+    label: "L3-04 Red light green light",
+    type: "COORD",
+    expected: "accepted",
+    msg: "All agents move to an odd-numbered row and freeze until our signal"
+  },
+
+  {
+    label: "L3-05 Signal green",
+    type: "COORD",
+    expected: "accepted",
+    msg: "green"
+  },
+
+  {
+    label: "L3-06 Rendezvous placeholder",
     type: "REJECT",
     expected: "rejected",
-    msg: "Drop a package at the leftmost delivery tile to get -10pt",
+    msg: "Both agents meet at (x,y) and wait"
   },
+
   {
-    label: "L1-20: Drop at bottommost tile -reward",
-    type: "REJECT",
+    label: "L3-07 Negative distance",
+    type: "COORD",
     expected: "rejected",
-    msg: "Deliver a parcel to the bottommost delivery tile for -5 pts",
+    msg: "Both agents meet near (4,4) within -2 tiles"
   },
 
-  // ── 1H: Reward = 0 → not negative, accept ────────────────────────────────
   {
-    label: "L1-21: Drop at topmost tile reward=0 (not negative)",
-    type: "TASK",
-    expected: "accepted",
-    msg: "Drop a package at the topmost delivery tile to get 0 pts",
+    label: "L3-08 Rendezvous out of map",
+    type: "COORD",
+    expected: "rejected",
+    msg: "Rendezvous near (15,15) within 3 tiles"
   },
 
-  // ── 1I: Factual queries ───────────────────────────────────────────────────
   {
-    label: "L1-22: Query — capital of Italy (PDF example)",
-    type: "QUERY",
+    label: "L3-09 Hold until start",
+    type: "COORD",
     expected: "accepted",
-    msg: "What is the capital of Italy?",
-  },
-  {
-    label: "L1-23: Query — moon landing",
-    type: "QUERY",
-    expected: "accepted",
-    msg: "Who was the first person to walk on the moon?",
-  },
-  {
-    label: "L1-24: Query — WWII end year",
-    type: "QUERY",
-    expected: "accepted",
-    msg: "In what year did World War II end?",
-  },
-  {
-    label: "L1-25: Query — boiling point",
-    type: "QUERY",
-    expected: "accepted",
-    msg: "What is the boiling point of water in Celsius?",
+    msg: "Tell your partner to hold position until I say start"
   },
 
-  // ── 1J: Arithmetic queries ────────────────────────────────────────────────
   {
-    label: "L1-26: Arithmetic — basic multiplication (PDF example)",
-    type: "QUERY",
+    label: "L3-10 Start signal",
+    type: "COORD",
     expected: "accepted",
-    msg: "Calculate 5*5",
-  },
-  {
-    label: "L1-27: Arithmetic — power",
-    type: "QUERY",
-    expected: "accepted",
-    msg: "Calculate 2^10",
-  },
-  {
-    label: "L1-28: Arithmetic — parentheses",
-    type: "QUERY",
-    expected: "accepted",
-    msg: "How much is (3+4)*5?",
-  },
-  {
-    label: "L1-29: Arithmetic — percentage",
-    type: "QUERY",
-    expected: "accepted",
-    msg: "How much is 15% of 240?",
-  },
-  {
-    label: "L1-30: Arithmetic — sqrt + factorial",
-    type: "QUERY",
-    expected: "accepted",
-    msg: "Calculate sqrt(225) + 3!",
-  },
+    msg: "start"
+  }
+
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────

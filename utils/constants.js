@@ -153,6 +153,16 @@ export const RUNTIME = {
 // Constants used in LLM agent
 export const MAX_ITERATIONS = 100;
 
+// go_to/go_pick_up/go_drop_off (the LLM's direct, single-shot movement tools)
+// surface a movementBlocked error only after goTo's own internal replan budget
+// (RUNTIME.MAX_REPLANS) is already exhausted — at that point nothing will retry
+// automatically, even though the underlying message still says "will retry"
+// (it was written for the transient in-place yield, not for this terminal
+// case). A transient block (a crossing partner) often clears within a second,
+// so the LLM tool layer gets exactly one extra attempt, after this pause,
+// before reporting failure back to the model.
+export const LLM_MOVE_RETRY_DELAY_MS = 600;
+
 // BDI delegation (collect_and_deliver): the LLM hands a pick-up/deliver task to
 // the embedded autonomous BDI and watches the shared delivery counter instead
 // of micro-stepping the play loop itself.
