@@ -130,6 +130,10 @@ Stack rule replacement:
   removal), THEN set_stack_size_rule as the terminal final step. Without more=true the
   mission ends on the removal and the new rule is never stored.
 
+Clearing rules: clear_durable_rules wipes stack/parcel-value/delivery-tile rules but
+NOT navigation blocks. To remove every blocked navigation tile, call
+clear_navigation_rules instead — never call unblock_navigation_tile once per tile.
+
 An action TASK is a bare goal to carry out NOW, with no standing scoring clause,
 e.g. "collect 5 parcels", "deliver the parcels you are carrying", "move to (4,7)".
 Carry it out using the play loop below.
