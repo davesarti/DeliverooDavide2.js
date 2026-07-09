@@ -1,4 +1,5 @@
 import { findPath } from "../pathfinding/pathfinding.js";
+import { dijkstraCosts } from "../pathfinding/dijkstra.js";
 import { AGENT_CONFIG, } from "../config.js";
 import {
   RUNTIME,
@@ -41,6 +42,20 @@ export function createActions(socket, bs, options = {}) {
     // cost (see astar reading bs.rules.penaltyTiles), never impassable walls.
     // Transient refused-move tiles still hard-block via options.avoidTiles.
     return new Set();
+  }
+
+  /*
+   * Penalty-inclusive travel costs from the agent to every reachable tile
+   * (one Dijkstra pass), used by explore ranking and camp anchor selection.
+   * Null when the map isn't ready yet — callers fall back to geometric
+   * distance, matching the pre-cost-map behavior.
+   */
+  function travelCostMap() {
+    try {
+      return dijkstraCosts(bs.me, bs, { blockedTiles: getBlockedTiles() });
+    } catch {
+      return null;
+    }
   }
 
   /*
@@ -551,7 +566,8 @@ export function createActions(socket, bs, options = {}) {
   async function explore({ shouldStop = () => false } = {}) {
     const candidates = findCellsToExplore(
       bs.map.spawnTiles,
-      bs.me
+      bs.me,
+      travelCostMap()
     );
 
     if (!candidates || candidates.length === 0) {
@@ -696,11 +712,18 @@ export function createActions(socket, bs, options = {}) {
    * which would leave the agent camping a corner; centring on the cluster makes
    * it sit where it can watch the most of the pocket.
    */
-  function clusterCenter(seed) {
+  function clusterCenter(seed, costMap = null) {
     const radius = campRadius();
-    const near = (bs.map.spawnTiles ?? []).filter(
+    let near = (bs.map.spawnTiles ?? []).filter(
       (t) => Math.abs(t.x - seed.x) + Math.abs(t.y - seed.y) <= radius
     );
+    // Tiles the agent can't currently reach can't anchor a camp. Only filter
+    // when something remains, so a fully cut-off pocket keeps the old
+    // geometric behavior instead of returning no anchor at all.
+    if (costMap) {
+      const reachable = near.filter((t) => costMap.has(`${t.x},${t.y}`));
+      if (reachable.length > 0) near = reachable;
+    }
     if (near.length === 0) return { x: seed.x, y: seed.y };
 
     let sumX = 0;
@@ -712,10 +735,24 @@ export function createActions(socket, bs, options = {}) {
     const cx = sumX / near.length;
     const cy = sumY / near.length;
 
+    // Anchor choice = centroid proximity + travel-cost excess over the
+    // cheapest tile of the pocket. Both terms are in step units
+    // (BASE_STEP_COST = 1), so for an unpenalized pocket the excess is a few
+    // steps and centroid proximity dominates as before; a tile on or behind
+    // an LLM penalty carries the penalty magnitude in its excess and loses
+    // the anchor spot to a clean neighbour without any new weight to tune.
+    let minCost = 0;
+    if (costMap) {
+      minCost = Math.min(...near.map((t) => costMap.get(`${t.x},${t.y}`)));
+    }
+
     let best = null;
     let bestDist = Infinity;
     for (const t of near) {
-      const d = Math.abs(t.x - cx) + Math.abs(t.y - cy);
+      const excess = costMap
+        ? costMap.get(`${t.x},${t.y}`) - minCost
+        : 0;
+      const d = Math.abs(t.x - cx) + Math.abs(t.y - cy) + excess;
       if (d < bestDist) {
         bestDist = d;
         best = t;
@@ -730,11 +767,25 @@ export function createActions(socket, bs, options = {}) {
     // gathers a fuller load before delivering. Centre the anchor on the local
     // spawn cluster so a big zone is watched from its middle rather than the
     // edge the parcel was picked up on.
+    const costMap = travelCostMap();
     const hint = bs.lastParcelHint;
-    if (hint) return clusterCenter(hint);
+    if (hint) return clusterCenter(hint, costMap);
 
     // No hint (carrying but nothing harvested yet this episode): fall back to
-    // the nearest green tile.
+    // the cheapest-to-reach green tile (penalty-inclusive), or the geometric
+    // nearest when the cost map isn't available.
+    if (costMap) {
+      let best = null;
+      let bestCost = Infinity;
+      for (const tile of bs.map.spawnTiles ?? []) {
+        const cost = costMap.get(`${tile.x},${tile.y}`);
+        if (cost !== undefined && cost < bestCost) {
+          bestCost = cost;
+          best = { x: tile.x, y: tile.y };
+        }
+      }
+      if (best) return best;
+    }
     return nearestSpawnTile(bs, bs.me);
   }
 
