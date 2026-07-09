@@ -630,32 +630,38 @@ export function createActions(socket, bs, options = {}) {
         if (isInsideMap(cx, cy, bs.map)) candidates.push({ x: cx, y: cy });
       }
     }
+    // One Dijkstra pass gives reachability and penalty-inclusive travel cost
+    // for every candidate at once, replacing the per-candidate findPath probe
+    // (worst case O(radius²) A* calls). The probe survives only as a fallback
+    // for when the map isn't ready yet.
+    const costMap = travelCostMap();
+    const cellCost = (cell) => costMap?.get(`${cell.x},${cell.y}`);
+
     // Sort by distance to the target first so both agents converge toward the
-    // meeting point (not the boundary of the diamond). Break ties by distance
-    // to the agent to keep travel efficient.
+    // meeting point (not the boundary of the diamond). Break ties by real
+    // travel cost (or plain distance to the agent without a cost map) to keep
+    // travel efficient and prefer un-penalized approaches.
     candidates.sort((a, b) => {
       const dt = distance(target, a) - distance(target, b);
       if (dt !== 0) return dt;
+      if (costMap) return (cellCost(a) ?? Infinity) - (cellCost(b) ?? Infinity);
       return distance(bs.me, a) - distance(bs.me, b);
     });
 
     for (const cell of candidates) {
       if (shouldStop()) throw ["stopped"];
-      const result = findPath(
-        bs.me,
-        cell,
-        AGENT_CONFIG.pathfinding.algorithm,
-        bs,
-        { blockedTiles: getBlockedTiles() }
-      );
-      if (result && Array.isArray(result.path)) {
-        try {
-          return await goTo(cell.x, cell.y, { shouldStop });
-        } catch (err) {
-          if (Array.isArray(err) && err[0] === "stopped") throw err;
-          // goTo failed (e.g. dynamic obstacle appeared after path was planned).
-          // Try the next candidate rather than propagating immediately.
-        }
+      const reachable = costMap
+        ? cellCost(cell) !== undefined
+        : !!findPath(bs.me, cell, AGENT_CONFIG.pathfinding.algorithm, bs, {
+            blockedTiles: getBlockedTiles(),
+          })?.path;
+      if (!reachable) continue;
+      try {
+        return await goTo(cell.x, cell.y, { shouldStop });
+      } catch (err) {
+        if (Array.isArray(err) && err[0] === "stopped") throw err;
+        // goTo failed (e.g. dynamic obstacle appeared after path was planned).
+        // Try the next candidate rather than propagating immediately.
       }
     }
 
