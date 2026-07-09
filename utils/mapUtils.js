@@ -217,30 +217,47 @@ export function updateSpawnStaleness(me, spawnTiles, observationDistance) {
  * Sorts spawn tiles to explore.
  * Combines two criteria:
  * - high staleness: tile not checked for the longest time
- * - low distance: most convenient tile to reach
+ * - low travel cost: most convenient tile to reach
+ *
+ * When a `costMap` is provided (a Dijkstra cost map from the agent's position,
+ * see pathfinding/dijkstra.js) the travel term is the REAL path cost including
+ * LLM rule penalties, so a fresh-looking tile whose only access runs through a
+ * penalized corridor ranks below an honest alternative — and tiles with no
+ * entry in the map (unreachable right now) are dropped up front. Without a
+ * costMap it falls back to the plain geometric distance, as before.
  */
-export function findCellsToExplore(spawnTiles, me) {
-  const candidates = spawnTiles.filter(
+export function findCellsToExplore(spawnTiles, me, costMap = null) {
+  let candidates = spawnTiles.filter(
     (tile) =>
       !(tile.x === Math.round(me.x) && tile.y === Math.round(me.y))
   );
+
+  const travelCost = costMap
+    ? (tile) => costMap.get(`${tile.x},${tile.y}`)
+    : (tile) => distance(tile, me);
+
+  if (costMap) {
+    candidates = candidates.filter(
+      (tile) => travelCost(tile) !== undefined
+    );
+  }
 
   if (candidates.length === 0) return [];
 
   const maxStaleness =
     Math.max(...candidates.map((tile) => tile.staleness ?? 0)) || 1;
 
-  const maxDist =
-    Math.max(...candidates.map((tile) => distance(tile, me))) || 1;
+  const maxCost =
+    Math.max(...candidates.map((tile) => travelCost(tile))) || 1;
 
   candidates.sort((a, b) => {
     const scoreA =
       STALENESS_WEIGHT * ((a.staleness ?? 0) / maxStaleness) +
-      (1 - STALENESS_WEIGHT) * (1 - distance(a, me) / maxDist);
+      (1 - STALENESS_WEIGHT) * (1 - travelCost(a) / maxCost);
 
     const scoreB =
       STALENESS_WEIGHT * ((b.staleness ?? 0) / maxStaleness) +
-      (1 - STALENESS_WEIGHT) * (1 - distance(b, me) / maxDist);
+      (1 - STALENESS_WEIGHT) * (1 - travelCost(b) / maxCost);
 
     return scoreB - scoreA;
   });
