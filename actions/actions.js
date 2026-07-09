@@ -212,13 +212,22 @@ export function createActions(socket, bs, options = {}) {
     // persistent rules first so it never does what the scored loop would refuse:
     // skip a parcel the value rules price at <= 0 (reward filter), and skip one
     // that would overshoot an exactly/at_most stack cap.
+    // Best-effort: these extras run inside executePath's step loop, so an
+    // unhandled throw here (a socket hiccup on the ack) would fail the WHOLE
+    // walking intention — aborting a healthy delivery and putting it on the
+    // failed-pool cooldown over an optional freebie. Swallow the error and
+    // keep walking; the parcel is still there for the scored loop to target.
     if (carriedCount() < effectiveCapacity(bs)) {
       for (const parcel of bs.parcels.values()) {
         if (parcel.carriedBy) continue;
         if (Math.round(parcel.x) !== x || Math.round(parcel.y) !== y) continue;
         if (applyParcelValueBand(parcel.reward, bs.rules) <= 0) continue;
         if (stackPickupOvershoots(carriedCount() + 1, bs.rules)) continue;
-        await pickup();
+        try {
+          await pickup();
+        } catch {
+          // Opportunistic grab failed — not this intention's problem.
+        }
         break;
       }
     }
@@ -235,8 +244,14 @@ export function createActions(socket, bs, options = {}) {
       if (!penalised && allStackRulesSatisfied(carriedCount(), bs.rules)) {
         // putdown credits the delivery counter and clears the camp hint itself
         // on a delivery tile, so this opportunistic drop is counted just like a
-        // deliberate go_drop_off.
-        await putdown();
+        // deliberate go_drop_off. Best-effort like the grab above: a failed
+        // en-route bank must not abort the walk — the parcels stay carried and
+        // the queued delivery intention still banks them at its own tile.
+        try {
+          await putdown();
+        } catch {
+          // Opportunistic bank failed — keep carrying, keep walking.
+        }
       }
     }
   }
