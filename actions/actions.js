@@ -153,6 +153,23 @@ export function createActions(socket, bs, options = {}) {
       }
     }
 
+    // Credit the shared delivery counter HERE — from the server's own ack
+    // (`dropped`) — so every real delivery is counted exactly once, regardless
+    // of which path triggered the drop: a deliberate go_drop_off, an
+    // opportunistic drop while merely crossing a delivery tile en route
+    // elsewhere (opportunisticActions), or a PDDL-driven putdown. Counting it
+    // in goDropOff alone missed the opportunistic/PDDL drops, so a
+    // collect_and_deliver watcher polling this counter could wait out its whole
+    // timeout after the target had already been met. A handoff drop (non-
+    // delivery tile) is never a delivery, so it is not counted. Clearing the
+    // camp hint belongs to a real delivery too (a fresh carry episode should
+    // anchor on its own harvest), so it is centralized here as well.
+    if (onDelivery && dropped.length > 0) {
+      bs.metrics ??= { deliveredParcels: 0 };
+      bs.metrics.deliveredParcels += dropped.length;
+      bs.lastParcelHint = null;
+    }
+
     // Recompute the cached carry count from bs.parcels, exactly as the sensing
     // update does, so every consumer sees a consistent state (a no-id drop or
     // a partial putdown leaves the rest correctly marked as still carried).
@@ -216,10 +233,10 @@ export function createActions(socket, bs, options = {}) {
     ) {
       const penalised = bs.rules?.penaltyDeliveries?.has(`${x},${y}`);
       if (!penalised && allStackRulesSatisfied(carriedCount(), bs.rules)) {
+        // putdown credits the delivery counter and clears the camp hint itself
+        // on a delivery tile, so this opportunistic drop is counted just like a
+        // deliberate go_drop_off.
         await putdown();
-        // Forget the harvest pocket on delivery (see goDropOff): a fresh carry
-        // episode should anchor camp on its own harvest, not the delivered one.
-        bs.lastParcelHint = null;
       }
     }
   }
@@ -534,30 +551,13 @@ export function createActions(socket, bs, options = {}) {
     }
     if (shouldStop()) throw ["stopped"];
 
-    // Count what this delivery banks so collect_and_deliver can watch progress
-    // when it hands the play loop to the autonomous BDI. The carried set only
-    // changes on sensing, so read the count just before putdown (matches how the
-    // LLM go_drop_off handler reports deliveredCount). A delivery tile banks all
-    // carried parcels at once.
-    const deliveredNow = carriedCount();
     // putdown drops the carried parcels on the current tile regardless of its
-    // type: on a delivery tile they are banked/scored, on any other tile they
-    // are simply left on the ground (this is exactly what a Level-3 handoff
-    // needs). Only a real delivery-tile drop counts as a delivery — never credit
-    // the metric (which collect_and_deliver polls) for a handoff drop.
-    const banked =
-      isDeliveryTile(Math.round(x), Math.round(y), bs.map.deliveryTiles);
-    const result = await putdown();
-    if (deliveredNow > 0 && banked) {
-      bs.metrics ??= { deliveredParcels: 0 };
-      bs.metrics.deliveredParcels += deliveredNow;
-      // Forget the harvest pocket on delivery: the next carry episode should
-      // anchor camp on its own harvest. Clearing here also avoids re-anchoring on
-      // the just-delivered pocket during the tick where carry.count is still
-      // stale right after delivery.
-      bs.lastParcelHint = null;
-    }
-    return result;
+    // type: on a delivery tile they are banked/scored (and credited to the
+    // shared deliveredParcels counter inside putdown, from the server ack), on
+    // any other tile they are simply left on the ground — exactly what a
+    // Level-3 handoff needs. The delivery count and the camp-hint reset both
+    // live in putdown now, so every drop path is treated identically.
+    return await putdown();
   }
 
   /*
