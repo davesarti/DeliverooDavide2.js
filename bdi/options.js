@@ -86,7 +86,6 @@ export const EXPLORATION_INCENTIVE = 0.01;
 // Slightly above exploration: a tiny baseline so any real pickup/delivery
 // still preempts camping, but camping outranks plain exploration when idle.
 export const CAMP_INCENTIVE = 0.02;
-export const DROP_DISINCENTIVE = 0;
 
 /*
  * Reward lost per tile traveled, per carried parcel.

@@ -14,7 +14,6 @@ import {
   campPatienceMs,
   EXPLORATION_INCENTIVE,
   CAMP_INCENTIVE,
-  DROP_DISINCENTIVE,
 } from "./options.js";
 import {
   deliveryMapDistance,
@@ -281,7 +280,7 @@ class IntentionRevision {
       // delivery route, floored at 0, then remapped by any parcel-value rule
       // (e.g. "worth over 10 at delivery -> 0 pts"). With no value rule this
       // sums to the old `totalReward - estimatedLoss`.
-      let sumBanked = -DROP_DISINCENTIVE;
+      let sumBanked = 0;
       const parcelDetails = out ? [] : null;
       for (const parcel of myParcels) {
         const projected = Math.max(0, parcel.reward - routeDist * factor);
