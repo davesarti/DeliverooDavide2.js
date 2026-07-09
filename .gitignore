@@ -7,4 +7,5 @@ CLAUDE.md
 .vscode/extensions.json
 Deliveroo.js/
 test-results-*.json
+report/
 PROPOSAL_*.md
