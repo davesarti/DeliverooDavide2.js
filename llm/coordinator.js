@@ -10,12 +10,34 @@ import { COORD_LLM_WAIT_TIMEOUT_MS } from "../utils/constants.js";
 export function createCoordinator(socket, bs, llmState) {
   let cidCounter = 0;
   const pendingWaiters = new Map(); // cid -> resolve(statusMsg)
-  const bufferedStatuses = new Map(); // cid -> statusMsg
+  const bufferedStatuses = new Map(); // cid -> { msg, bufferedAtMs }
+
+  /*
+   * Drops buffered statuses nobody has claimed within COORD_LLM_WAIT_TIMEOUT_MS
+   * of arriving. A status is buffered here when it lands before the LLM calls
+   * wait_for_partner for that cid (see handleStatus); a fire-and-forget
+   * direct_partner call whose result is never awaited leaves one behind
+   * forever otherwise. Reuses the same timeout that already governs how long
+   * an active wait_for_partner will wait, since the logic is symmetric: if a
+   * wait would give up after this long with no status, a status is just as
+   * safe to give up on after this long with no one asking for it. Piggybacks
+   * on the two call sites that already touch this map instead of a new timer.
+   */
+  function evictExpiredBuffered() {
+    const now = Date.now();
+    for (const [cid, entry] of bufferedStatuses) {
+      if (now - entry.bufferedAtMs > COORD_LLM_WAIT_TIMEOUT_MS) {
+        bufferedStatuses.delete(cid);
+      }
+    }
+  }
 
   /*
    * Called by the agent's onMsg router for every incoming coord status.
    */
   function handleStatus(msg) {
+    evictExpiredBuffered();
+
     const waiter = pendingWaiters.get(msg.cid);
     if (waiter) {
       // Someone called wait_for_partner for this cid — deliver it normally.
@@ -37,7 +59,7 @@ export function createCoordinator(socket, bs, llmState) {
       return;
     }
 
-    bufferedStatuses.set(msg.cid, msg);
+    bufferedStatuses.set(msg.cid, { msg, bufferedAtMs: Date.now() });
   }
 
   /*
@@ -45,6 +67,8 @@ export function createCoordinator(socket, bs, llmState) {
    * cross-turn coordination context.
    */
   async function directPartner(command, args = {}) {
+    evictExpiredBuffered();
+
     const cid = ++cidCounter;
     const partnerId = bs.partner?.id;
 
@@ -88,9 +112,9 @@ export function createCoordinator(socket, bs, llmState) {
    */
   function waitForPartner(cid, timeoutMs = COORD_LLM_WAIT_TIMEOUT_MS) {
     if (bufferedStatuses.has(cid)) {
-      const status = bufferedStatuses.get(cid);
+      const { msg } = bufferedStatuses.get(cid);
       bufferedStatuses.delete(cid);
-      return Promise.resolve(status);
+      return Promise.resolve(msg);
     }
 
     return new Promise((resolve) => {
