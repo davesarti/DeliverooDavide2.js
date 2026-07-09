@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import { LLM_CONFIG } from "../config.js";
+import { LLM_CALL_RETRY_DELAY_MS } from "../utils/constants.js";
+import { wait } from "../utils/asyncUtils.js";
 
 const client = new OpenAI({
   baseURL: LLM_CONFIG.baseURL,
@@ -31,6 +33,10 @@ export async function callLLMTool({
 
   console.warn(`[callLLMTool] First attempt failed: ${firstResult.error}. Retrying...`);
 
+  // Pause before retrying: against a rate limit or a network blip an
+  // immediate second call would most likely fail the same way.
+  await wait(LLM_CALL_RETRY_DELAY_MS);
+
   const retryResult = await requestTool({ messages, tools, temperature });
 
   if (retryResult.ok) return retryResult.value;
@@ -40,7 +46,10 @@ export async function callLLMTool({
 
 /*
  * Executes a single request to the model with function calling
- * and returns { ok, value } or { ok, error }.
+ * and returns { ok, value } or { ok, error }. A thrown API error (rate limit,
+ * network failure, timeout) is folded into { ok: false } too: it is the most
+ * transient failure class of all, so it must go through the same single-retry
+ * path as an invalid response instead of failing the mission outright.
  */
 async function requestTool({ messages, tools, temperature }) {
   const request = {
@@ -51,7 +60,12 @@ async function requestTool({ messages, tools, temperature }) {
     temperature,
   };
 
-  const response = await client.chat.completions.create(request);
+  let response;
+  try {
+    response = await client.chat.completions.create(request);
+  } catch (error) {
+    return { ok: false, error: `API call failed: ${error?.message ?? error}` };
+  }
 
   const toolCall = response.choices?.[0]?.message?.tool_calls?.[0];
 
