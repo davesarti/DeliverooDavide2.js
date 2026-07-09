@@ -810,8 +810,19 @@ export function createActions(socket, bs, options = {}) {
    */
   function campPatrolTiles(anchor) {
     const radius = campRadius();
+    // A penalized tile must never be a patrol WAYPOINT: unlike a tile merely
+    // on the way somewhere (where A* already routes around penalties), a
+    // waypoint is entered deliberately, once per patrol loop, paying the
+    // penalty every lap. Dropping it here still keeps it watched — the
+    // remaining patrol positions cover it within the view radius. If the
+    // whole pocket is penalized the patrol collapses to the anchor alone
+    // (chosen cost-aware in pickCampAnchor), and the gate's matching filter
+    // in countAdjacentSpawnTiles keeps such a camp from starting at all.
+    const penaltyTiles = bs.rules?.penaltyTiles;
     const near = (bs.map.spawnTiles ?? []).filter(
-      (t) => Math.abs(t.x - anchor.x) + Math.abs(t.y - anchor.y) <= radius
+      (t) =>
+        Math.abs(t.x - anchor.x) + Math.abs(t.y - anchor.y) <= radius &&
+        !penaltyTiles?.has(`${t.x},${t.y}`)
     );
     if (near.length === 0) return [anchor];
 
