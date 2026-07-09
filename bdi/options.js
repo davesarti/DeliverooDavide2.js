@@ -22,11 +22,16 @@ import { AGENT_CONFIG } from "../config.js";
 
 /*
  * Number of spawn ("green") tiles clustered within CAMP_ADJACENCY_RADIUS of a
- * pocket — the richer the cluster, the more parcels appear there.
+ * pocket — the richer the cluster, the more parcels appear there. Tiles under
+ * an LLM navigation penalty don't count: the patrol refuses to step on them
+ * (see campPatrolTiles), so they add no harvestable density — counting them
+ * would start a long camp on a pocket the agent can't actually work.
  */
 function countAdjacentSpawnTiles(bs, anchor) {
+  const penaltyTiles = bs.rules?.penaltyTiles;
   let count = 0;
   for (const tile of bs.map.spawnTiles ?? []) {
+    if (penaltyTiles?.has(`${tile.x},${tile.y}`)) continue;
     if (
       Math.abs(tile.x - anchor.x) + Math.abs(tile.y - anchor.y) <=
       CAMP_ADJACENCY_RADIUS
