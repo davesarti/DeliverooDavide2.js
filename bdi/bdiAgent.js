@@ -92,6 +92,11 @@ class IntentionRevision {
   // key -> { predicate, addedAtMs, cooldownMs }: predicates waiting out a
   // post-failure cooldown.
   #failedIntentionPool = new Map();
+  // key -> { count, lastFailMs }: consecutive-failure streaks that drive the
+  // pool's progressive backoff. Kept separate from the pool because pool
+  // entries are deleted on requeue, while the streak must survive the
+  // cooldown->retry->fail cycle to keep escalating.
+  #failureStreaks = new Map();
   #bs;
   #executePredicate;
   // When true, the autonomous select-and-execute cycle idles: the running
@@ -163,17 +168,30 @@ class IntentionRevision {
   }
 
   /*
-   * Stores a failed intention so it is filtered from the queue for a short,
-   * flat cooldown, then retried. No exponential backoff: a failure is almost
-   * always transient congestion that clears within a moment (see
-   * RUNTIME.FAILED_INTENTION_RETRY_MS), so every predicate — pickup, delivery
-   * or explore — re-probes at the same steady interval.
+   * Stores a failed intention so it is filtered from the queue for a cooldown,
+   * then retried. The cooldown backs off progressively: the first failure is
+   * almost always transient congestion that clears within a moment, so it
+   * re-probes after the short base interval, but each consecutive failure of
+   * the same predicate doubles the wait up to a low cap (see
+   * RUNTIME.FAILED_INTENTION_MAX_RETRY_MS) so a persistently blocked target
+   * stops generating a retry storm. A successful completion resets the streak.
    */
   #recordFailedIntention(predicate) {
-    this.#failedIntentionPool.set(this.#predicateKey(predicate), {
+    const key = this.#predicateKey(predicate);
+    const now = Date.now();
+    const count = (this.#failureStreaks.get(key)?.count ?? 0) + 1;
+    this.#failureStreaks.set(key, { count, lastFailMs: now });
+
+    const cooldownMs = Math.min(
+      RUNTIME.FAILED_INTENTION_RETRY_MS *
+        Math.pow(RUNTIME.FAILED_INTENTION_BACKOFF_FACTOR, count - 1),
+      RUNTIME.FAILED_INTENTION_MAX_RETRY_MS
+    );
+
+    this.#failedIntentionPool.set(key, {
       predicate: [...predicate],
-      addedAtMs: Date.now(),
-      cooldownMs: RUNTIME.FAILED_INTENTION_RETRY_MS,
+      addedAtMs: now,
+      cooldownMs,
     });
   }
 
@@ -210,11 +228,23 @@ class IntentionRevision {
   }
 
   /*
-   * Re-queues failed intentions when the cooldown expires.
+   * Re-queues failed intentions when the cooldown expires. Also forgets
+   * failure streaks that have gone quiet: if a predicate hasn't failed again
+   * within twice the max cooldown, whatever was blocking it is long gone
+   * (or the target vanished from beliefs), so its next failure — if any —
+   * restarts from the base interval instead of a stale escalated one. This
+   * also keeps the streak map from accumulating keys of vanished parcels.
    */
   #requeueFailedIntentions() {
     const now = Date.now();
     let requeued = false;
+
+    const streakExpiryMs = RUNTIME.FAILED_INTENTION_MAX_RETRY_MS * 2;
+    for (const [key, streak] of this.#failureStreaks.entries()) {
+      if (now - streak.lastFailMs > streakExpiryMs) {
+        this.#failureStreaks.delete(key);
+      }
+    }
 
     for (const [key, entry] of this.#failedIntentionPool.entries()) {
       if (now - entry.addedAtMs < entry.cooldownMs) continue;
@@ -875,6 +905,12 @@ class IntentionRevision {
               this.#currentIntention = null;
             }
           });
+
+        if (intentionOutcome === "completed") {
+          this.#failureStreaks.delete(
+            this.#predicateKey(intention.predicate)
+          );
+        }
 
         if (!keepIntentionInQueue) {
           this.removeIntention(intention);
