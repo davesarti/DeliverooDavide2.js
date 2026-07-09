@@ -135,15 +135,18 @@ export const RUNTIME = {
   YIELD_RETRY_LIMIT: 1,
   YIELD_BACKOFF_MOVE_FACTOR: 3,
 
-  // Failure pool: a single flat cooldown before a failed predicate is retried.
-  // No exponential backoff — a failure is almost always transient congestion
-  // (a crossing agent at a choke) that clears within a moment, not a genuinely
-  // unreachable target: an unreachable free parcel is quickly taken by a closer
-  // agent and vanishes from beliefs (its id-keyed option never regenerates), so
-  // there is nothing to "back off" from. The loop's validity checks already
-  // drop taken/undeliverable intentions before they reach the pool. So just
-  // re-probe at a steady short interval.
+  // Failure pool: cooldown before a failed predicate is retried. The base
+  // interval is short because a failure is almost always transient congestion
+  // (a crossing agent at a choke) that clears within a moment; the loop's
+  // validity checks already drop taken/undeliverable intentions before they
+  // reach the pool. But when the *same* predicate keeps failing back-to-back
+  // (a persistently contested choke, a camped corridor), steady 1s re-probes
+  // become a retry storm — so consecutive failures double the cooldown up to
+  // a low cap: 1s -> 2s -> 4s -> 8s. The cap keeps the agent responsive once
+  // the obstruction clears; a success resets the streak to the base interval.
   FAILED_INTENTION_RETRY_MS: 1000,
+  FAILED_INTENTION_BACKOFF_FACTOR: 2,
+  FAILED_INTENTION_MAX_RETRY_MS: 8000,
 
   // Rate-limited reconsideration: full options regeneration runs on
   // significant belief changes, or at most this often.
