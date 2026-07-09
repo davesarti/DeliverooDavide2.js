@@ -718,11 +718,17 @@ export function createActions(socket, bs, options = {}) {
       (t) => Math.abs(t.x - seed.x) + Math.abs(t.y - seed.y) <= radius
     );
     // Tiles the agent can't currently reach can't anchor a camp. Only filter
-    // when something remains, so a fully cut-off pocket keeps the old
-    // geometric behavior instead of returning no anchor at all.
+    // when something remains: a fully cut-off pocket drops the cost map
+    // entirely and keeps the old geometric behavior — otherwise the excess
+    // computation below would read missing entries and poison the anchor
+    // choice with NaN.
     if (costMap) {
       const reachable = near.filter((t) => costMap.has(`${t.x},${t.y}`));
-      if (reachable.length > 0) near = reachable;
+      if (reachable.length > 0) {
+        near = reachable;
+      } else {
+        costMap = null;
+      }
     }
     if (near.length === 0) return { x: seed.x, y: seed.y };
 
