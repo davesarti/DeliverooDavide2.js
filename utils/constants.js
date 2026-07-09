@@ -156,6 +156,12 @@ export const RUNTIME = {
 // Constants used in LLM agent
 export const MAX_ITERATIONS = 100;
 
+// Pause before the single retry of a failed chat-completion call. The retry
+// covers transient failures — a 429 rate limit, a network hiccup, or an
+// invalid/tool-less response — and against a rate limit an immediate retry
+// would just be refused again, so it waits this long first.
+export const LLM_CALL_RETRY_DELAY_MS = 1000;
+
 // go_to/go_pick_up/go_drop_off (the LLM's direct, single-shot movement tools)
 // surface a movementBlocked error only after goTo's own internal replan budget
 // (RUNTIME.MAX_REPLANS) is already exhausted — at that point nothing will retry
