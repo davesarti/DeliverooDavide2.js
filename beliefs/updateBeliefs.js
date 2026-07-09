@@ -58,12 +58,6 @@ export function setupBeliefUpdates(socket, bs) {
     bs.me.x = x;
     bs.me.y = y;
     bs.me.score = score;
-
-    updateSpawnStaleness(
-      bs.me,
-      bs.map.spawnTiles,
-      bs.config.observationDistance
-    );
   });
 
   // ==========================================
@@ -120,6 +114,22 @@ export function setupBeliefUpdates(socket, bs) {
      * its memory expires — never just because it left the sensing range.
      */
     const nowMs = Date.now();
+
+    // Staleness clock: one tick per sensing snapshot, not per movement.
+    // Sensing arrives at a steady rate even while the agent stands still
+    // (camping, parked on a wait), so the tiles it is watching cool down and
+    // the out-of-view ones keep heating up — with a movement-driven clock the
+    // heat map would freeze whenever the agent stops. The exploration ranking
+    // normalizes staleness, so the tick rate itself doesn't shift the tuning.
+    // Own position may not have arrived yet on the very first snapshots; a
+    // distance from an undefined coordinate would write NaN into staleness.
+    if (Number.isFinite(bs.me.x) && Number.isFinite(bs.me.y)) {
+      updateSpawnStaleness(
+        bs.me,
+        bs.map.spawnTiles,
+        bs.config.observationDistance
+      );
+    }
 
     // Observe server decay ticks before overwriting beliefs: each -1 on a
     // sensed parcel's reward is one decay event. The parcels' rewards act
