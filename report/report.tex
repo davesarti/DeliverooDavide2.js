@@ -1,7 +1,7 @@
 \documentclass[11pt,a4paper]{article}
 
 \usepackage[T1]{fontenc}
-\usepackage[margin=1.7cm]{geometry}
+\usepackage[margin=1.5cm]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{array}
@@ -9,6 +9,8 @@
 \usepackage{listings}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
+\usepackage{float}
+\usepackage{capt-of}
 \usepackage{hyperref}
 \hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
 \usepackage{enumitem}
@@ -27,6 +29,17 @@
 \titlespacing*{\subsubsection}{0pt}{4pt}{2pt}
 \linespread{0.97}
 \setlength{\parskip}{0pt}
+\raggedbottom
+\makeatletter
+% On a page made up entirely of floats, LaTeX's default \@fptop/\@fpsep/\@fpbot
+% all carry infinite stretch (plus 1fil) to spread the floats evenly across
+% the full page height -- \raggedbottom does not reach this glue. Replacing
+% them with small fixed skips pulls the floats up to the top of the page and
+% packs consecutive floats together, instead of leaving large uneven gaps.
+\setlength{\@fptop}{0pt plus 1pt minus 1pt}
+\setlength{\@fpsep}{8pt plus 1pt minus 1pt}
+\setlength{\@fpbot}{0pt plus 1pt minus 1pt}
+\makeatother
 
 \lstdefinestyle{code}{
   basicstyle=\ttfamily\small,
@@ -68,21 +81,19 @@
 
 \begin{description}
   \item[Agent A --- the LLM agent.] Runs an \emph{embedded} autonomous BDI loop
-  (\texttt{startAutonomousBDI}) identical in implementation to Agent B's, and additionally
-  listens on the chat channel. Each incoming chat message is interpreted by an LLM and executed
-  through a tool-call loop (Section~\ref{sec:llm}). The embedded BDI keeps harvesting parcels
-  with zero model calls while the LLM merely reads or queries state; it is paused only when a
-  tool is about to take exclusive control of the agent's body (movement, delegated collection,
-  rendezvous).
-  \item[Agent B --- the BDI agent.] A pure reactive BDI agent with no LLM in its loop. It scores
-  and executes intentions autonomously (Section~\ref{sec:scoring}) and can be \emph{preempted}
-  by directives sent over the wire by Agent A (Section~\ref{sec:coordination}).
+  (\texttt{startAutonomousBDI}), identical to Agent B's, and additionally listens on the chat
+  channel: each message is interpreted by an LLM and executed through a tool-call loop
+  (Section~\ref{sec:llm}). The embedded BDI keeps harvesting with zero model calls while the LLM
+  merely reads/queries state, and is paused only when a tool takes exclusive control of the
+  agent's body (movement, delegated collection, rendezvous).
+  \item[Agent B --- the BDI agent.] A pure reactive BDI agent with no LLM in its loop: it scores
+  and executes intentions autonomously (Section~\ref{sec:scoring}) and can be \emph{preempted} by
+  directives from Agent A (Section~\ref{sec:coordination}).
 \end{description}
 
 Both agents instantiate \texttt{createBeliefState()} (Section~\ref{sec:belief}) independently;
-the two belief states are not a shared memory region but are kept consistent by an explicit
-synchronization channel for persistent rules. The design separates four concerns that recur
-throughout the codebase:
+the two belief states are kept consistent by an explicit synchronization channel for persistent
+rules, not by sharing memory. The design separates four recurring concerns:
 
 \begin{itemize}
   \item \textbf{Deliberation} --- option generation and scoring (\texttt{bdi/options.js},
@@ -153,7 +164,7 @@ object on demand. Table~\ref{tab:belief-fields} summarizes its top-level section
 \midrule
 \texttt{me} & \texttt{\{id, name, x, y, score\}} --- identity and current position. \\
 \texttt{parcels}, \texttt{crates}, \texttt{agents} & \texttt{Map}s of sensed world objects keyed by id, refreshed on every sensing event. \\
-\texttt{map} & \texttt{tiles}, \texttt{deliveryTiles}, \texttt{spawnTiles}, \texttt{pushableTiles} (type-5 / type-``5!'' tiles a crate can be pushed onto), \texttt{deliveryDistanceMap}, \texttt{spawnDistanceMap} (precomputed BFS distance tables, Section~\ref{sec:plans}), \texttt{grid}. \\
+\texttt{map} & \texttt{tiles}, \texttt{deliveryTiles}, \texttt{spawnTiles}, \texttt{pushableTiles} (type-5/``5!'' crate-receiving tiles), \texttt{deliveryDistanceMap}, \texttt{spawnDistanceMap} (BFS tables, Section~\ref{sec:plans}), \texttt{grid}. \\
 \texttt{config} & \texttt{observationDistance}, \texttt{movementDuration}, \texttt{playerCapacity}, \texttt{parcelDecayingEvent}, \texttt{parcelGenerationEvent}, \texttt{maxParcels} --- server-declared parameters. \\
 \texttt{timing} & \texttt{decayTicks} (global counter of observed decay events) and \texttt{decayPerStep} (EMA of ticks per completed move, Section~\ref{sec:scoring}). \\
 \texttt{rules} & Persistent strategy rules (Table~\ref{tab:rules-fields}), set only by the LLM agent's tools but mirrored onto the BDI agent's copy. \\
@@ -173,7 +184,7 @@ object on demand. Table~\ref{tab:belief-fields} summarizes its top-level section
 \toprule
 \textbf{Field} & \textbf{Semantics} \\
 \midrule
-\texttt{stackSize} & Array of \texttt{\{mode, count, met, unmet\}}; several compatible constraints (e.g.\ \texttt{at\_least 2} and \texttt{at\_most 5}) coexist; conflicting ones are resolved at write time. \\
+\texttt{stackSize} & Array of \texttt{\{mode, count, met, unmet\}}; compatible constraints (e.g.\ \texttt{at\_least 2}, \texttt{at\_most 5}) coexist; conflicts are resolved at write time. \\
 \texttt{parcelValueRules} & Array of \texttt{\{minReward, maxReward, mult, delta\}} value-band remaps applied at delivery time. \\
 \texttt{penaltyDeliveries}, \texttt{preferredDeliveries} & \texttt{"x,y"} $\to$ \texttt{\{penalty\}} / \texttt{\{reward\}} maps for specific delivery tiles. \\
 \texttt{deliveryMultipliers} & \texttt{"x,y"} $\to$ multiplier map for specific delivery tiles. \\
@@ -188,16 +199,15 @@ delivery or a passable route.}
 \label{tab:rules-fields}
 \end{table}
 
-\paragraph{Object permanence.} Sensing is local and intermittent: a parcel or agent that leaves
-observation range simply stops appearing in updates. Several belief-update paths therefore
-treat the \emph{absence} of an expected entity as negative evidence rather than as silence,
-combined with a short time-to-live: an agent's last known position
-(\texttt{AGENT\_MEMORY\_TTL\_MS}, 3\,s) is retained briefly for the race-discount and soft-obstacle
-computations and then dropped, so stale sightings do not bias scoring or pathfinding indefinitely.
-The same TTL discipline applies to the avoided-tile memory used during navigation
-(Section~\ref{sec:plans}): a tile that just refused a move is hard-avoided only for a few
-move-durations, after which it becomes eligible again while the blocking agent is still in
-sensing range.
+\paragraph{Object permanence.} Sensing is local and intermittent: a parcel or agent leaving
+observation range simply stops appearing in updates. Belief-update paths treat this absence as
+negative evidence with a short time-to-live rather than as silence: an agent's last known
+position (\texttt{AGENT\_MEMORY\_TTL\_MS}, 3\,s) feeds the race-discount and soft-obstacle
+computations only briefly before being dropped, and the same TTL discipline governs the
+avoided-tile memory used in navigation (Section~\ref{sec:plans}). The spawn-tile staleness heat
+map driving \texttt{explore} (Table~\ref{tab:plans}) ticks once per sensing snapshot rather than
+per move, so it keeps cooling/heating tiles even while the agent stands still (camping, parked on
+a coordination wait) instead of freezing.
 
 % ============================================================
 \section{Option Generation}
@@ -226,13 +236,13 @@ separately by the idle branch of the revision loop, Section~\ref{sec:scoring}).}
 \label{tab:options}
 \end{table}
 
-\texttt{agent.pushBatch(options)} filters out predicates already in the failed-intention
-cooldown pool or already queued, inserts the rest, and re-sorts the queue exactly \emph{once}
-regardless of batch size --- avoiding $O(n)$ re-sorts for $n$ newly generated options.
+\texttt{agent.pushBatch(options)} filters out predicates already cooled-down or queued, inserts
+the rest, and re-sorts the queue once regardless of batch size, avoiding $O(n)$ re-sorts for $n$
+new options.
 
-\texttt{optionsGeneration} returns immediately when \texttt{bs.coordination.active} is true: in
-directive mode the BDI executes only what the LLM commands, so ordinary scored options must
-neither compete with nor preempt the active coordination intention (Section~\ref{sec:coordination}).
+\texttt{optionsGeneration} returns immediately when \texttt{bs.coordination.active} is true, so
+ordinary scored options never compete with or preempt the active coordination intention
+(Section~\ref{sec:coordination}).
 
 % ============================================================
 \section{Scoring and Intention Revision}
@@ -241,9 +251,15 @@ neither compete with nor preempt the active coordination intention (Section~\ref
 \subsection{The IntentionRevision loop}
 
 \texttt{IntentionRevisionRevise} (\texttt{bdi/bdiAgent.js}) maintains an intention queue and a
-failed-intention cooldown pool (predicate $\to$ \texttt{\{addedAtMs, cooldownMs\}}, flat
-\texttt{FAILED\_INTENTION\_RETRY\_MS} = 1\,s, no exponential backoff: a failure is almost
-always transient congestion). Each pass of \texttt{loop()}:
+failed-intention cooldown pool (predicate $\to$ \texttt{\{addedAtMs, cooldownMs\}}). The cooldown
+backs off per predicate --- base \texttt{FAILED\_INTENTION\_}\allowbreak\texttt{RETRY\_MS}=1\,s,
+doubling on each consecutive failure
+(\texttt{FAILED\_INTENTION\_}\allowbreak\texttt{BACKOFF\_FACTOR}=2) up to
+\texttt{FAILED\_INTENTION\_}\allowbreak\texttt{MAX\_RETRY\_MS}=8\,s --- so a persistently blocked
+target stops retry-storming; the streak resets on the predicate's next success, or automatically
+once it goes $2\times$ the cap (16\,s) without a further failure, so a resolved block does not
+leave a stale escalated cooldown behind. Each pass of
+\texttt{loop()}:
 
 \begin{enumerate}
   \item Idles if \texttt{paused} (an embedded owner, e.g.\ the LLM mission handler, is holding
@@ -259,8 +275,8 @@ always transient congestion). Each pass of \texttt{loop()}:
 
 \subsection{Score computation}
 
-\texttt{intentionScore(predicate)} is the single authority on a predicate's worth; every number
-below is computed fresh from \texttt{bs} at scoring time. The quantity represents the potential optimistic score gain from an action.
+\texttt{intentionScore(predicate)} is the single authority on a predicate's worth, computed fresh
+from \texttt{bs} at scoring time.
 
 \paragraph{Decay factor.} Reward loss is priced through one quantity, the EMA-estimated reward
 lost per carried parcel per tile traveled:
@@ -281,14 +297,14 @@ necessarily contains proportionally more ticks.
 \text{projected}_p &= \max(0,\, \text{reward}_p - d\cdot\text{factor}) \\
 \text{banked}_p &= \text{projected}_p \cdot \text{mult}_v + \text{delta}_v
   \quad\text{(value-band remap, Section~\ref{sec:rulescoring})} \\
-\text{sumBanked} &= -\text{DROP\_DISINCENTIVE} + \sum_{p\in P} \text{banked}_p \\
+\text{sumBanked} &= \sum_{p\in P} \text{banked}_p \\
 \text{scoreAfterStack} &= \text{sumBanked}\cdot\text{mult}_s + \text{delta}_s
   \quad\text{(stack delivery modifier at } |P| \text{)} \\
 S_{\text{drop}}(x,y) &= \max\!\big(0,\ \text{scoreAfterStack}\cdot m(x,y) + r(x,y) - \pi(x,y)\big)
 \label{eq:drop-score}
 \end{align}
 where $m,r,\pi$ are the tile's delivery multiplier, preferred reward and penalty
-(\texttt{adjustDeliveryScore}). \texttt{DROP\_DISINCENTIVE} is currently 0.
+(\texttt{adjustDeliveryScore}).
 
 \paragraph{Pickup score.} For \texttt{go\_pick\_up} of a new parcel $n$ with full route distance
 $d$ (pickup leg $+$ nearest-delivery leg) and carried parcels $P$:
@@ -337,9 +353,22 @@ be undone by waiting). Camp is invalid once \texttt{campSteps} $\geq$ horizon. W
 S_{\text{camp}} = \text{totalReward} + \text{CAMP\_INCENTIVE},\qquad \text{CAMP\_INCENTIVE}=0.02
 \label{eq:camp-score}
 \end{equation}
-which deliberately outranks a plain delivery of the same load (so the agent gathers a fuller
-load first) but stays below any real pickup (\(\text{totalReward}+\text{reward}_n\)), so a
-visible parcel is still grabbed before camping is reconsidered.
+which outranks a plain delivery of the same load (so the agent tops up first) but stays below
+any real pickup (\(\text{totalReward}+\text{reward}_n\)), so a visible parcel is still grabbed
+first.
+
+\paragraph{Contested-pocket tie-break.} Camp validity also depends on the partner's position, via
+a shared radius
+\begin{equation}
+\operatorname{campRadius}(bs) = \lceil \text{observationDistance} \rceil,
+\end{equation}
+falling back to \texttt{CAMP\_PATROL\_RADIUS}=5 tiles without a declared observation distance ---
+reused verbatim by the camp anchor/patrol footprint (Section~\ref{sec:plans}) and the exploration
+de-conflict below. When the partner is within this radius of the harvest anchor, only the agent
+with the \emph{lower} game score keeps camping (ties broken by id), so both sides reach the same
+verdict with no message exchange; the loser's \texttt{camp} scores $-1$, handing off to delivery
+or exploration as an ordinary cold pocket would. The verdict cannot flip mid-camp, since camping
+freezes the camper's own score while the partner's can only grow.
 
 \paragraph{Exploration score.} A flat floor, $S_{\text{explore}} = \text{EXPLORATION\_INCENTIVE} = 0.01$,
 strictly below camp so an idle agent prefers to camp a hot pocket over wandering, but high
@@ -383,7 +412,10 @@ Table~\ref{tab:constants} collects the numeric constants governing scoring and p
 \texttt{CAMP\_LOSS\_BUDGET\_FRACTION} & 0.05 & Fraction of carried reward camping may bleed to decay. \\
 \texttt{EXPLORATION\_INCENTIVE} & 0.01 & Flat exploration floor. \\
 \texttt{CAMP\_INCENTIVE} & 0.02 & Flat margin by which camp outranks an equal-value delivery. \\
-\texttt{FAILED\_INTENTION\_RETRY\_MS} & 1000\,ms & Flat cooldown before a failed predicate is re-probed. \\
+\texttt{FAILED\_INTENTION\_RETRY\_MS} & 1000\,ms & Base cooldown before a failed predicate is re-probed (Section~\ref{sec:scoring}). \\
+\texttt{FAILED\_INTENTION\_BACKOFF\_FACTOR} & 2 & Per-streak doubling factor applied to the cooldown above. \\
+\texttt{FAILED\_INTENTION\_MAX\_RETRY\_MS} & 8000\,ms & Cap on the backed-off cooldown. \\
+\texttt{CAMP\_PATROL\_RADIUS} & 5 tiles & Fallback \(\operatorname{campRadius}(bs)\) when the server declares no observation distance. \\
 \bottomrule
 \end{tabular}
 \caption{Scoring and preemption constants (\texttt{utils/constants.js}, \texttt{bdi/options.js}).}
@@ -406,17 +438,16 @@ S_{\text{running}}\,(1+h) + \varepsilon & \text{if } S_{\text{running}} > 0 \\
 \label{eq:hysteresis}
 \end{equation}
 with $h=0.25$ and $\varepsilon=0.001$ (Table~\ref{tab:constants}); an already-invalid running
-intention ($S_{\text{running}}\leq 0$) is abandoned immediately. This protects deliveries in final approach naturally: the drop-off score in
-Eq.~\ref{eq:drop-score} \emph{peaks} right before the tile (route distance $\to 0$), so the bar
-for interruption is highest exactly where switching would waste the most progress. A
-\texttt{committedManeuver} flag (set while a PDDL crate-push is in flight, Section~\ref{sec:pddl})
-unconditionally disables preemption: restarting a partial push from scratch would waste the
-detour already taken to get behind the crate.
+intention is abandoned immediately. This naturally protects deliveries in final approach: the
+drop-off score \emph{peaks} right before the tile (route distance $\to 0$), so the interruption
+bar is highest exactly where switching would waste the most progress. A
+\texttt{committedManeuver} flag (set during a PDDL crate-push, Section~\ref{sec:pddl})
+unconditionally disables preemption, since restarting a partial push from scratch would waste
+the detour already taken.
 
 When preemption fires, the running intention is \texttt{stop(STOP\_REASON\_PREEMPTION)}'d; its
 \texttt{achieve()} promise rejects with a tagged \emph{preempted} error, and the loop
-\textbf{requeues} a fresh \texttt{Intention} for the same predicate (not failed, not
-cooled down) so it competes again on the next sort.
+\textbf{requeues} a fresh \texttt{Intention} for the same predicate to compete again next sort.
 
 \subsection{Failure handling}
 \label{sec:failure}
@@ -443,6 +474,11 @@ Figure~\ref{fig:revision-cycle} summarizes the full cycle.
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[font=\footnotesize]
+% The loop-back curve below has a control point well above the "Belief
+% update" node (needed to shape the arc), which would otherwise inflate
+% TikZ's computed bounding box and reserve a lot of unused vertical space
+% above the diagram. Pin the box to the actual visible content instead.
+\useasboundingbox (-0.4,-1.05) rectangle (8.7,8.9);
 \node[box,text width=3.0cm] (belief) at (4,8.1) {Belief update};
 \node[box,text width=3.0cm] (optgen) at (4,6.85) {Option generation};
 \node[box,text width=3.0cm] (score) at (4,6) {Score computation};
@@ -500,8 +536,8 @@ coordination layer and the LLM's delegated tools.
 \midrule
 \texttt{go\_to x y} & A*-routes to $(x,y)$, replanning on a blocked step (up to \texttt{MAX\_REPLANS}=3) and falling back to PDDL when a crate is the sole blocker. \\
 \texttt{go\_pick\_up x y id} & \texttt{go\_to} then \texttt{pickup()}; records \texttt{lastParcelHint} on a successful grab. \\
-\texttt{go\_drop\_off x y} & \texttt{go\_to} then \texttt{putdown()}; increments \texttt{bs.metrics.deliveredParcels} only when the tile is a genuine delivery tile (a handoff drop on a plain tile banks nothing). \\
-\texttt{explore} & \texttt{go\_to} on the least-recently-visited reachable spawn tile (\texttt{findCellsToExplore}, distance/staleness weighted). \\
+\texttt{go\_drop\_off x y} & \texttt{go\_to} then \texttt{putdown()}, which itself credits \texttt{bs.metrics.deliveredParcels} from the server ack on genuine delivery tiles --- so opportunistic and PDDL-driven drops are counted identically (a handoff drop on a plain tile banks nothing). \\
+\texttt{explore} & \texttt{go\_to} on the least-recently-visited reachable spawn tile (\texttt{findCellsToExplore}, travel-cost/staleness weighted). \\
 \texttt{camp} & Patrols the perimeter of the spawn cluster around the harvest anchor (Section~\ref{sec:scoring}), charging \texttt{carry.campSteps}. \\
 \texttt{go\_near x y maxDist} & \texttt{go\_to} on the closest reachable tile inside the Manhattan diamond of radius \texttt{maxDist} around $(x,y)$; used by rendezvous. \\
 \texttt{wait signal timeoutMs} & Blocks until \texttt{bs.coordination.waiting} is cleared by an incoming \texttt{signal} message, or until an optional timeout; default is unbounded. \\
@@ -514,26 +550,39 @@ coordination layer and the LLM's delegated tools.
 \paragraph{Navigation principles.}
 \begin{itemize}
   \item \textbf{A* with mixed hard/soft obstacles.} Walls and crates are hard; other agents are
-  hard only within \texttt{SOFT\_OBSTACLE\_HARD\_RADIUS}=1 tiles of the start (they are
+  hard only within \texttt{SOFT\_OBSTACLE\_HARD\_RADIUS}=2 tiles of the start (they are
   genuinely in the way \emph{now}), and merely add \texttt{AGENT\_SOFT\_PENALTY}=7.5 to the edge
   cost otherwise (they will likely have moved by the time the agent arrives).
   \item \textbf{Soft penalties from rules.} Entering a tile in \texttt{bs.rules.penaltyTiles}
-  costs extra (added to \texttt{BASE\_STEP\_COST}=1) but is never refused, so an LLM navigation
+  costs extra (added to \texttt{BASE\_STEP\_COST}\allowbreak{}=1) but is never refused, so an LLM navigation
   rule can steer the route without ever stranding the agent.
   \item \textbf{Adaptive timeout.} $\text{timeout} = \max(\text{GO\_TO\_TIMEOUT\_MS},\ |\text{path}|\cdot\text{movementDurationMs}\cdot\text{GO\_TO\_TIMEOUT\_SAFETY\_FACTOR})$,
   with \texttt{GO\_TO\_TIMEOUT\_SAFETY\_FACTOR}=3, so short legs fail fast and long legs are not spuriously timed out.
-  \item \textbf{\texttt{avoidTiles}.} A tile that just physically refused a move is hard-blocked
-  for \texttt{AVOID\_TENURE\_MOVE\_FACTOR}=3 move-durations, forcing the replanner onto a
-  genuinely different route instead of greedily re-entering a proven choke; the memory expires
-  quickly so a cleared corridor is retried while still in sensing range.
+  \item \textbf{\texttt{avoidTiles}.} A tile that just refused a move is hard-blocked for
+  \texttt{AVOID\_TENURE\_MOVE\_FACTOR}=3 move-durations, forcing the replanner off a proven choke;
+  the memory expires quickly enough that a cleared corridor is retried while still in sensing
+  range.
   \item \textbf{Opportunistic pickup and delivery.} \texttt{opportunisticActions()} runs after
-  every step: it grabs a free, rule-eligible parcel standing on the just-entered tile (zero
-  detour) and auto-banks carried parcels on a delivery tile, unless a stack rule is still
-  unmet or the tile is penalised --- suspended entirely while \texttt{coordination.active}.
+  every step: it grabs a free, rule-eligible parcel on the just-entered tile (zero detour) and
+  auto-banks carried parcels on a delivery tile, unless a stack rule is unmet or the tile is
+  penalised --- suspended while \texttt{coordination.active}. Both are best-effort: a failed
+  socket ack is swallowed rather than thrown, so a transient hiccup never aborts the walking
+  intention.
   \item \textbf{BFS distance maps.} \texttt{deliveryDistanceMap} and \texttt{spawnDistanceMap}
   are precomputed once per tile (multi-source shortest-path tables) so route-distance lookups
   used throughout scoring (Eqs.~\ref{eq:drop-score}--\ref{eq:pickup-score}) are $O(1)$ instead of
   re-running BFS/A* on every score evaluation.
+  \item \textbf{Penalty-aware travel-cost map.} \texttt{travelCostMap()} runs a single Dijkstra
+  pass (\texttt{pathfinding/dijkstra.js}) from the agent's position, giving $O(1)$
+  penalty-inclusive reachability/cost lookups reused by \texttt{goNear}, \texttt{explore}'s
+  ranking (\texttt{findCellsToExplore}) and the camp anchor's cluster-centroid choice
+  (\texttt{clusterCenter}) --- replacing one A*/BFS probe per candidate. An unreachable candidate
+  is dropped rather than scored as \texttt{NaN}; without a usable map, callers fall back to plain
+  geometric distance.
+  \item \textbf{Exploration/partner de-conflict.} \texttt{explore} demotes (never drops)
+  spawn-tile candidates within the partner's $\operatorname{campRadius}(bs)$
+  (Section~\ref{sec:scoring}) to the tail of the ranking, so the two agents spread over separate
+  pockets while still falling back to a watched tile if nothing else is reachable.
   \item \textbf{Crate detection.} \texttt{crateBlocksRoute()} plans twice --- once respecting
   crates, once with \\ \texttt{ignoreCrates:true} --- and concludes a crate is the blocker only when
   the first fails and the second succeeds, avoiding false positives from an agent merely
@@ -552,16 +601,15 @@ coordination layer and the LLM's delegated tools.
 \texttt{startLLMAgent(socket, bs, llmState, actions)} wires three independent pieces onto one
 agent: an embedded autonomous BDI (\texttt{startAutonomousBDI}, identical code path to Agent B),
 a \texttt{createCoordinator} for talking to the partner, and a chat listener. Incoming chat
-messages are pushed through \\ \texttt{createMissionQueue}, which serializes mission handling so
-two rapid messages never race over the same pause/resume state or the same parcels.
+messages are pushed through \texttt{createMissionQueue}, serializing mission handling to avoid
+races between rapid messages.
 
-Pausing is \emph{lazy}: the embedded BDI keeps harvesting while the LLM reasons about a message,
-and is paused only the first time a body-controlling tool (Table~\ref{tab:bdi-pausing}) is about
-to execute, via \texttt{pauseBdiForMission()} (idempotent, guarded by \texttt{pausedForMission}).
-A pure rule/query mission therefore never interrupts ongoing play. The \texttt{finally} block
-unconditionally calls \texttt{bdi.resume()} at mission end, \emph{unless} the agent was
-deliberately parked on an external signal (\texttt{partnerParkedOn} set, Section~\ref{sec:coordination}),
-in which case the next mission turn must relay that signal before resuming.
+Pausing is \emph{lazy}: the embedded BDI keeps harvesting until the first body-controlling tool
+(Table~\ref{tab:bdi-pausing}) is about to execute, via \texttt{pauseBdiForMission()} (idempotent).
+A pure rule/query mission therefore never interrupts ongoing play. \texttt{finally}
+unconditionally calls \texttt{bdi.resume()} at mission end, \emph{unless} the agent was parked on
+an external signal (\texttt{partnerParkedOn}, Section~\ref{sec:coordination}), in which case the
+next mission turn must relay it first.
 
 \begin{table}[htbp]
 \centering
@@ -590,12 +638,11 @@ procedure, not free-form instructions:
   \item[Role / output contract.] Exactly one tool call per step; the loop continues until
   \texttt{final\_reply}.
   \item[Reward phrasing.] Any mission tying points to an outcome (``+N pts if X'') is reframed
-  as motivation, never as a passive fact: it resolves either to a durable RULE or to an active
-  TASK, never to a no-op.
+  as motivation: it resolves to a durable RULE or an active TASK, never a no-op.
   \item[Rejection whitelist.] A \emph{closed} list of four grounds --- unresolved coordinate
-  placeholder, explicit negative immediate reward, violation of an active persistent rule, or
-  genuinely garbled text. Everything else must be classified and acted on; the prompt explicitly
-  forbids inventing further rejection reasons (vagueness, missing specifics, future tense).
+  placeholder, explicit negative reward, violation of an active rule, or garbled text; everything
+  else must be classified and acted on, and inventing further reasons (vagueness, missing
+  specifics, future tense) is explicitly forbidden.
   \item[Anti-hallucination.] The model may only use parcels/tiles/rewards present in the
   supplied state or a fresh \texttt{observe\_environment} call --- never invented.
   \item[Mission classification.] Every mission is first sorted into RULE, TASK or QUERY; the
@@ -603,12 +650,11 @@ procedure, not free-form instructions:
   \item[Compound missions.] A boolean \texttt{more} flag on terminal tools lets ``do X AND do
   Y'' missions chain multiple terminal calls without ending after the first clause.
   \item[Team coordination rules.] Eight numbered rules disambiguating solo vs.\ team missions,
-  when to use \texttt{rendezvous\_with\_partner} versus manual \texttt{direct\_partner} +
+  when to use \texttt{rendezvous\_with\_}\allowbreak\texttt{partner} versus manual \texttt{direct\_partner} +
   \texttt{wait\_for\_partner}, and the asymmetric handoff protocol (Section~\ref{sec:coordination}).
   \item[Few-shot examples.] \texttt{EXECUTOR\_EXAMPLES} enumerates $\sim$20 worked
-  mission$\to$tool-sequence pairs covering rejections, factual queries, durable rules (including
-  compound and replacement cases), harvesting tasks, rendezvous and handoffs --- each annotated
-  with the reasoning that produced the sequence.
+  mission$\to$tool-sequence pairs (rejections, factual queries, durable rules incl.\ compound and
+  replacement cases, harvesting tasks, rendezvous, handoffs), each annotated with its reasoning.
 \end{description}
 
 \subsection{Tool catalog}
@@ -644,23 +690,22 @@ snapshot of the current game state. The loop (capped at \texttt{MAX\_ITERATIONS}
   \item \texttt{mapExecutorAction} translates the executor's tool name/shape into the internal
   action used by \texttt{executeTool} (e.g.\ \texttt{pick\_up\_parcel} $\to$ \texttt{go\_pick\_up}).
   \item \texttt{validateActionAgainstPersistentRules} checks the action against active rules
-  \emph{before} execution; a violation is fed back as a tool observation so the model can pick a
-  different step, without ever running the disallowed action.
+  \emph{before} execution; a violation is fed back as a tool observation instead of running the
+  disallowed action.
   \item If the action is in \texttt{BDI\_PAUSING\_TOOLS}, pause the embedded BDI (once).
   \item Execute the tool, append its observation as a \texttt{tool} message.
   \item \textbf{Terminal tools} (every persistent-rule/navigation store, plus
-  \texttt{collect\_and\_deliver} via \\ \texttt{toolResult.terminal}) end the mission immediately
-  on success, using the tool's own confirmation text as the chat reply --- saving the extra
-  round-trip a separate \texttt{final\_reply} would cost --- \emph{unless} the tool errored or
-  \texttt{more:true} was set for a remaining compound clause.
+  \texttt{collect\_and\_deliver} via \texttt{toolResult.terminal}) end the mission immediately on
+  success, using the tool's own confirmation text as the reply (saving a separate
+  \texttt{final\_reply} round-trip), \emph{unless} the tool errored or \texttt{more:true} flags a
+  remaining compound clause.
   \item \texttt{final\_reply} always ends the mission with an explicit message.
 \end{enumerate}
 
-Concretely, for ``collect three parcels and deliver them'': the chat message enters the mission
-queue, the LLM emits a single \texttt{collect\_and\_deliver(parcels=3)} tool call, the embedded
-BDI is unpaused and watches \texttt{deliveredParcels} climb with zero further model calls, and
-once the target is reached (or the time budget elapses) the tool returns and the BDI is
-re-paused, ending the mission in one model round-trip.
+Concretely, for ``collect three parcels and deliver them'': the LLM emits one
+\texttt{collect\_and\_deliver(parcels=3)} call; the embedded BDI is unpaused and watches
+\texttt{deliveredParcels} climb with zero further model calls until the target is reached (or the
+time budget elapses), ending the mission in a single round-trip.
 
 % ============================================================
 \section{Multi-Agent Coordination}
@@ -695,29 +740,26 @@ anyone waits for it is buffered and consumed by the next matching \texttt{waitFo
 copy of \texttt{bs.rules} never drifts from the LLM's.
 
 \paragraph{BDI side (\texttt{bdi/coordination.js}).} \texttt{setupBdiCoordination} attaches a
-message listener that pushes directives into \texttt{bs.coordination.queue}, flips
-\texttt{active}, and calls \texttt{agent.preemptForCoordination()}. \\ \texttt{\#runCoordination()}
-then drains the queue one directive at a time: \texttt{coordToPredicate} maps the wire command
-onto the same predicates Table~\ref{tab:plans} describes so directive execution reuses the ordinary plan layer verbatim.
-\texttt{vacateAfterDrop()} steps the agent one tile off its cell after a \texttt{putdown} so the
-partner can physically occupy the just-vacated tile to collect the handoff parcel. A
-\texttt{resume} directive clears \texttt{coordination.active}, returning control to the scored
-loop; an idle TTL (\texttt{COORD\_RESUME\_IDLE\_TTL\_MS}=15\,s) auto-resumes defensively if the
-LLM partner disappears mid-directive.
+listener that pushes directives into \texttt{bs.coordination.queue}, flips \texttt{active}, and
+calls \texttt{agent.preemptForCoordination()}; \texttt{\#runCoordination()} then drains the queue
+one directive at a time via \texttt{coordToPredicate}, reusing the ordinary plan layer
+(Table~\ref{tab:plans}) verbatim. \texttt{vacateAfterDrop()} steps the agent off its cell after a
+\texttt{putdown} so the partner can occupy it to collect the handoff parcel. A \texttt{resume}
+directive clears \texttt{coordination.active}; an idle TTL
+(\texttt{COORD\_RESUME\_IDLE\_TTL\_MS}=15\,s) auto-resumes defensively if the LLM partner
+disappears mid-directive.
 
-\paragraph{Handoff protocol.} A cross-delivery handoff is driven end-to-end by a single tool,
-\texttt{handoff\_to\_partner}, rather than by the model manually sequencing
-\texttt{direct\_partner}/\texttt{wait\_for\_partner} calls. The tool: (1) repeatedly issues
+\paragraph{Handoff protocol.} A cross-delivery handoff is driven end-to-end by one tool,
+\texttt{handoff\_to\_partner}, instead of the model manually sequencing
+\texttt{direct\_partner}/\texttt{wait\_for\_partner} calls: (1) it repeatedly issues
 \texttt{direct\_partner(pickup)} with no coordinates so the BDI self-selects via
-\texttt{\#selectBestPickup()} (reusing \texttt{intentionScore}, so it never diverges from normal
-play), stacking up to an optional target count or a safety cap (\texttt{HANDOFF\_MAX\_PICKUPS});
-(2) sends \texttt{direct\_partner(go\_near)} to bring the loaded BDI adjacent to the LLM agent
-before dropping, so the hand-off lands within trivial reach; (3) issues
-\texttt{direct\_partner(putdown)} at the BDI's own (now-adjacent) cell and waits for
-\texttt{status(ok)}, sent only after \texttt{vacateAfterDrop()} has stepped the BDI off the tile;
-(4) walks the LLM agent onto the vacated tile and retries the pickup a few times. (5) By
-default delivers the collected load to the nearest delivery tile and reports the parcels
-actually banked.
+\texttt{\#selectBestPickup()} (reusing \texttt{intentionScore}, never diverging from normal
+play), up to a target count or safety cap (\texttt{HANDOFF\_MAX\_PICKUPS}); (2)
+\texttt{direct\_partner(go\_near)} brings the loaded BDI adjacent to the LLM agent; (3)
+\texttt{direct\_partner(putdown)} drops at the BDI's cell, and \texttt{status(ok)} arrives only
+after \texttt{vacateAfterDrop()} steps it off the tile; (4) the LLM agent walks onto the vacated
+tile and retries the pickup; (5) by default it then delivers the load to the nearest delivery
+tile and reports what was actually banked.
 
 \paragraph{Rendezvous / barrier synchronization.} \texttt{rendezvous\_with\_partner} sends
 \texttt{go\_near} to the partner, moves the LLM agent itself in parallel, then waits for both
@@ -763,9 +805,9 @@ pushing crates aside --- a maneuver A* cannot express.
 \texttt{(tile ?t)} & \texttt{?t} is a walkable cell (walls, type 0, are excluded entirely). \\
 \texttt{(free ?t)} & No agent and no crate on \texttt{?t} (parcels never block). \\
 \texttt{(delivery ?t)}, \texttt{(pushable ?t)} & Delivery zone / type-5 crate-receiving tile. \\
-\texttt{(up/down/left/right ?from ?to)} & Directional adjacency, emitted only between two existing tiles. \\
+\texttt{(up/down/left/right ?from ?to)} & Directional adjacency between two existing tiles. \\
 \texttt{(at-agent ?t)} & Current agent position. \\
-\texttt{(parcel ?p)}, \texttt{(at-parcel ?p ?t)}, \texttt{(carrying ?p)}, \texttt{(delivered ?p)} & Parcel type guard, floor position, carried state, terminal delivered state. \\
+\texttt{(parcel ?p)}, \texttt{(at-parcel ?p ?t)}, \texttt{(carrying ?p)}, \texttt{(delivered ?p)} & Parcel type guard, floor position, carried state, terminal state. \\
 \texttt{(crate ?c)}, \texttt{(at-crate ?c ?t)} & Crate type guard and position. \\
 \bottomrule
 \end{tabular}
@@ -773,14 +815,14 @@ pushing crates aside --- a maneuver A* cannot express.
 \label{tab:pddl-predicates}
 \end{table}
 
-\textbf{Actions:} four \texttt{move-*} actions, one per direction (precondition: the adjacent
-tile in that direction is free), and four matching \texttt{push-*} actions, which move the agent
-onto the crate's tile while sliding the crate one step further in the same direction onto a
-\texttt{pushable} tile that is \texttt{free}. At execution time both collapse to the same
-primitive: the server has no separate push command, so moving \emph{into} a crate that has a
+\textbf{Actions:} four \texttt{move-*} actions (precondition: the adjacent tile is free), and
+four matching \texttt{push-*} actions that move the agent onto the crate's tile while sliding the
+crate one step further onto a free \texttt{pushable} tile. Both collapse to the same primitive at
+execution time: the server has no separate push command, so moving \emph{into} a crate with a
 clear type-5 tile behind it pushes it automatically (\texttt{planExecutor.js}'s
-\texttt{ACTION\_MAP} maps every \texttt{push-*} action to \texttt{actions.move(direction)}).
+\texttt{ACTION\_MAP} maps every \texttt{push-*} to \texttt{actions.move(direction)}).
 
+\begin{minipage}{\linewidth}
 \begin{lstlisting}[language={},caption={Push action (excerpt, \texttt{pddl/domain.pddl}): the
 agent and the crate must be co-linear in the push direction, and the destination must be both
 \texttt{free} and \texttt{pushable}.},label={lst:pddl-push}]
@@ -796,15 +838,14 @@ agent and the crate must be co-linear in the push direction, and the destination
     (not (free ?destPos)))
 )
 \end{lstlisting}
+\end{minipage}
 
 \paragraph{Problem generation.} \texttt{buildProblem(bs, goal)} (\texttt{pddl/problemBuilder.js})
-caches the static part of the map (tiles, adjacency, delivery/pushable sets) keyed on the
-\texttt{bs.map.tiles} array reference, rebuilding only when the server sends a new map; the
-dynamic part --- occupancy, agent position, parcel and crate locations --- is always recomputed
-from \texttt{bs} fresh. Tiles are named \texttt{t\_\textless x\textgreater\_\textless y\textgreater};
-parcel and crate game ids (free-form strings) are hashed to a stable \texttt{[a-z0-9]} suffix
-with a djb2 variant (\texttt{sanitize}), since PDDL object names cannot contain arbitrary
-characters and the mapping never needs to be inverted --- only uniqueness matters.
+caches the map's static part (tiles, adjacency, delivery/pushable sets), rebuilding only on a new
+map; the dynamic part --- occupancy, positions, parcel/crate locations --- is always recomputed
+fresh. Tiles are named \texttt{t\_\textless x\textgreater\_\textless y\textgreater}; parcel/crate
+ids are hashed to a stable \texttt{[a-z0-9]} suffix (djb2 variant, \texttt{sanitize}) since PDDL
+object names cannot contain arbitrary characters and the mapping never needs inverting.
 
 \begin{table}[htbp]
 \centering
@@ -824,17 +865,15 @@ characters and the mapping never needs to be inverted --- only uniqueness matter
 \end{table}
 
 \paragraph{Planner invocation and fallback.} \texttt{plan(bs, goal)} races
-\texttt{onlineSolver(domain, problem)} against a \texttt{SOLVER\_TIMEOUT\_MS}=5\,s deadline;
-both an empty result and a timeout/solver error normalize to \texttt{null}, so the caller treats
-``no plan'' and ``solver unreachable'' identically and falls back to ordinary A*. While a plan
-is executing, \texttt{bs.committedManeuver=true} disables hysteresis preemption
-(Eq.~\ref{eq:hysteresis}): a crate push deliberately walks \emph{away} from the target first (to
-get behind the crate), which would otherwise look like a worse intention and invite the revision
-loop to abandon it mid-push.
+\texttt{onlineSolver(domain, problem)} against a \texttt{SOLVER\_}\allowbreak\texttt{TIMEOUT\_MS}=5\,s deadline;
+an empty result and a timeout/solver error both normalize to \texttt{null}, so the caller falls
+back to ordinary A* either way. While a plan executes, \texttt{bs.committedManeuver=true}
+disables hysteresis preemption (Eq.~\ref{eq:hysteresis}), since a crate push deliberately walks
+\emph{away} from the target first (to get behind the crate) and would otherwise look like a
+worse intention to the revision loop.
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[font=\footnotesize]
+\begin{center}
+\begin{tikzpicture}[font=\footnotesize, scale=0.46, every node/.style={scale=0.46}]
 \node[box] (target) at (4.3,6.6) {Target selected};
 \node[box] (astar) at (4.3,5.6) {A* search};
 \node[decision,text width=2.0cm] (blocked) at (4.3,4) {Crate blocks path?};
@@ -860,10 +899,10 @@ loop to abandon it mid-push.
 \draw[arr] (fallback) -- (resumebdi);
 \draw[arr] (committed.south) -- (10.3,-2.9) -- (resumebdi.east);
 \end{tikzpicture}
-\caption{Crate blocking and PDDL recovery. \texttt{crateBlocksRoute()} double-checks the block
-(crate-respecting plan fails, crate-ignoring plan succeeds) before paying the cost of a solver
-call; a found plan runs as a committed maneuver immune to preemption.}
+\captionof{figure}{Crate blocking and PDDL recovery: \texttt{crateBlocksRoute()} double-checks
+the block before paying for a solver call; a found plan is a committed maneuver immune to
+preemption.}
 \label{fig:pddl-recovery}
-\end{figure}
+\end{center}
 
 \end{document}

@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.6.17)  17 JUN 2026 21:35
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.6.17)  10 JUL 2026 22:36
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -559,6 +559,17 @@ File: pgflibraryshapes.geometric.code.tex 2025-08-29 v3.1.11a (3.1.11a)
 z/libraries\tikzlibrarycalc.code.tex
 File: tikzlibrarycalc.code.tex 2025-08-29 v3.1.11a (3.1.11a)
 )
+(C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/float\float.sty
+Package: float 2001/11/08 v1.3d Float enhancements (AL)
+\c@float@type=\count331
+\float@exts=\toks38
+\float@box=\box70
+\@float@everytoks=\toks39
+\@floatcapt=\box71
+)
+(C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/capt-of\capt-of.sty
+Package: capt-of 2009/12/29 v0.2 standard captions outside of floats
+)
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyperref.sty
 Package: hyperref 2025-07-12 v7.01o Hypertext links for LaTeX
 
@@ -605,11 +616,11 @@ Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvoptions.sty
 Package: kvoptions 2022-06-15 v3.15 Key value format for package options (HO)
 ))
-\c@section@level=\count331
+\c@section@level=\count332
 )
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etoolbox.sty
 Package: etoolbox 2025/10/02 v2.5m e-TeX tools for LaTeX (JAW)
-\etb@tempcnta=\count332
+\etb@tempcnta=\count333
 )
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/generic/stringenc\stringenc.s
 ty
@@ -617,8 +628,8 @@ Package: stringenc 2019/11/29 v1.12 Convert strings between diff. encodings (HO
 )
 )
 \@linkdim=\dimen297
-\Hy@linkcounter=\count333
-\Hy@pagecounter=\count334
+\Hy@linkcounter=\count334
+\Hy@pagecounter=\count335
  (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1enc.def
 File: pd1enc.def 2025-07-12 v7.01o Hyperref: PDFDocEncoding definition (HO)
 Now handling font encoding PD1 ...
@@ -626,7 +637,7 @@ Now handling font encoding PD1 ...
 ) (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intcalc.sty
 Package: intcalc 2019/12/15 v1.3 Expandable calculations with integers (HO)
 )
-\Hy@SavedSpaceFactor=\count335
+\Hy@SavedSpaceFactor=\count336
  (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc.def
 File: puenc.def 2025-07-12 v7.01o Hyperref: PDF Unicode definition (HO)
 Now handling font encoding PU ...
@@ -639,7 +650,7 @@ Package hyperref Info: Plain pages OFF on input line 4210.
 Package hyperref Info: Backreferencing OFF on input line 4215.
 Package hyperref Info: Implicit mode ON; LaTeX internals redefined.
 Package hyperref Info: Bookmarks ON on input line 4462.
-\c@Hy@tempcnt=\count336
+\c@Hy@tempcnt=\count337
 
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty
 \Urlmuskip=\muskip18
@@ -656,7 +667,7 @@ Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
 Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO
 )
 ))
-\Fld@menulength=\count337
+\Fld@menulength=\count338
 \Field@Width=\dimen299
 \Fld@charsize=\dimen300
 Package hyperref Info: Hyper figures OFF on input line 6078.
@@ -666,16 +677,16 @@ Package hyperref Info: backreferencing OFF on input line 6093.
 Package hyperref Info: Link coloring OFF on input line 6098.
 Package hyperref Info: Link coloring with OCG OFF on input line 6103.
 Package hyperref Info: PDF/A mode OFF on input line 6108.
-\Hy@abspage=\count338
-\c@Item=\count339
-\c@Hfootnote=\count340
+\Hy@abspage=\count339
+\c@Item=\count340
+\c@Hfootnote=\count341
 )
 Package hyperref Info: Driver (autodetected): hpdftex.
 
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hpdftex.def
 File: hpdftex.def 2025-07-12 v7.01o Hyperref driver for pdfTeX
-\Fld@listcount=\count341
-\c@bookmark@seq@number=\count342
+\Fld@listcount=\count342
+\c@bookmark@seq@number=\count343
 
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/rerunfilecheck\rerunfil
 echeck.sty
@@ -690,25 +701,25 @@ Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 2
 )
 \Hy@SectionHShift=\skip56
 )
-Package hyperref Info: Option `colorlinks' set `true' on input line 13.
+Package hyperref Info: Option `colorlinks' set `true' on input line 15.
 
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/enumitem\enumitem.sty
 Package: enumitem 2025/02/06 v3.11 Customized lists
 \labelindent=\skip57
 \enit@outerparindent=\dimen301
-\enit@toks=\toks38
-\enit@inbox=\box70
-\enit@count@id=\count343
-\enitdp@description=\count344
+\enit@toks=\toks40
+\enit@inbox=\box72
+\enit@count@id=\count344
+\enitdp@description=\count345
 )
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/titlesec\titlesec.sty
 Package: titlesec 2025/01/04 v2.17 Sectioning titles
-\ttl@box=\box71
+\ttl@box=\box73
 \beforetitleunit=\skip58
 \aftertitleunit=\skip59
 \ttl@plus=\dimen302
 \ttl@minus=\dimen303
-\ttl@toksa=\toks39
+\ttl@toksa=\toks41
 \titlewidth=\dimen304
 \titlewidthlast=\dimen305
 \titlewidthfirst=\dimen306
@@ -716,28 +727,28 @@ Package: titlesec 2025/01/04 v2.17 Sectioning titles
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-pdf
 tex.def
 File: l3backend-pdftex.def 2025-10-09 L3 backend support: PDF output (pdfTeX)
-\l__color_backend_stack_int=\count345
+\l__color_backend_stack_int=\count346
 ) (report.aux)
 \openout1 = `report.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 61.
-LaTeX Font Info:    ... okay on input line 61.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 61.
-LaTeX Font Info:    ... okay on input line 61.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 61.
-LaTeX Font Info:    ... okay on input line 61.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 61.
-LaTeX Font Info:    ... okay on input line 61.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 61.
-LaTeX Font Info:    ... okay on input line 61.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 61.
-LaTeX Font Info:    ... okay on input line 61.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 61.
-LaTeX Font Info:    ... okay on input line 61.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 61.
-LaTeX Font Info:    ... okay on input line 61.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 61.
-LaTeX Font Info:    ... okay on input line 61.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 74.
+LaTeX Font Info:    ... okay on input line 74.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 74.
+LaTeX Font Info:    ... okay on input line 74.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 74.
+LaTeX Font Info:    ... okay on input line 74.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 74.
+LaTeX Font Info:    ... okay on input line 74.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 74.
+LaTeX Font Info:    ... okay on input line 74.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 74.
+LaTeX Font Info:    ... okay on input line 74.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 74.
+LaTeX Font Info:    ... okay on input line 74.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 74.
+LaTeX Font Info:    ... okay on input line 74.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 74.
+LaTeX Font Info:    ... okay on input line 74.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
@@ -747,15 +758,15 @@ LaTeX Font Info:    ... okay on input line 61.
 * layout: <same size as paper>
 * layoutoffset:(h,v)=(0.0pt,0.0pt)
 * modes: 
-* h-part:(L,W,R)=(48.36958pt, 500.7687pt, 48.36958pt)
-* v-part:(T,H,B)=(48.36958pt, 748.30768pt, 48.36958pt)
+* h-part:(L,W,R)=(42.67912pt, 512.14963pt, 42.67912pt)
+* v-part:(T,H,B)=(42.67912pt, 759.6886pt, 42.67912pt)
 * \paperwidth=597.50787pt
 * \paperheight=845.04684pt
-* \textwidth=500.7687pt
-* \textheight=748.30768pt
-* \oddsidemargin=-23.9004pt
-* \evensidemargin=-23.9004pt
-* \topmargin=-60.9004pt
+* \textwidth=512.14963pt
+* \textheight=759.6886pt
+* \oddsidemargin=-29.59087pt
+* \evensidemargin=-29.59087pt
+* \topmargin=-66.59087pt
 * \headheight=12.0pt
 * \headsep=25.0pt
 * \topskip=11.0pt
@@ -777,17 +788,17 @@ LaTeX Font Info:    ... okay on input line 61.
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.mk
 ii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count346
+\scratchcounter=\count347
 \scratchdimen=\dimen307
-\scratchbox=\box72
-\nofMPsegments=\count347
-\nofMParguments=\count348
-\everyMPshowfont=\toks40
-\MPscratchCnt=\count349
+\scratchbox=\box74
+\nofMPsegments=\count348
+\nofMParguments=\count349
+\everyMPshowfont=\toks42
+\MPscratchCnt=\count350
 \MPscratchDim=\dimen308
-\MPnumerator=\count350
-\makeMPintoPDFobject=\count351
-\everyMPtoPDFconversion=\toks41
+\MPnumerator=\count351
+\makeMPintoPDFobject=\count352
+\everyMPtoPDFconversion=\toks43
 )
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\epstopdf-b
 ase.sty
@@ -799,340 +810,372 @@ Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
 fg
 File: epstopdf-sys.cfg 2021/03/18 v2.0 Configuration of epstopdf for MiKTeX
 ))
-\c@lstlisting=\count352
-Package hyperref Info: Link coloring ON on input line 61.
+\c@lstlisting=\count353
+Package hyperref Info: Link coloring ON on input line 74.
  (report.out) (report.out)
 \@outlinefile=\write4
 \openout4 = `report.out'.
 
-LaTeX Font Info:    Trying to load font information for U+msa on input line 64.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 77.
 
 
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 64.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 77.
 
 
 (C:\Users\david\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
-Underfull \hbox (badness 1147) in paragraph at lines 172--172
+Underfull \hbox (badness 1147) in paragraph at lines 166--166
 []|\T1/cmtt/m/n/9 parcels\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 crates\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 174--175
+Underfull \hbox (badness 10000) in paragraph at lines 168--169
 []|\T1/cmtt/m/n/9 observationDistance\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 movementDur
 ation\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 playerCapacity\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 2671) in paragraph at lines 175--176
+Underfull \hbox (badness 2671) in paragraph at lines 169--170
 []|\T1/cmtt/m/n/9 decayTicks \T1/cmr/m/n/9 (global counter of ob-served de-cay 
 events) and
  []
 
+[1
 
-Underfull \hbox (badness 10000) in paragraph at lines 195--195
+{C:/Users/david/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}]
+Underfull \hbox (badness 10000) in paragraph at lines 189--189
 []|\T1/cmtt/m/n/9 penaltyDeliveries\T1/cmr/m/n/9 ,
  []
 
 
-Overfull \hbox (4.39482pt too wide) in paragraph at lines 195--195
+Overfull \hbox (4.39482pt too wide) in paragraph at lines 189--189
 \T1/cmtt/m/n/9 preferredDeliveries| 
  []
 
 
-Overfull \hbox (4.39482pt too wide) in paragraph at lines 196--196
+Overfull \hbox (4.39482pt too wide) in paragraph at lines 190--190
 []|\T1/cmtt/m/n/9 deliveryMultipliers| 
  []
 
-[1
 
-{C:/Users/david/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}] [2]
-Underfull \hbox (badness 10000) in paragraph at lines 237--237
+Underfull \hbox (badness 10000) in paragraph at lines 228--228
 []|\T1/cmtt/m/n/9 go_pick_up x y
  []
 
 
-Underfull \hbox (badness 3354) in paragraph at lines 237--237
+Underfull \hbox (badness 3354) in paragraph at lines 228--228
 []|\T1/cmr/m/n/9 a free par-cel has a fi-nite
  []
 
 
-Underfull \hbox (badness 7907) in paragraph at lines 237--237
+Underfull \hbox (badness 7907) in paragraph at lines 228--228
 \T1/cmr/m/n/9 pickup-route dis-tance, and
  []
 
 
-Underfull \hbox (badness 1048) in paragraph at lines 240--240
+Underfull \hbox (badness 1048) in paragraph at lines 231--231
 []|\T1/cmr/m/n/9 always, as the idle fall-back
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 240--241
+Underfull \hbox (badness 10000) in paragraph at lines 231--232
 []|\T1/cmr/m/n/9 not gen-er-ated here; pushed by
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 240--241
+Underfull \hbox (badness 10000) in paragraph at lines 231--232
 \T1/cmtt/m/n/9 IntentionRevision.loop() \T1/cmr/m/n/9 when
  []
 
 
-Overfull \hbox (11.04002pt too wide) in paragraph at lines 266--270
-\T1/cmtt/m/n/10.95 IntentionRevisionRevise \T1/cmr/m/n/10.95 (\T1/cmtt/m/n/10.9
-5 bdi/bdiAgent.js\T1/cmr/m/n/10.95 ) main-tains an in-ten-tion queue and a fail
-ed-intention cooldown
+Overfull \hbox (23.09836pt too wide) in paragraph at lines 253--263
+\T1/cmr/m/n/10.95 pool (pred-i-cate $\OMS/cmsy/m/n/10.95 !$ \T1/cmtt/m/n/10.95 
+{addedAtMs, cooldownMs}\T1/cmr/m/n/10.95 ). The cooldown backs off per pred-i-c
+ate --- base \T1/cmtt/m/n/10.95 FAILED_INTENTION_
  []
 
-[3]
-Overfull \hbox (331.57642pt too wide) in paragraph at lines 344--353
-\T1/cmtt/m/n/10.95 CAMP_PATIENCE_SATURATION_TILES\T1/cmr/m/n/10.95 =10) and $\O
-ML/cmm/m/it/10.95 ^^V \OT1/cmr/m/n/10.95 = []  [][]\OML/cmm/m/it/10.95 ;  []\OT
-1/cmr/m/n/10.95 (1\OML/cmm/m/it/10.95 ;  []=[]\OT1/cmr/m/n/10.95 )[]$\T1/cmr/m/
-n/10.95 ,
+
+Overfull \hbox (51.29956pt too wide) in paragraph at lines 253--263
+\T1/cmtt/m/n/10.95 RETRY_MS\T1/cmr/m/n/10.95 =1s, dou-bling on each con-sec-u-t
+ive fail-ure (\T1/cmtt/m/n/10.95 FAILED_INTENTION_BACKOFF_FACTOR\T1/cmr/m/n/10.
+95 =2) up to \T1/cmtt/m/n/10.95 FAILED_INTENTION_
  []
 
-[4]
-Underfull \hbox (badness 1199) in paragraph at lines 404--405
+[2] [3]
+Underfull \hbox (badness 1199) in paragraph at lines 409--410
 []|\T1/cmr/m/n/9 Relative mar-gin a chal-lenger must clear (Sec-
  []
 
+[4]
+Overfull \hbox (5.77937pt too wide) in paragraph at lines 448--451
+[]\T1/cmr/m/n/10.95 When pre-emp-tion fires, the run-ning in-ten-tion is \T1/cm
+tt/m/n/10.95 stop(STOP_REASON_PREEMPTION)\T1/cmr/m/n/10.95 'd; its \T1/cmtt/m/n
+/10.95 achieve() \T1/cmr/m/n/10.95 promise
+ []
 
-Underfull \hbox (badness 6173) in paragraph at lines 525--526
+
+Underfull \hbox (badness 6173) in paragraph at lines 537--538
 []|\T1/cmr/m/n/9 A*-routes to $\OT1/cmr/m/n/9 (\OML/cmm/m/it/9 x; y\OT1/cmr/m/n
 /9 )$\T1/cmr/m/n/9 , re-plan-ning on a blocked step (up to
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 526--526
+Underfull \hbox (badness 10000) in paragraph at lines 538--538
 []|\T1/cmtt/m/n/9 go_pick_up x y
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 527--527
+Underfull \hbox (badness 10000) in paragraph at lines 539--539
 []|\T1/cmtt/m/n/9 go_drop_off x
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 528--529
+Underfull \hbox (badness 10000) in paragraph at lines 539--540
+[]|\T1/cmtt/m/n/9 go_to \T1/cmr/m/n/9 then \T1/cmtt/m/n/9 putdown()\T1/cmr/m/n/
+9 , which it-self cred-its
+ []
+
+
+Underfull \hbox (badness 2376) in paragraph at lines 539--540
+\T1/cmtt/m/n/9 bs.metrics.deliveredParcels \T1/cmr/m/n/9 from the server ack on
+ gen-uine
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 540--541
 []|\T1/cmtt/m/n/9 go_to \T1/cmr/m/n/9 on the least-recently-visited reach-able 
 spawn tile
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 530--530
+Underfull \hbox (badness 10000) in paragraph at lines 542--542
 []|\T1/cmtt/m/n/9 go_near x y
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 531--531
+Underfull \hbox (badness 10000) in paragraph at lines 543--543
 []|\T1/cmtt/m/n/9 wait signal
  []
 
-[5] [6]
-Overfull \hbox (0.53015pt too wide) in paragraph at lines 547--549
-[]\OT1/cmr/m/n/10.95 )$\T1/cmr/m/n/10.95 , with \T1/cmtt/m/n/10.95 GO_TO_TIMEOU
-T_SAFETY_FACTOR\T1/cmr/m/n/10.95 =3, so short legs
+
+Overfull \hbox (34.13206pt too wide) in paragraph at lines 556--559
+[]\T1/cmr/bx/n/10.95 Soft penal-ties from rules. \T1/cmr/m/n/10.95 En-ter-ing a
+ tile in \T1/cmtt/m/n/10.95 bs.rules.penaltyTiles \T1/cmr/m/n/10.95 costs ex-tr
+a (added to \T1/cmtt/m/n/10.95 BASE_STEP_COST
  []
 
+[5]
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [6]
 LaTeX Font Info:    Font shape `T1/cmtt/bx/n' in size <10.95> not available
-(Font)              Font shape `T1/cmtt/m/n' tried instead on input line 549.
+(Font)              Font shape `T1/cmtt/m/n' tried instead on input line 561.
 
-Overfull \hbox (20.55011pt too wide) in paragraph at lines 549--553
-[]\T1/cmtt/m/n/10.95 avoidTiles\T1/cmr/bx/n/10.95 . \T1/cmr/m/n/10.95 A tile th
-at just phys-i-cally re-fused a move is hard-blocked for \T1/cmtt/m/n/10.95 AVO
-ID_TENURE_MOVE_FACTOR\T1/cmr/m/n/10.95 =3
+Overfull \hbox (35.64183pt too wide) in paragraph at lines 575--582
+[]\T1/cmr/bx/n/10.95 Penalty-aware travel-cost map. \T1/cmtt/m/n/10.95 travelCo
+stMap() \T1/cmr/m/n/10.95 runs a sin-gle Di-jk-stra pass (\T1/cmtt/m/n/10.95 pa
+thfinding/dijkstra.js\T1/cmr/m/n/10.95 )
  []
 
 
-Overfull \hbox (41.3902pt too wide) in paragraph at lines 561--565
-[]\T1/cmr/bx/n/10.95 Crate de-tec-tion. \T1/cmtt/m/n/10.95 crateBlocksRoute() \
-T1/cmr/m/n/10.95 plans twice --- once re-spect-ing crates, once with \T1/cmtt/m
-/n/10.95 ignoreCrates:true
+Overfull \hbox (11.73372pt too wide) in paragraph at lines 575--582
+\T1/cmtt/m/n/10.95 explore\T1/cmr/m/n/10.95 's rank-ing (\T1/cmtt/m/n/10.95 fin
+dCellsToExplore\T1/cmr/m/n/10.95 ) and the camp an-chor's cluster-centroid choi
+ce (\T1/cmtt/m/n/10.95 clusterCenter\T1/cmr/m/n/10.95 )
  []
 
 
-Overfull \hbox (24.38861pt too wide) in paragraph at lines 576--581
-\T1/cmr/m/n/10.95 for talk-ing to the part-ner, and a chat lis-tener. In-com-in
-g chat mes-sages are pushed through \T1/cmtt/m/n/10.95 createMissionQueue\T1/cm
-r/m/n/10.95 ,
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 597--598
+Underfull \hbox (badness 10000) in paragraph at lines 621--622
 []|\T1/cmtt/m/n/9 collect_and_deliver\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 go_to\T1/cm
 r/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 597--598
+Underfull \hbox (badness 10000) in paragraph at lines 621--622
 \T1/cmtt/m/n/9 go_pick_up\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 go_drop_off\T1/cmr/m/n/
 9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 597--598
+Underfull \hbox (badness 10000) in paragraph at lines 621--622
 \T1/cmtt/m/n/9 rendezvous_with_partner\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 599--601
+Underfull \hbox (badness 10000) in paragraph at lines 623--625
 []|\T1/cmtt/m/n/9 observe_environment\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 calculate\T
 1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 599--601
+Underfull \hbox (badness 10000) in paragraph at lines 623--625
 \T1/cmr/m/n/9 ev-ery rule/navigation store tool,
  []
 
 [7]
-Underfull \hbox (badness 10000) in paragraph at lines 647--648
+Underfull \hbox (badness 10000) in paragraph at lines 669--670
 []|\T1/cmtt/m/n/9 move_to\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 pick_up_parcel\T1/cmr/m
 /n/9 , \T1/cmtt/m/n/9 deliver_carried_parcels\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 5652) in paragraph at lines 647--648
+Underfull \hbox (badness 5652) in paragraph at lines 669--670
 \T1/cmtt/m/n/9 collect_and_deliver \T1/cmr/m/n/9 (del-e-gates to the em-bed-ded
  BDI,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 649--650
+Underfull \hbox (badness 10000) in paragraph at lines 671--672
 []|\T1/cmtt/m/n/9 rendezvous_with_partner\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 handoff
 _to_partner\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 650--651
+Underfull \hbox (badness 10000) in paragraph at lines 672--673
 []|\T1/cmtt/m/n/9 set_stack_size_rule\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 remove_stac
 k_size_rule\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 650--651
+Underfull \hbox (badness 10000) in paragraph at lines 672--673
 \T1/cmtt/m/n/9 set_parcel_value_rule\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 remove_parce
 l_value_rule\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 650--651
+Underfull \hbox (badness 10000) in paragraph at lines 672--673
 \T1/cmtt/m/n/9 forbid_delivery_tile\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 prefer_delive
 ry_tile\T1/cmr/m/n/9 ,
  []
 
 
-Overfull \hbox (1.68726pt too wide) in paragraph at lines 650--651
+Overfull \hbox (1.68726pt too wide) in paragraph at lines 672--673
 \T1/cmtt/m/n/9 set_delivery_tile_multiplier\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 remov
 e_delivery_tile_rule\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 650--651
+Underfull \hbox (badness 10000) in paragraph at lines 672--673
 \T1/cmtt/m/n/9 clear_durable_rules\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 block_navigati
 on_tile\T1/cmr/m/n/9 ,
  []
 
 
-Overfull \hbox (52.84549pt too wide) in paragraph at lines 675--680
+Overfull \hbox (19.85022pt too wide) in paragraph at lines 690--692
+[]\T1/cmtt/m/n/10.95 mapExecutorAction \T1/cmr/m/n/10.95 trans-lates the ex-ecu
+-tor's tool name/shape into the in-ter-nal ac-tion used by \T1/cmtt/m/n/10.95 e
+xecuteTool
+ []
+
+
+Overfull \hbox (41.46457pt too wide) in paragraph at lines 697--702
 []\T1/cmr/bx/n/10.95 Terminal tools \T1/cmr/m/n/10.95 (ev-ery persistent-rule/n
 avigation store, plus \T1/cmtt/m/n/10.95 collect_and_deliver \T1/cmr/m/n/10.95 
 via \T1/cmtt/m/n/10.95 toolResult.terminal\T1/cmr/m/n/10.95 )
  []
 
 
-Overfull \hbox (0.71074pt too wide) in paragraph at lines 704--704
+Overfull \hbox (23.112pt too wide) in paragraph at lines 705--709
+[]\T1/cmr/m/n/10.95 Concretely, for ``col-lect three parcels and de-liver them'
+': the LLM emits one \T1/cmtt/m/n/10.95 collect_and_deliver(parcels=3)
+ []
+
+
+Overfull \hbox (0.71074pt too wide) in paragraph at lines 725--725
 []|\T1/cmr/m/n/9 LLM$\OMS/cmsy/m/n/9 !$\T1/cmr/m/n/9 BDI| 
  []
 
 
-Overfull \hbox (0.71074pt too wide) in paragraph at lines 705--705
+Overfull \hbox (0.71074pt too wide) in paragraph at lines 726--726
 []|\T1/cmr/m/n/9 BDI$\OMS/cmsy/m/n/9 !$\T1/cmr/m/n/9 LLM| 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 705--706
+Underfull \hbox (badness 10000) in paragraph at lines 726--727
 []|\T1/cmtt/m/n/9 {cid, ok, detail}\T1/cmr/m/n/9 ; re-solves the match-ing
  []
 
 
-Overfull \hbox (0.71074pt too wide) in paragraph at lines 706--706
+Overfull \hbox (0.71074pt too wide) in paragraph at lines 727--727
 []|\T1/cmr/m/n/9 LLM$\OMS/cmsy/m/n/9 !$\T1/cmr/m/n/9 BDI| 
  []
 
 
-Overfull \hbox (0.71074pt too wide) in paragraph at lines 707--707
+Overfull \hbox (0.71074pt too wide) in paragraph at lines 728--728
 []|\T1/cmr/m/n/9 LLM$\OMS/cmsy/m/n/9 !$\T1/cmr/m/n/9 BDI| 
  []
 
 
-Underfull \hbox (badness 7415) in paragraph at lines 707--708
+Underfull \hbox (badness 7415) in paragraph at lines 728--729
 []|\T1/cmr/m/n/9 Full se-ri-al-ized rule snap-shot (idem-po-tent; a missed
  []
 
 
-Underfull \hbox (badness 7081) in paragraph at lines 707--708
+Underfull \hbox (badness 7081) in paragraph at lines 728--729
 \T1/cmr/m/n/9 up-date self-heals on the next change), ap-plied via
  []
 
 [8]
-Overfull \hbox (52.4438pt too wide) in paragraph at lines 721--733
-\T1/cmr/m/n/10.95 tives into \T1/cmtt/m/n/10.95 bs.coordination.queue\T1/cmr/m/
-n/10.95 , flips \T1/cmtt/m/n/10.95 active\T1/cmr/m/n/10.95 , and calls \T1/cmtt
-/m/n/10.95 agent.preemptForCoordination()\T1/cmr/m/n/10.95 . \T1/cmtt/m/n/10.95
- #runCoordination()
+Overfull \hbox (10.57799pt too wide) in paragraph at lines 752--763
+\T1/cmtt/m/n/10.95 intentionScore\T1/cmr/m/n/10.95 , never di-verg-ing from nor
+-mal play), up to a tar-get count or safety cap (\T1/cmtt/m/n/10.95 HANDOFF_MAX
+_PICKUPS\T1/cmr/m/n/10.95 );
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 797--797
+Overfull \hbox (17.4869pt too wide) in paragraph at lines 752--763
+\T1/cmr/m/n/10.95 (2) \T1/cmtt/m/n/10.95 direct_partner(go_near) \T1/cmr/m/n/10
+.95 brings the loaded BDI ad-ja-cent to the LLM agent; (3) \T1/cmtt/m/n/10.95 d
+irect_partner(putdown)
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 807--807
 []|\T1/cmtt/m/n/9 (delivery ?t)\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 798--798
+Underfull \hbox (badness 10000) in paragraph at lines 808--808
 []|\T1/cmtt/m/n/9 (up/down/left/right
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 800--800
+Underfull \hbox (badness 10000) in paragraph at lines 810--810
 []|\T1/cmtt/m/n/9 (parcel ?p)\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 800--800
+Underfull \hbox (badness 10000) in paragraph at lines 810--810
 \T1/cmtt/m/n/9 (at-parcel ?p
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 800--800
+Underfull \hbox (badness 10000) in paragraph at lines 810--810
 \T1/cmtt/m/n/9 ?t)\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 (carrying ?p)\T1/cmr/m/n/9 ,
  []
 
 Package hyperref Info: bookmark level for unknown lstlisting defaults to 0 on i
-nput line 818.
-[9] [10]
-Underfull \hbox (badness 10000) in paragraph at lines 849--849
+nput line 828.
+
+Overfull \hbox (17.0pt too wide) in paragraph at lines 825--842
+[]$[]$ 
+ []
+
+[9]
+Underfull \hbox (badness 10000) in paragraph at lines 858--858
 []|\T1/cmtt/m/n/9 deliver_parcel
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 850--850
+Underfull \hbox (badness 10000) in paragraph at lines 859--859
 []|\T1/cmtt/m/n/9 deliver_parcels
  []
 
-
-Overfull \hbox (82.2071pt too wide) in paragraph at lines 901--908
-\T1/cmr/m/n/10.95 once: a RULE clause (\T1/cmtt/m/n/10.95 forbid_delivery_tile\
-T1/cmr/m/n/10.95 , \T1/cmtt/m/n/10.95 more=true\T1/cmr/m/n/10.95 ) fol-lowed by
- a TASK clause (\T1/cmtt/m/n/10.95 collect_and_deliver(parcels=5)\T1/cmr/m/n/10
-.95 ,
- []
-
-[11] [12] (report.aux)
+[10] (report.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2025-12-24>
@@ -1141,13 +1184,13 @@ Package rerunfilecheck Info: File `report.out' has not changed.
 (rerunfilecheck)             Checksum: 41DAF4EE7B83F81E27CEB99B6FF6DDB8;2415.
  ) 
 Here is how much of TeX's memory you used:
- 24634 strings out of 467871
- 451099 string characters out of 5418376
- 952687 words of memory out of 5000000
- 53042 multiletter control sequences out of 15000+600000
+ 24726 strings out of 467871
+ 452889 string characters out of 5418376
+ 967327 words of memory out of 5000000
+ 53127 multiletter control sequences out of 15000+600000
  650604 words of font info for 98 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 102i,13n,107p,507b,2020s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 102i,13n,107p,507b,1229s stack positions out of 10000i,1000n,20000p,200000b,200000s
  <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt
 1000.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi60
 0\ecrm0800.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec
@@ -1157,15 +1200,15 @@ pen/ec/dpi600\ecti0900.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour
 ljfour/jknappen/ec/dpi600\ecbx0900.pk> <C:\Users\david\AppData\Local\MiKTeX\fon
 ts/pk/ljfour/jknappen/ec/dpi600\ecrm0600.pk> <C:\Users\david\AppData\Local\MiKT
 eX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm0900.pk> <C:\Users\david\AppData\Loca
-l\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1095.pk> <C:\Users\david\AppDat
-a\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt1095.pk> <C:\Users\david\
-AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecti1095.pk> <C:\Users\
-david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1095.pk> <C:\
-Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1095.pk
-> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1
-440.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600
-\ecbx1000.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/
-dpi600\ecrm1000.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknapp
+l\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1000.pk> <C:\Users\david\AppDat
+a\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1000.pk> <C:\Users\david\
+AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1095.pk> <C:\Users\
+david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt1095.pk> <C:\
+Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecti1095.pk
+> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1
+095.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600
+\ecbx1095.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/
+dpi600\ecbx1440.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/jknapp
 en/ec/dpi600\ecrm1200.pk> <C:\Users\david\AppData\Local\MiKTeX\fonts/pk/ljfour/
 jknappen/ec/dpi600\ecbx1728.pk><C:/Users/david/AppData/Local/Programs/MiKTeX/fo
 nts/type1/public/amsfonts/cm/cmex10.pfb><C:/Users/david/AppData/Local/Programs/
@@ -1180,9 +1223,9 @@ nts/cm/cmr9.pfb><C:/Users/david/AppData/Local/Programs/MiKTeX/fonts/type1/publi
 c/amsfonts/cm/cmsy10.pfb><C:/Users/david/AppData/Local/Programs/MiKTeX/fonts/ty
 pe1/public/amsfonts/cm/cmsy8.pfb><C:/Users/david/AppData/Local/Programs/MiKTeX/
 fonts/type1/public/amsfonts/cm/cmsy9.pfb>
-Output written on report.pdf (12 pages, 424500 bytes).
+Output written on report.pdf (10 pages, 424118 bytes).
 PDF statistics:
- 1095 PDF objects out of 1200 (max. 8388607)
- 83 named destinations out of 1000 (max. 500000)
+ 1080 PDF objects out of 1200 (max. 8388607)
+ 82 named destinations out of 1000 (max. 500000)
  149 words of extra memory for PDF output out of 10000 (max. 10000000)
 
