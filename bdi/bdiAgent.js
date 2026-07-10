@@ -18,6 +18,7 @@ import {
 import {
   deliveryMapDistance,
   nearestDeliveryTileAt,
+  campRadius,
 } from "../utils/stateUtils.js";
 import {
   applyParcelValueBand,
@@ -448,6 +449,32 @@ class IntentionRevision {
         if (out) { out.reason = "no_hint"; out.finalScore = -1; }
         return -1;
       }
+
+      // Contested pocket: when the partner is already inside this pocket's
+      // footprint, only ONE agent may keep camping it — the one with the LOWER
+      // game score (ties broken by id, so the rule is total and both sides
+      // reach the same verdict without exchanging a message). The yielding
+      // agent's camp turns invalid and the existing invalid-camp path hands
+      // off to delivery/exploration. The verdict is stable for the camper:
+      // camping delivers nothing, so its own score is frozen while the
+      // partner's can only grow — "I stay" cannot flip mid-camp.
+      const partner = this.#bs.partner;
+      if (partner && partner.x != null && partner.y != null) {
+        const contested =
+          Math.abs(partner.x - hint.x) + Math.abs(partner.y - hint.y) <=
+          campRadius(this.#bs);
+        const myScore = this.#bs.me.score ?? 0;
+        const partnerScore = partner.score ?? 0;
+        const iYield =
+          myScore > partnerScore ||
+          (myScore === partnerScore &&
+            String(this.#bs.me.id) > String(partner.id));
+        if (contested && iYield) {
+          if (out) { out.reason = "pocket_contested"; out.finalScore = -1; }
+          return -1;
+        }
+      }
+
       const patienceMs = campPatienceMs(this.#bs, hint);
       const elapsedMs = Date.now() - hint.ts;
       const hot = patienceMs > 0 && elapsedMs < patienceMs;
