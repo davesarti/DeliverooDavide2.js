@@ -1,3 +1,20 @@
+import { CAMP_PATROL_RADIUS } from "./constants.js";
+
+/*
+ * Camp/coverage neighbourhood radius: the agent can only meaningfully watch as
+ * far as it senses, so the pocket footprint scales to the observation distance
+ * instead of a fixed constant. Falls back to CAMP_PATROL_RADIUS when the server
+ * hasn't declared an observation distance. Shared by the camp anchor/patrol
+ * (actions), the contested-pocket scoring gate (bdiAgent) and the exploration
+ * partner de-conflict, so they all agree on what "covered by an agent" means.
+ */
+export function campRadius(bs) {
+  const obsDist = bs.config?.observationDistance;
+  return Number.isFinite(obsDist) && obsDist > 0
+    ? Math.ceil(obsDist)
+    : CAMP_PATROL_RADIUS;
+}
+
 /*
  * Finds the nearest reachable delivery tile from a position.
  */
