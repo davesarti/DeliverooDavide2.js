@@ -252,14 +252,15 @@ ordinary scored options never compete with or preempt the active coordination in
 
 \texttt{IntentionRevisionRevise} (\texttt{bdi/bdiAgent.js}) maintains an intention queue and a
 failed-intention cooldown pool (predicate $\to$ \texttt{\{addedAtMs, cooldownMs\}}). The cooldown
-backs off per predicate --- base \texttt{FAILED\_INTENTION\_}\allowbreak\texttt{RETRY\_MS}=1\,s,
-doubling on each consecutive failure
-(\texttt{FAILED\_INTENTION\_}\allowbreak\texttt{BACKOFF\_FACTOR}=2) up to
-\texttt{FAILED\_INTENTION\_}\allowbreak\texttt{MAX\_RETRY\_MS}=8\,s --- so a persistently blocked
-target stops retry-storming; the streak resets on the predicate's next success, or automatically
-once it goes $2\times$ the cap (16\,s) without a further failure, so a resolved block does not
-leave a stale escalated cooldown behind. Each pass of
-\texttt{loop()}:
+is \emph{exponentially backed off} per predicate. The first failure waits only 1\,s
+(\texttt{FAILED\_INTENTION\_RETRY\_MS}), because a failure is almost always transient congestion
+--- a crossing agent at a choke --- that clears within a moment; but each consecutive failure of
+the \emph{same} predicate doubles the wait, $1 \to 2 \to 4 \to 8$\,s
+(cap \texttt{FAILED\_INTENTION\_MAX\_RETRY\_MS}), so a persistently blocked target stops
+generating a retry storm, while the low cap keeps the agent responsive once the obstruction
+clears. The failure streak resets on the predicate's next success, or automatically after
+$2\times$ the cap (16\,s) without further failures, so a long-resolved block never leaves a stale
+escalated cooldown behind. Each pass of \texttt{loop()}:
 
 \begin{enumerate}
   \item Idles if \texttt{paused} (an embedded owner, e.g.\ the LLM mission handler, is holding
@@ -366,9 +367,10 @@ falling back to \texttt{CAMP\_PATROL\_RADIUS}=5 tiles without a declared observa
 reused verbatim by the camp anchor/patrol footprint (Section~\ref{sec:plans}) and the exploration
 de-conflict below. When the partner is within this radius of the harvest anchor, only the agent
 with the \emph{lower} game score keeps camping (ties broken by id), so both sides reach the same
-verdict with no message exchange; the loser's \texttt{camp} scores $-1$, handing off to delivery
-or exploration as an ordinary cold pocket would. The verdict cannot flip mid-camp, since camping
-freezes the camper's own score while the partner's can only grow.
+verdict with no message exchange; the yielding, higher-scored agent's \texttt{camp} scores $-1$,
+handing off to delivery or exploration exactly as an ordinary cold pocket would. The verdict
+cannot flip mid-camp: camping banks nothing, so the camper's own score is frozen while the
+partner's can only grow.
 
 \paragraph{Exploration score.} A flat floor, $S_{\text{explore}} = \text{EXPLORATION\_INCENTIVE} = 0.01$,
 strictly below camp so an idle agent prefers to camp a hot pocket over wandering, but high

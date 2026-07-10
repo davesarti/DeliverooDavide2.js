@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.6.17)  10 JUL 2026 22:36
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.6.17)  10 JUL 2026 23:09
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -891,212 +891,179 @@ Underfull \hbox (badness 10000) in paragraph at lines 231--232
 \T1/cmtt/m/n/9 IntentionRevision.loop() \T1/cmr/m/n/9 when
  []
 
-
-Overfull \hbox (23.09836pt too wide) in paragraph at lines 253--263
-\T1/cmr/m/n/10.95 pool (pred-i-cate $\OMS/cmsy/m/n/10.95 !$ \T1/cmtt/m/n/10.95 
-{addedAtMs, cooldownMs}\T1/cmr/m/n/10.95 ). The cooldown backs off per pred-i-c
-ate --- base \T1/cmtt/m/n/10.95 FAILED_INTENTION_
- []
-
-
-Overfull \hbox (51.29956pt too wide) in paragraph at lines 253--263
-\T1/cmtt/m/n/10.95 RETRY_MS\T1/cmr/m/n/10.95 =1s, dou-bling on each con-sec-u-t
-ive fail-ure (\T1/cmtt/m/n/10.95 FAILED_INTENTION_BACKOFF_FACTOR\T1/cmr/m/n/10.
-95 =2) up to \T1/cmtt/m/n/10.95 FAILED_INTENTION_
- []
-
-[2] [3]
-Underfull \hbox (badness 1199) in paragraph at lines 409--410
+[2] [3] [4]
+Underfull \hbox (badness 1199) in paragraph at lines 411--412
 []|\T1/cmr/m/n/9 Relative mar-gin a chal-lenger must clear (Sec-
  []
 
-[4]
-Overfull \hbox (5.77937pt too wide) in paragraph at lines 448--451
+
+Overfull \hbox (5.77937pt too wide) in paragraph at lines 450--453
 []\T1/cmr/m/n/10.95 When pre-emp-tion fires, the run-ning in-ten-tion is \T1/cm
 tt/m/n/10.95 stop(STOP_REASON_PREEMPTION)\T1/cmr/m/n/10.95 'd; its \T1/cmtt/m/n
 /10.95 achieve() \T1/cmr/m/n/10.95 promise
  []
 
-
-Underfull \hbox (badness 6173) in paragraph at lines 537--538
+[5]
+Underfull \hbox (badness 6173) in paragraph at lines 539--540
 []|\T1/cmr/m/n/9 A*-routes to $\OT1/cmr/m/n/9 (\OML/cmm/m/it/9 x; y\OT1/cmr/m/n
 /9 )$\T1/cmr/m/n/9 , re-plan-ning on a blocked step (up to
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 538--538
+Underfull \hbox (badness 10000) in paragraph at lines 540--540
 []|\T1/cmtt/m/n/9 go_pick_up x y
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 539--539
+Underfull \hbox (badness 10000) in paragraph at lines 541--541
 []|\T1/cmtt/m/n/9 go_drop_off x
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 539--540
+Underfull \hbox (badness 10000) in paragraph at lines 541--542
 []|\T1/cmtt/m/n/9 go_to \T1/cmr/m/n/9 then \T1/cmtt/m/n/9 putdown()\T1/cmr/m/n/
 9 , which it-self cred-its
  []
 
 
-Underfull \hbox (badness 2376) in paragraph at lines 539--540
+Underfull \hbox (badness 2376) in paragraph at lines 541--542
 \T1/cmtt/m/n/9 bs.metrics.deliveredParcels \T1/cmr/m/n/9 from the server ack on
  gen-uine
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 540--541
+Underfull \hbox (badness 10000) in paragraph at lines 542--543
 []|\T1/cmtt/m/n/9 go_to \T1/cmr/m/n/9 on the least-recently-visited reach-able 
 spawn tile
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 542--542
+Underfull \hbox (badness 10000) in paragraph at lines 544--544
 []|\T1/cmtt/m/n/9 go_near x y
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 543--543
+Underfull \hbox (badness 10000) in paragraph at lines 545--545
 []|\T1/cmtt/m/n/9 wait signal
  []
 
 
-Overfull \hbox (34.13206pt too wide) in paragraph at lines 556--559
+Overfull \hbox (34.13206pt too wide) in paragraph at lines 558--561
 []\T1/cmr/bx/n/10.95 Soft penal-ties from rules. \T1/cmr/m/n/10.95 En-ter-ing a
  tile in \T1/cmtt/m/n/10.95 bs.rules.penaltyTiles \T1/cmr/m/n/10.95 costs ex-tr
 a (added to \T1/cmtt/m/n/10.95 BASE_STEP_COST
  []
 
-[5]
-Underfull \vbox (badness 10000) has occurred while \output is active []
-
- [6]
 LaTeX Font Info:    Font shape `T1/cmtt/bx/n' in size <10.95> not available
-(Font)              Font shape `T1/cmtt/m/n' tried instead on input line 561.
-
-Overfull \hbox (35.64183pt too wide) in paragraph at lines 575--582
+(Font)              Font shape `T1/cmtt/m/n' tried instead on input line 563.
+[6]
+Overfull \hbox (35.64183pt too wide) in paragraph at lines 577--584
 []\T1/cmr/bx/n/10.95 Penalty-aware travel-cost map. \T1/cmtt/m/n/10.95 travelCo
 stMap() \T1/cmr/m/n/10.95 runs a sin-gle Di-jk-stra pass (\T1/cmtt/m/n/10.95 pa
 thfinding/dijkstra.js\T1/cmr/m/n/10.95 )
  []
 
 
-Overfull \hbox (11.73372pt too wide) in paragraph at lines 575--582
+Overfull \hbox (11.73372pt too wide) in paragraph at lines 577--584
 \T1/cmtt/m/n/10.95 explore\T1/cmr/m/n/10.95 's rank-ing (\T1/cmtt/m/n/10.95 fin
 dCellsToExplore\T1/cmr/m/n/10.95 ) and the camp an-chor's cluster-centroid choi
 ce (\T1/cmtt/m/n/10.95 clusterCenter\T1/cmr/m/n/10.95 )
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 621--622
+Underfull \hbox (badness 10000) in paragraph at lines 623--624
 []|\T1/cmtt/m/n/9 collect_and_deliver\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 go_to\T1/cm
 r/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 621--622
+Underfull \hbox (badness 10000) in paragraph at lines 623--624
 \T1/cmtt/m/n/9 go_pick_up\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 go_drop_off\T1/cmr/m/n/
 9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 621--622
+Underfull \hbox (badness 10000) in paragraph at lines 623--624
 \T1/cmtt/m/n/9 rendezvous_with_partner\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 623--625
+Underfull \hbox (badness 10000) in paragraph at lines 625--627
 []|\T1/cmtt/m/n/9 observe_environment\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 calculate\T
 1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 623--625
+Underfull \hbox (badness 10000) in paragraph at lines 625--627
 \T1/cmr/m/n/9 ev-ery rule/navigation store tool,
  []
 
 [7]
-Underfull \hbox (badness 10000) in paragraph at lines 669--670
+Underfull \hbox (badness 10000) in paragraph at lines 671--672
 []|\T1/cmtt/m/n/9 move_to\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 pick_up_parcel\T1/cmr/m
 /n/9 , \T1/cmtt/m/n/9 deliver_carried_parcels\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 5652) in paragraph at lines 669--670
+Underfull \hbox (badness 5652) in paragraph at lines 671--672
 \T1/cmtt/m/n/9 collect_and_deliver \T1/cmr/m/n/9 (del-e-gates to the em-bed-ded
  BDI,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 671--672
+Underfull \hbox (badness 10000) in paragraph at lines 673--674
 []|\T1/cmtt/m/n/9 rendezvous_with_partner\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 handoff
 _to_partner\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 672--673
+Underfull \hbox (badness 10000) in paragraph at lines 674--675
 []|\T1/cmtt/m/n/9 set_stack_size_rule\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 remove_stac
 k_size_rule\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 672--673
+Underfull \hbox (badness 10000) in paragraph at lines 674--675
 \T1/cmtt/m/n/9 set_parcel_value_rule\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 remove_parce
 l_value_rule\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 672--673
+Underfull \hbox (badness 10000) in paragraph at lines 674--675
 \T1/cmtt/m/n/9 forbid_delivery_tile\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 prefer_delive
 ry_tile\T1/cmr/m/n/9 ,
  []
 
 
-Overfull \hbox (1.68726pt too wide) in paragraph at lines 672--673
+Overfull \hbox (1.68726pt too wide) in paragraph at lines 674--675
 \T1/cmtt/m/n/9 set_delivery_tile_multiplier\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 remov
 e_delivery_tile_rule\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 672--673
+Underfull \hbox (badness 10000) in paragraph at lines 674--675
 \T1/cmtt/m/n/9 clear_durable_rules\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 block_navigati
 on_tile\T1/cmr/m/n/9 ,
  []
 
 
-Overfull \hbox (19.85022pt too wide) in paragraph at lines 690--692
+Overfull \hbox (19.85022pt too wide) in paragraph at lines 692--694
 []\T1/cmtt/m/n/10.95 mapExecutorAction \T1/cmr/m/n/10.95 trans-lates the ex-ecu
 -tor's tool name/shape into the in-ter-nal ac-tion used by \T1/cmtt/m/n/10.95 e
 xecuteTool
  []
 
 
-Overfull \hbox (41.46457pt too wide) in paragraph at lines 697--702
+Overfull \hbox (41.46457pt too wide) in paragraph at lines 699--704
 []\T1/cmr/bx/n/10.95 Terminal tools \T1/cmr/m/n/10.95 (ev-ery persistent-rule/n
 avigation store, plus \T1/cmtt/m/n/10.95 collect_and_deliver \T1/cmr/m/n/10.95 
 via \T1/cmtt/m/n/10.95 toolResult.terminal\T1/cmr/m/n/10.95 )
  []
 
 
-Overfull \hbox (23.112pt too wide) in paragraph at lines 705--709
+Overfull \hbox (23.112pt too wide) in paragraph at lines 707--711
 []\T1/cmr/m/n/10.95 Concretely, for ``col-lect three parcels and de-liver them'
 ': the LLM emits one \T1/cmtt/m/n/10.95 collect_and_deliver(parcels=3)
- []
-
-
-Overfull \hbox (0.71074pt too wide) in paragraph at lines 725--725
-[]|\T1/cmr/m/n/9 LLM$\OMS/cmsy/m/n/9 !$\T1/cmr/m/n/9 BDI| 
- []
-
-
-Overfull \hbox (0.71074pt too wide) in paragraph at lines 726--726
-[]|\T1/cmr/m/n/9 BDI$\OMS/cmsy/m/n/9 !$\T1/cmr/m/n/9 LLM| 
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 726--727
-[]|\T1/cmtt/m/n/9 {cid, ok, detail}\T1/cmr/m/n/9 ; re-solves the match-ing
  []
 
 
@@ -1106,72 +1073,87 @@ Overfull \hbox (0.71074pt too wide) in paragraph at lines 727--727
 
 
 Overfull \hbox (0.71074pt too wide) in paragraph at lines 728--728
+[]|\T1/cmr/m/n/9 BDI$\OMS/cmsy/m/n/9 !$\T1/cmr/m/n/9 LLM| 
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 728--729
+[]|\T1/cmtt/m/n/9 {cid, ok, detail}\T1/cmr/m/n/9 ; re-solves the match-ing
+ []
+
+
+Overfull \hbox (0.71074pt too wide) in paragraph at lines 729--729
 []|\T1/cmr/m/n/9 LLM$\OMS/cmsy/m/n/9 !$\T1/cmr/m/n/9 BDI| 
  []
 
 
-Underfull \hbox (badness 7415) in paragraph at lines 728--729
+Overfull \hbox (0.71074pt too wide) in paragraph at lines 730--730
+[]|\T1/cmr/m/n/9 LLM$\OMS/cmsy/m/n/9 !$\T1/cmr/m/n/9 BDI| 
+ []
+
+
+Underfull \hbox (badness 7415) in paragraph at lines 730--731
 []|\T1/cmr/m/n/9 Full se-ri-al-ized rule snap-shot (idem-po-tent; a missed
  []
 
 
-Underfull \hbox (badness 7081) in paragraph at lines 728--729
+Underfull \hbox (badness 7081) in paragraph at lines 730--731
 \T1/cmr/m/n/9 up-date self-heals on the next change), ap-plied via
  []
 
 [8]
-Overfull \hbox (10.57799pt too wide) in paragraph at lines 752--763
+Overfull \hbox (10.57799pt too wide) in paragraph at lines 754--765
 \T1/cmtt/m/n/10.95 intentionScore\T1/cmr/m/n/10.95 , never di-verg-ing from nor
 -mal play), up to a tar-get count or safety cap (\T1/cmtt/m/n/10.95 HANDOFF_MAX
 _PICKUPS\T1/cmr/m/n/10.95 );
  []
 
 
-Overfull \hbox (17.4869pt too wide) in paragraph at lines 752--763
+Overfull \hbox (17.4869pt too wide) in paragraph at lines 754--765
 \T1/cmr/m/n/10.95 (2) \T1/cmtt/m/n/10.95 direct_partner(go_near) \T1/cmr/m/n/10
 .95 brings the loaded BDI ad-ja-cent to the LLM agent; (3) \T1/cmtt/m/n/10.95 d
 irect_partner(putdown)
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 807--807
+Underfull \hbox (badness 10000) in paragraph at lines 809--809
 []|\T1/cmtt/m/n/9 (delivery ?t)\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 808--808
+Underfull \hbox (badness 10000) in paragraph at lines 810--810
 []|\T1/cmtt/m/n/9 (up/down/left/right
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 810--810
+Underfull \hbox (badness 10000) in paragraph at lines 812--812
 []|\T1/cmtt/m/n/9 (parcel ?p)\T1/cmr/m/n/9 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 810--810
+Underfull \hbox (badness 10000) in paragraph at lines 812--812
 \T1/cmtt/m/n/9 (at-parcel ?p
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 810--810
+Underfull \hbox (badness 10000) in paragraph at lines 812--812
 \T1/cmtt/m/n/9 ?t)\T1/cmr/m/n/9 , \T1/cmtt/m/n/9 (carrying ?p)\T1/cmr/m/n/9 ,
  []
 
 Package hyperref Info: bookmark level for unknown lstlisting defaults to 0 on i
-nput line 828.
+nput line 830.
 
-Overfull \hbox (17.0pt too wide) in paragraph at lines 825--842
+Overfull \hbox (17.0pt too wide) in paragraph at lines 827--844
 []$[]$ 
  []
 
 [9]
-Underfull \hbox (badness 10000) in paragraph at lines 858--858
+Underfull \hbox (badness 10000) in paragraph at lines 860--860
 []|\T1/cmtt/m/n/9 deliver_parcel
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 859--859
+Underfull \hbox (badness 10000) in paragraph at lines 861--861
 []|\T1/cmtt/m/n/9 deliver_parcels
  []
 
@@ -1223,9 +1205,9 @@ nts/cm/cmr9.pfb><C:/Users/david/AppData/Local/Programs/MiKTeX/fonts/type1/publi
 c/amsfonts/cm/cmsy10.pfb><C:/Users/david/AppData/Local/Programs/MiKTeX/fonts/ty
 pe1/public/amsfonts/cm/cmsy8.pfb><C:/Users/david/AppData/Local/Programs/MiKTeX/
 fonts/type1/public/amsfonts/cm/cmsy9.pfb>
-Output written on report.pdf (10 pages, 424118 bytes).
+Output written on report.pdf (10 pages, 425570 bytes).
 PDF statistics:
- 1080 PDF objects out of 1200 (max. 8388607)
+ 1082 PDF objects out of 1200 (max. 8388607)
  82 named destinations out of 1000 (max. 500000)
  149 words of extra memory for PDF output out of 10000 (max. 10000000)
 
