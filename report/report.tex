@@ -9,8 +9,6 @@
 \usepackage{listings}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
-\usepackage{float}
-\usepackage{capt-of}
 \usepackage{hyperref}
 \hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
 \usepackage{enumitem}
@@ -368,9 +366,7 @@ reused verbatim by the camp anchor/patrol footprint (Section~\ref{sec:plans}) an
 de-conflict below. When the partner is within this radius of the harvest anchor, only the agent
 with the \emph{lower} game score keeps camping (ties broken by id), so both sides reach the same
 verdict with no message exchange; the yielding, higher-scored agent's \texttt{camp} scores $-1$,
-handing off to delivery or exploration exactly as an ordinary cold pocket would. The verdict
-cannot flip mid-camp: camping banks nothing, so the camper's own score is frozen while the
-partner's can only grow.
+handing off to delivery or exploration exactly as an ordinary cold pocket would.
 
 \paragraph{Exploration score.} A flat floor, $S_{\text{explore}} = \text{EXPLORATION\_INCENTIVE} = 0.01$,
 strictly below camp so an idle agent prefers to camp a hot pocket over wandering, but high
@@ -859,7 +855,7 @@ object names cannot contain arbitrary characters and the mapping never needs inv
 \texttt{reach\_tile \{x,y\}} & \texttt{(at-agent t\_x\_y)} \\
 \texttt{deliver\_parcel \{parcelId\}} & \texttt{(delivered p\_\textless hash\textgreater)} \\
 \texttt{deliver\_parcels \{parcelIds\}} & conjunction of \texttt{(delivered ...)} per id \\
-\texttt{free\_tile \{x,y\}} & \texttt{(free t\_x\_y)} --- used to ask ``can a crate be moved off this tile'', the goal driving the crate-recovery maneuver of Figure~\ref{fig:pddl-recovery} \\
+\texttt{free\_tile \{x,y\}} & \texttt{(free t\_x\_y)} --- used to ask ``can a crate be moved off this tile'', the goal driving the crate-recovery maneuver \\
 \bottomrule
 \end{tabular}
 \caption{Goal descriptors accepted by \texttt{buildProblem}.}
@@ -873,38 +869,5 @@ back to ordinary A* either way. While a plan executes, \texttt{bs.committedManeu
 disables hysteresis preemption (Eq.~\ref{eq:hysteresis}), since a crate push deliberately walks
 \emph{away} from the target first (to get behind the crate) and would otherwise look like a
 worse intention to the revision loop.
-
-\begin{center}
-\begin{tikzpicture}[font=\footnotesize, scale=0.46, every node/.style={scale=0.46}]
-\node[box] (target) at (4.3,6.6) {Target selected};
-\node[box] (astar) at (4.3,5.6) {A* search};
-\node[decision,text width=2.0cm] (blocked) at (4.3,4) {Crate blocks path?};
-\node[box,text width=2.5cm] (continue) at (1.1,3.2) {No: execute A* path normally};
-\node[box,text width=2.9cm] (genpddl) at (7.5,3.2) {Yes: generate PDDL problem};
-\node[box,text width=2.5cm] (planner) at (7.5,2.1) {Online planner};
-\node[decision,text width=1.9cm] (found) at (7.5,0.8) {Plan found?};
-\node[box,text width=2.7cm] (fallback) at (4.3,-0.3) {No: fall back to A*};
-\node[box,text width=2.5cm] (pushseq) at (10.3,-0.3) {Yes: execute push sequence};
-\node[box,text width=2.7cm] (committed) at (10.3,-1.8) {Committed maneuver: preemption disabled};
-\node[box,text width=3.2cm] (resumebdi) at (4.3,-2.9) {Resume normal BDI scoring};
-
-\draw[arr] (target) -- (astar);
-\draw[arr] (astar) -- (blocked);
-\draw[arr] (blocked) -- (continue);
-\draw[arr] (blocked) -- (genpddl);
-\draw[arr] (genpddl) -- (planner);
-\draw[arr] (planner) -- (found);
-\draw[arr] (found) -- (fallback);
-\draw[arr] (found) -- (pushseq);
-\draw[arr] (pushseq) -- (committed);
-\draw[arr] (continue.south) -- (1.1,-2.9) -- (resumebdi.west);
-\draw[arr] (fallback) -- (resumebdi);
-\draw[arr] (committed.south) -- (10.3,-2.9) -- (resumebdi.east);
-\end{tikzpicture}
-\captionof{figure}{Crate blocking and PDDL recovery: \texttt{crateBlocksRoute()} double-checks
-the block before paying for a solver call; a found plan is a committed maneuver immune to
-preemption.}
-\label{fig:pddl-recovery}
-\end{center}
 
 \end{document}
