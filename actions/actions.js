@@ -3,7 +3,6 @@ import { dijkstraCosts } from "../pathfinding/dijkstra.js";
 import { AGENT_CONFIG, } from "../config.js";
 import {
   RUNTIME,
-  CAMP_PATROL_RADIUS,
 } from "../utils/constants.js";
 import { yieldControl, wait, waitUntil } from "../utils/asyncUtils.js";
 import {
@@ -14,7 +13,10 @@ import {
   distance,
   DIRECTIONS,
 } from "../utils/mapUtils.js";
-import { nearestSpawnTile } from "../utils/stateUtils.js";
+import {
+  nearestSpawnTile,
+  campRadius as sharedCampRadius,
+} from "../utils/stateUtils.js";
 import { effectiveCapacity } from "../bdi/options.js";
 import {
   applyParcelValueBand,
@@ -589,7 +591,24 @@ export function createActions(socket, bs, options = {}) {
       throw new Error("No spawn tiles available");
     }
 
-    for (const cell of candidates) {
+    // Partner de-conflict: tiles inside the partner's view radius are already
+    // being watched, so exploring them only duplicates coverage. Demote them to
+    // the tail rather than dropping them — if every far candidate turns out
+    // unreachable the loop still falls back to the covered ones, so the worst
+    // case is exactly the single-agent behavior. Inert without a partner.
+    let ordered = candidates;
+    const partner = bs.partner;
+    if (partner && partner.x != null && partner.y != null) {
+      const covered = campRadius();
+      const away = [];
+      const watched = [];
+      for (const cell of candidates) {
+        (distance(cell, partner) > covered ? away : watched).push(cell);
+      }
+      ordered = [...away, ...watched];
+    }
+
+    for (const cell of ordered) {
       try {
         await goTo(cell.x, cell.y, { shouldStop });
         return true;
@@ -713,16 +732,12 @@ export function createActions(socket, bs, options = {}) {
   }
 
   /*
-   * Camp neighbourhood radius: the agent can only meaningfully watch as far as
-   * it senses, so the camp anchor search and the patrol footprint both scale to
-   * the observation distance instead of a fixed constant. Falls back to
-   * CAMP_PATROL_RADIUS when the server hasn't declared an observation distance.
+   * Camp neighbourhood radius, shared with the scoring gate and the explore
+   * de-conflict (utils/stateUtils.js) so every consumer agrees on the pocket
+   * footprint.
    */
   function campRadius() {
-    const obsDist = bs.config?.observationDistance;
-    return Number.isFinite(obsDist) && obsDist > 0
-      ? Math.ceil(obsDist)
-      : CAMP_PATROL_RADIUS;
+    return sharedCampRadius(bs);
   }
 
   /*
